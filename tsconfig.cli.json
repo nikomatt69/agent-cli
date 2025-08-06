@@ -11,7 +11,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "downlevelIteration": true
+    "downlevelIteration": true,
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
   "include": [
     "src/cli/**/*"

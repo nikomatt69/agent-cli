@@ -48,7 +48,7 @@ export class ChatManager {
     if (session) {
       this.currentSession = session;
     }
-    return session;
+    return session || null;
   }
 
   addMessage(content: string, role: 'user' | 'assistant'): ChatMessage {
@@ -77,12 +77,12 @@ export class ChatManager {
 
   getContextMessages(): ChatMessage[] {
     const messages = this.getMessages();
-    
+
     if (!configManager.get('chatHistory')) {
       // Return only system message and last user message if history is disabled
       const systemMessage = messages.find(m => m.role === 'system');
       const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-      
+
       return [
         ...(systemMessage ? [systemMessage] : []),
         ...(lastUserMessage ? [lastUserMessage] : []),
@@ -141,8 +141,8 @@ export class ChatManager {
   }
 
   exportSession(sessionId?: string): string {
-    const session = sessionId 
-      ? this.sessions.get(sessionId) 
+    const session = sessionId
+      ? this.sessions.get(sessionId)
       : this.currentSession;
 
     if (!session) {

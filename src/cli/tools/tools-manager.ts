@@ -67,7 +67,7 @@ export class ToolsManager {
   // File Operations
   async readFile(filePath: string): Promise<FileInfo> {
     const fullPath = path.resolve(this.workingDirectory, filePath);
-    
+
     if (!fs.existsSync(fullPath)) {
       throw new Error(`File not found: ${filePath}`);
     }
@@ -75,7 +75,7 @@ export class ToolsManager {
     const stats = fs.statSync(fullPath);
     const content = fs.readFileSync(fullPath, 'utf8');
     const extension = path.extname(fullPath).slice(1);
-    
+
     return {
       path: filePath,
       content,
@@ -89,7 +89,7 @@ export class ToolsManager {
   async writeFile(filePath: string, content: string): Promise<void> {
     const fullPath = path.resolve(this.workingDirectory, filePath);
     const dir = path.dirname(fullPath);
-    
+
     // Create directory if it doesn't exist
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -123,20 +123,20 @@ export class ToolsManager {
 
   async listFiles(directory: string = '.', pattern?: RegExp): Promise<string[]> {
     const fullPath = path.resolve(this.workingDirectory, directory);
-    
+
     if (!fs.existsSync(fullPath)) {
       throw new Error(`Directory not found: ${directory}`);
     }
 
     const files: string[] = [];
-    
+
     function walkDir(dir: string) {
       const items = fs.readdirSync(dir);
-      
+
       for (const item of items) {
         const itemPath = path.join(dir, item);
         const relativePath = path.relative(fullPath, itemPath);
-        
+
         if (fs.statSync(itemPath).isDirectory()) {
           if (!item.startsWith('.') && item !== 'node_modules') {
             walkDir(itemPath);
@@ -189,11 +189,11 @@ export class ToolsManager {
 
   // Advanced Command Execution
   async runCommand(
-    command: string, 
-    args: string[] = [], 
-    options: { 
-      cwd?: string; 
-      timeout?: number; 
+    command: string,
+    args: string[] = [],
+    options: {
+      cwd?: string;
+      timeout?: number;
       env?: Record<string, string>;
       interactive?: boolean;
       stream?: boolean;
@@ -203,37 +203,37 @@ export class ToolsManager {
     const fullCommand = options.sudo ? `sudo ${command} ${args.join(' ')}` : `${command} ${args.join(' ')}`;
     const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
     const env = { ...process.env, ...options.env };
-    
+
     console.log(chalk.blue(`⚡ Executing: ${fullCommand}`));
     console.log(chalk.gray(`📁 Working directory: ${cwd}`));
-    
+
     try {
       const startTime = Date.now();
-      
+
       if (options.stream || options.interactive) {
         return await this.runCommandStream(fullCommand, { cwd, env, interactive: options.interactive });
       } else {
-        const { stdout, stderr } = await execAsync(fullCommand, { 
-          cwd, 
+        const { stdout, stderr } = await execAsync(fullCommand, {
+          cwd,
           timeout: options.timeout || 60000,
           env,
           maxBuffer: 1024 * 1024 * 10, // 10MB buffer
         });
-        
+
         const duration = Date.now() - startTime;
         this.addToHistory(fullCommand, true, stdout + stderr);
-        
+
         console.log(chalk.green(`✅ Command completed in ${duration}ms`));
         return { stdout, stderr, code: 0 };
       }
-      
+
     } catch (error: any) {
       const duration = Date.now() - Date.now();
       this.addToHistory(fullCommand, false, error.message);
-      
+
       console.log(chalk.red(`❌ Command failed: ${fullCommand}`));
       console.log(chalk.gray(`Error: ${error.message}`));
-      
+
       return {
         stdout: error.stdout || '',
         stderr: error.stderr || error.message,
@@ -243,13 +243,13 @@ export class ToolsManager {
   }
 
   private async runCommandStream(
-    command: string, 
+    command: string,
     options: { cwd: string; env: any; interactive?: boolean }
   ): Promise<{ stdout: string; stderr: string; code: number; pid: number }> {
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
-      
+
       const child = spawn('sh', ['-c', command], {
         cwd: options.cwd,
         env: options.env,
@@ -283,17 +283,17 @@ export class ToolsManager {
 
       child.on('close', (code) => {
         processInfo.status = code === 0 ? 'completed' : 'failed';
-        processInfo.exitCode = code;
+        processInfo.exitCode = code || 0;
         this.runningProcesses.delete(child.pid!);
-        
+
         this.addToHistory(command, code === 0, stdout + stderr);
-        
+
         if (code === 0) {
           console.log(chalk.green(`✅ Process completed (PID: ${child.pid})`));
         } else {
           console.log(chalk.red(`❌ Process failed with code ${code} (PID: ${child.pid})`));
         }
-        
+
         resolve({ stdout, stderr, code: code || 0, pid: child.pid! });
       });
 
@@ -334,7 +334,7 @@ export class ToolsManager {
 
     console.log(chalk.blue(`📦 Installing ${packageName} with ${manager}...`));
     const result = await this.runCommand(command, args);
-    
+
     if (result.code === 0) {
       console.log(chalk.green(`✅ Successfully installed ${packageName}`));
       return true;
@@ -347,13 +347,13 @@ export class ToolsManager {
   async killProcess(pid: number): Promise<boolean> {
     try {
       process.kill(pid, 'SIGTERM');
-      
+
       const processInfo = this.runningProcesses.get(pid);
       if (processInfo) {
         processInfo.status = 'killed';
         this.runningProcesses.delete(pid);
       }
-      
+
       console.log(chalk.yellow(`⚠️ Process ${pid} terminated`));
       return true;
     } catch (error) {
@@ -377,7 +377,7 @@ export class ToolsManager {
       success,
       output: output.slice(0, 1000), // Limit output size
     });
-    
+
     // Keep only last 100 commands
     if (this.commandHistory.length > 100) {
       this.commandHistory = this.commandHistory.slice(-100);
@@ -387,15 +387,15 @@ export class ToolsManager {
   // Build and Test Operations
   async build(framework?: 'next' | 'react' | 'node' | 'npm'): Promise<{ success: boolean; output: string; errors?: ErrorAnalysis[] }> {
     let buildCommand = 'npm run build';
-    
+
     if (framework === 'next') buildCommand = 'npm run build';
     else if (framework === 'react') buildCommand = 'npm run build';
     else if (framework === 'node') buildCommand = 'npm run build';
 
     const result = await this.runCommand('npm', ['run', 'build']);
-    
+
     const errors = this.parseErrors(result.stderr);
-    
+
     return {
       success: result.code === 0,
       output: result.stdout + result.stderr,
@@ -409,7 +409,7 @@ export class ToolsManager {
 
     const result = await this.runCommand('npm', args);
     const errors = this.parseErrors(result.stderr);
-    
+
     return {
       success: result.code === 0,
       output: result.stdout + result.stderr,
@@ -423,7 +423,7 @@ export class ToolsManager {
 
     const result = await this.runCommand('npm', args);
     const errors = this.parseErrors(result.stderr);
-    
+
     return {
       success: result.code === 0,
       output: result.stdout + result.stderr,
@@ -434,7 +434,7 @@ export class ToolsManager {
   async typeCheck(): Promise<{ success: boolean; output: string; errors?: ErrorAnalysis[] }> {
     const result = await this.runCommand('npx', ['tsc', '--noEmit']);
     const errors = this.parseTypeErrors(result.stderr);
-    
+
     return {
       success: result.code === 0,
       output: result.stdout + result.stderr,
@@ -528,24 +528,24 @@ export class ToolsManager {
     const nodeVersion = process.version;
     const totalMemory = os.totalmem();
     const freeMemory = os.freemem();
-    
+
     // Get versions of common tools
     let npmVersion, gitVersion, dockerVersion;
-    
+
     try {
       const npmResult = await this.runCommand('npm', ['--version']);
       npmVersion = npmResult.stdout.trim();
-    } catch {}
-    
+    } catch { }
+
     try {
       const gitResult = await this.runCommand('git', ['--version']);
       gitVersion = gitResult.stdout.match(/git version ([\d.]+)/)?.[1];
-    } catch {}
-    
+    } catch { }
+
     try {
       const dockerResult = await this.runCommand('docker', ['--version']);
       dockerVersion = dockerResult.stdout.match(/Docker version ([\d.]+)/)?.[1];
-    } catch {}
+    } catch { }
 
     return {
       platform,
@@ -567,15 +567,15 @@ export class ToolsManager {
   async runScript(scriptContent: string, options: { language?: 'bash' | 'python' | 'node'; file?: string } = {}): Promise<{ success: boolean; output: string }> {
     const language = options.language || 'bash';
     let tempFile = options.file;
-    
+
     if (!tempFile) {
       const tempDir = os.tmpdir();
       const extension = language === 'bash' ? '.sh' : language === 'python' ? '.py' : '.js';
       tempFile = path.join(tempDir, `script_${Date.now()}${extension}`);
-      
+
       // Write script to temp file
       fs.writeFileSync(tempFile, scriptContent);
-      
+
       if (language === 'bash') {
         fs.chmodSync(tempFile, '755');
       }
@@ -583,7 +583,7 @@ export class ToolsManager {
 
     try {
       let result;
-      
+
       switch (language) {
         case 'bash':
           result = await this.runCommand('bash', [tempFile]);
@@ -597,19 +597,19 @@ export class ToolsManager {
         default:
           throw new Error(`Unsupported script language: ${language}`);
       }
-      
+
       // Clean up temp file if we created it
       if (!options.file) {
         try {
           fs.unlinkSync(tempFile);
-        } catch {}
+        } catch { }
       }
-      
+
       return {
         success: result.code === 0,
         output: result.stdout + result.stderr,
       };
-      
+
     } catch (error: any) {
       return {
         success: false,
@@ -620,7 +620,7 @@ export class ToolsManager {
 
   async checkDependencies(dependencies: string[]): Promise<Record<string, { installed: boolean; version?: string }>> {
     const results: Record<string, { installed: boolean; version?: string }> = {};
-    
+
     for (const dep of dependencies) {
       try {
         const result = await this.runCommand('which', [dep]);
@@ -639,7 +639,7 @@ export class ToolsManager {
         results[dep] = { installed: false };
       }
     }
-    
+
     return results;
   }
 
@@ -656,19 +656,19 @@ export class ToolsManager {
           commands.push(`npx create-next-app@latest ${projectName} --typescript --tailwind --eslint --app --src-dir`);
           await this.runCommand('npx', ['create-next-app@latest', projectName, '--typescript', '--tailwind', '--eslint', '--app', '--src-dir']);
           break;
-          
+
         case 'react':
           commands.push(`npx create-react-app ${projectName} --template typescript`);
           await this.runCommand('npx', ['create-react-app', projectName, '--template', 'typescript']);
           break;
-          
+
         case 'node':
           commands.push(`mkdir ${projectName}`, 'cd ' + projectName, 'npm init -y', 'npm install -D typescript @types/node ts-node');
           fs.mkdirSync(projectPath, { recursive: true });
           await this.runCommand('npm', ['init', '-y'], { cwd: projectPath });
           await this.runCommand('npm', ['install', '-D', 'typescript', '@types/node', 'ts-node'], { cwd: projectPath });
           break;
-          
+
         case 'express':
           commands.push(`mkdir ${projectName}`, 'cd ' + projectName, 'npm init -y');
           commands.push('npm install express', 'npm install -D typescript @types/node @types/express ts-node');
@@ -678,11 +678,11 @@ export class ToolsManager {
           await this.runCommand('npm', ['install', '-D', 'typescript', '@types/node', '@types/express', 'ts-node'], { cwd: projectPath });
           break;
       }
-      
+
       success = true;
       console.log(chalk.green(`✅ Project ${projectName} created successfully!`));
       console.log(chalk.gray(`📁 Location: ${projectPath}`));
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Failed to create project: ${error.message}`));
     }
@@ -692,14 +692,14 @@ export class ToolsManager {
 
   async monitorLogs(logFile: string, callback?: (line: string) => void): Promise<ChildProcess> {
     console.log(chalk.blue(`👀 Monitoring logs: ${logFile}`));
-    
+
     const child = spawn('tail', ['-f', logFile], {
       cwd: this.workingDirectory,
     });
 
     child.stdout?.on('data', (data) => {
       const lines = data.toString().split('\n').filter(Boolean);
-      lines.forEach(line => {
+      lines.forEach((line: string) => {
         console.log(chalk.cyan(`📝 ${line}`));
         callback?.(line);
       });
@@ -744,7 +744,7 @@ export class ToolsManager {
   }> {
     const files = await this.listFiles('.');
     const structure = this.buildDirectoryStructure(files);
-    
+
     let packageInfo;
     let framework;
     let technologies: string[] = [];
@@ -752,13 +752,13 @@ export class ToolsManager {
     try {
       const pkg = await this.readFile('package.json');
       packageInfo = JSON.parse(pkg.content);
-      
+
       // Detect framework
       if (packageInfo.dependencies?.next) framework = 'Next.js';
       else if (packageInfo.dependencies?.react) framework = 'React';
       else if (packageInfo.dependencies?.express) framework = 'Express';
       else if (packageInfo.dependencies?.fastify) framework = 'Fastify';
-      
+
       // Detect technologies
       Object.keys(packageInfo.dependencies || {}).forEach(dep => {
         if (dep.includes('typescript')) technologies.push('TypeScript');
@@ -769,7 +769,7 @@ export class ToolsManager {
         if (dep.includes('vue')) technologies.push('Vue.js');
         if (dep.includes('express')) technologies.push('Express');
       });
-      
+
     } catch (error) {
       // No package.json or invalid JSON
     }
@@ -778,17 +778,17 @@ export class ToolsManager {
       structure,
       packageInfo,
       framework,
-      technologies: [...new Set(technologies)],
+      technologies: Array.from(new Set(technologies)),
     };
   }
 
   private buildDirectoryStructure(files: string[]): any {
     const structure: any = {};
-    
+
     for (const file of files) {
       const parts = file.split('/');
       let current = structure;
-      
+
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
         if (i === parts.length - 1) {
@@ -802,7 +802,7 @@ export class ToolsManager {
         }
       }
     }
-    
+
     return structure;
   }
 }

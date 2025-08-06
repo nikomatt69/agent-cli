@@ -9,9 +9,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cli": "tsc --project tsconfig.cli.json",
+    "build:all": "npm run build && npm run build:cli",
     "start": "next start",
     "lint": "next lint",
     "cli": "ts-node --project tsconfig.cli.json src/cli/index.ts",
+    "cli:build": "node dist/cli/index.js",
     "chat": "npm run cli chat",
     "cli:list": "npm run cli list",
     "cli:run": "npm run cli run",

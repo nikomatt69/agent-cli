@@ -1,0 +1,65 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DevOpsAgent = void 0;
+const base_agent_1 = require("./base-agent");
+const model_provider_1 = require("../ai/model-provider");
+class DevOpsAgent extends base_agent_1.BaseAgent {
+    constructor() {
+        super(...arguments);
+        this.name = 'devops-expert';
+        this.description = 'DevOps and infrastructure specialist for CI/CD, Docker, Kubernetes, and cloud deployments';
+    }
+    async run(task) {
+        if (!task) {
+            return {
+                message: 'DevOps Expert ready! I can help with CI/CD, containerization, infrastructure, and cloud deployments',
+                specialties: [
+                    'Docker and container orchestration',
+                    'Kubernetes deployment and management',
+                    'CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins)',
+                    'Infrastructure as Code (Terraform, CloudFormation)',
+                    'Cloud platforms (AWS, GCP, Azure)',
+                    'Monitoring and logging (Prometheus, Grafana, ELK)',
+                    'Security and compliance',
+                ],
+            };
+        }
+        const messages = [
+            {
+                role: 'system',
+                content: `You are a DevOps and infrastructure expert with deep knowledge of:
+        
+        - Docker containerization and multi-stage builds
+        - Kubernetes orchestration and cluster management
+        - CI/CD pipeline design and automation
+        - Infrastructure as Code (IaC) with Terraform, CloudFormation
+        - Cloud platforms: AWS, Google Cloud, Azure
+        - Monitoring, logging, and observability
+        - Security best practices and compliance
+        - Performance optimization and scaling
+        - GitOps and deployment strategies
+
+        Always provide:
+        - Production-ready configurations
+        - Security-first approach
+        - Scalable and maintainable infrastructure
+        - Cost optimization strategies
+        - Monitoring and alerting setup
+        - Disaster recovery considerations
+        - Clear deployment instructions`,
+            },
+            {
+                role: 'user',
+                content: task,
+            },
+        ];
+        try {
+            const response = await model_provider_1.modelProvider.generateResponse({ messages });
+            return { response, task, agent: 'DevOps Expert' };
+        }
+        catch (error) {
+            return { error: error.message, task, agent: 'DevOps Expert' };
+        }
+    }
+}
+exports.DevOpsAgent = DevOpsAgent;

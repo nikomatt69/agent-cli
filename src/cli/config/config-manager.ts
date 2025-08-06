@@ -19,23 +19,39 @@ export interface AppConfig {
 }
 
 const defaultConfig: AppConfig = {
-  currentModel: 'claude-3-5-sonnet',
+  currentModel: 'claude-sonnet-4-20250514',
   models: {
-    'claude-3-5-sonnet': {
+    'claude-sonnet-4-20250514': {
       provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
     },
-    'claude-3-haiku': {
+    'claude-3-haiku-20240229': {
       provider: 'anthropic',
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-3-haiku-20240229',
+    },
+    'gpt-4o-mini': {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
     },
     'gpt-4o': {
       provider: 'openai',
       model: 'gpt-4o',
     },
-    'gpt-4o-mini': {
+    'gpt-4.1': {
       provider: 'openai',
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1',
+    },
+    'gpt-4': {
+      provider: 'openai',
+      model: 'gpt-4',
+    },
+    'gpt-3.5-turbo': {
+      provider: 'openai',
+      model: 'gpt-3.5-turbo',
+    },
+    'gpt-3.5-turbo-16k': {
+      provider: 'openai',
+      model: 'gpt-3.5-turbo-16k',
     },
     'gemini-pro': {
       provider: 'google',
@@ -120,7 +136,7 @@ export class ConfigManager {
     if (!models[modelName]) {
       throw new Error(`Model ${modelName} not found`);
     }
-    
+
     models[modelName].apiKey = apiKey;
     this.set('models', models);
   }
@@ -128,22 +144,37 @@ export class ConfigManager {
   getApiKey(modelName: string): string | undefined {
     const models = this.get('models');
     const model = models[modelName];
-    if (!model) return undefined;
+    if (!model) {
+      console.log(chalk.red(`❌ Model ${modelName} not found in config`));
+      return undefined;
+    }
 
     // Check model-specific API key first
-    if (model.apiKey) return model.apiKey;
+    if (model.apiKey && model.apiKey.trim() !== '') {
+      return model.apiKey;
+    }
 
     // Fall back to environment variables
+    let envKey: string | undefined;
     switch (model.provider) {
       case 'openai':
-        return process.env.OPENAI_API_KEY;
+        envKey = process.env.OPENAI_API_KEY;
+        break;
       case 'anthropic':
-        return process.env.ANTHROPIC_API_KEY;
+        envKey = process.env.ANTHROPIC_API_KEY;
+        break;
       case 'google':
-        return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        envKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        break;
       default:
         return undefined;
     }
+
+    if (envKey && envKey.trim() !== '') {
+      return envKey;
+    }
+
+    return undefined;
   }
 
   validateCurrentModel(): boolean {
@@ -151,14 +182,14 @@ export class ConfigManager {
       const currentModel = this.getCurrentModel();
       const modelName = this.get('currentModel');
       const apiKey = this.getApiKey(modelName);
-      
+
       if (!apiKey) {
         console.log(chalk.yellow(`⚠️  No API key found for ${modelName}`));
         console.log(chalk.gray(`Set it with: ${chalk.white(`ai-coder set-key ${modelName} YOUR_API_KEY`)}`));
         console.log(chalk.gray(`Or set environment variable: ${chalk.white(`${currentModel.provider.toUpperCase()}_API_KEY`)}`));
         return false;
       }
-      
+
       return true;
     } catch (error) {
       console.log(chalk.red('❌ Invalid model configuration'));
@@ -169,20 +200,20 @@ export class ConfigManager {
   showConfig(): void {
     console.log(chalk.blue.bold('\n🔧 Current Configuration:'));
     console.log(chalk.gray('─'.repeat(40)));
-    
+
     const currentModel = this.get('currentModel');
     const model = this.getCurrentModel();
-    
+
     console.log(chalk.green(`Current Model: ${currentModel}`));
     console.log(chalk.gray(`  Provider: ${model.provider}`));
     console.log(chalk.gray(`  Model: ${model.model}`));
     console.log(chalk.gray(`  API Key: ${this.getApiKey(currentModel) ? '✅ Set' : '❌ Not set'}`));
-    
+
     console.log(chalk.green(`\nSettings:`));
     console.log(chalk.gray(`  Chat History: ${this.get('chatHistory') ? 'enabled' : 'disabled'}`));
     console.log(chalk.gray(`  Max History: ${this.get('maxHistoryLength')}`));
     console.log(chalk.gray(`  Temperature: ${this.get('temperature')}`));
-    
+
     console.log(chalk.green(`\nAvailable Models:`));
     const models = this.get('models');
     Object.entries(models).forEach(([name, config]) => {
@@ -198,6 +229,65 @@ export class ConfigManager {
     this.config = { ...defaultConfig };
     this.saveConfig();
     console.log(chalk.green('✅ Configuration reset to defaults'));
+  }
+
+  debugApiKeys(): void {
+    console.log(chalk.blue.bold('\n🔍 API Key Debug Information:'));
+    console.log(chalk.gray('─'.repeat(40)));
+    
+    const models = this.get('models');
+    const currentModel = this.get('currentModel');
+    
+    console.log(chalk.yellow(`Current Model: ${currentModel}`));
+    
+    Object.entries(models).forEach(([name, config]) => {
+      const isCurrent = name === currentModel;
+      const prefix = isCurrent ? chalk.yellow('→ ') : '  ';
+      
+      console.log(`${prefix}${chalk.cyan(name)} (${config.provider})`);
+      
+      // Check stored API key
+      const storedKey = config.apiKey;
+      if (storedKey) {
+        console.log(`    Stored Key: ${chalk.green('✅')} (${storedKey.substring(0, 8)}...)`);
+      } else {
+        console.log(`    Stored Key: ${chalk.red('❌ Not set')}`);
+      }
+      
+      // Check environment variable
+      let envVarName = '';
+      let envKey = '';
+      switch (config.provider) {
+        case 'openai':
+          envVarName = 'OPENAI_API_KEY';
+          envKey = process.env.OPENAI_API_KEY || '';
+          break;
+        case 'anthropic':
+          envVarName = 'ANTHROPIC_API_KEY';
+          envKey = process.env.ANTHROPIC_API_KEY || '';
+          break;
+        case 'google':
+          envVarName = 'GOOGLE_GENERATIVE_AI_API_KEY';
+          envKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
+          break;
+      }
+      
+      if (envKey) {
+        console.log(`    ${envVarName}: ${chalk.green('✅')} (${envKey.substring(0, 8)}...)`);
+      } else {
+        console.log(`    ${envVarName}: ${chalk.red('❌ Not set')}`);
+      }
+      
+      // Show final resolved key
+      const resolvedKey = this.getApiKey(name);
+      if (resolvedKey) {
+        console.log(`    Resolved: ${chalk.green('✅')} (${resolvedKey.substring(0, 8)}...)`);
+      } else {
+        console.log(`    Resolved: ${chalk.red('❌ No key available')}`);
+      }
+      
+      console.log('');
+    });
   }
 }
 

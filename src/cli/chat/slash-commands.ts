@@ -33,6 +33,7 @@ export class SlashCommandHandler {
     this.commands.set('models', this.modelsCommand.bind(this));
     this.commands.set('set-key', this.setKeyCommand.bind(this));
     this.commands.set('config', this.configCommand.bind(this));
+    this.commands.set('debug', this.debugCommand.bind(this));
     this.commands.set('new', this.newSessionCommand.bind(this));
     this.commands.set('sessions', this.sessionsCommand.bind(this));
     this.commands.set('export', this.exportCommand.bind(this));
@@ -109,6 +110,7 @@ ${chalk.cyan('/set-key <model> <key>')} - Set API key for a model
 
 ${chalk.blue.bold('Configuration:')}
 ${chalk.cyan('/config')} - Show current configuration
+${chalk.cyan('/debug')} - Debug API key configuration
 ${chalk.cyan('/temp <0.0-2.0>')} - Set temperature (creativity)
 ${chalk.cyan('/history <on|off>')} - Enable/disable chat history
 ${chalk.cyan('/system <prompt>')} - Set system prompt for current session
@@ -238,6 +240,11 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
 
   private async configCommand(): Promise<CommandResult> {
     configManager.showConfig();
+    return { shouldExit: false, shouldUpdatePrompt: false };
+  }
+
+  private async debugCommand(): Promise<CommandResult> {
+    configManager.debugApiKeys();
     return { shouldExit: false, shouldUpdatePrompt: false };
   }
 

@@ -1,7 +1,7 @@
 import { generateText, generateObject, streamText } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { google } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { ModelConfig, configManager } from '../config/config-manager';
 
 export interface ChatMessage {
@@ -19,15 +19,23 @@ export interface GenerateOptions {
 
 export class ModelProvider {
   private getModel(config: ModelConfig) {
-    const apiKey = configManager.getApiKey(configManager.get('currentModel'));
+    const currentModelName = configManager.get('currentModel');
+    const apiKey = configManager.getApiKey(currentModelName);
     
+    if (!apiKey) {
+      throw new Error(`API key not found for model: ${currentModelName}. Use /set-key command to configure API keys`);
+    }
+
     switch (config.provider) {
       case 'openai':
-        return openai(config.model);
+        const openaiProvider = createOpenAI({ apiKey });
+        return openaiProvider(config.model);
       case 'anthropic':
-        return anthropic(config.model);
+        const anthropicProvider = createAnthropic({ apiKey });
+        return anthropicProvider(config.model);
       case 'google':
-        return google(config.model);
+        const googleProvider = createGoogleGenerativeAI({ apiKey });
+        return googleProvider(config.model);
       default:
         throw new Error(`Unsupported provider: ${config.provider}`);
     }
@@ -70,10 +78,10 @@ export class ModelProvider {
   }
 
   async generateStructured<T>(
-    options: GenerateOptions & { 
-      schema: any; 
-      schemaName?: string; 
-      schemaDescription?: string; 
+    options: GenerateOptions & {
+      schema: any;
+      schemaName?: string;
+      schemaDescription?: string;
     }
   ): Promise<T> {
     const currentModel = configManager.getCurrentModel();
