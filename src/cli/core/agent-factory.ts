@@ -7,6 +7,24 @@ import { workspaceContext } from './workspace-context';
 import chalk from 'chalk';
 import { nanoid } from 'nanoid';
 
+// Helper function to extract JSON from markdown code blocks
+function extractJsonFromMarkdown(text: string): string {
+  // Try to find JSON wrapped in code blocks
+  const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    return jsonBlockMatch[1].trim();
+  }
+  
+  // Try to find JSON object directly
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return jsonMatch[0].trim();
+  }
+  
+  // Return original text if no patterns found
+  return text.trim();
+}
+
 export interface AgentBlueprint {
   id: string;
   name: string;
@@ -475,7 +493,8 @@ Context Scope: ${requirements.contextScope || 'project'}`,
 
     try {
       const response = await modelProvider.generateResponse({ messages });
-      const aiBlueprint = JSON.parse(response);
+      const jsonText = extractJsonFromMarkdown(response);
+      const aiBlueprint = JSON.parse(jsonText);
       
       const blueprint: AgentBlueprint = {
         id: nanoid(),

@@ -12,6 +12,21 @@ const agent_stream_1 = require("./agent-stream");
 const workspace_context_1 = require("./workspace-context");
 const chalk_1 = __importDefault(require("chalk"));
 const nanoid_1 = require("nanoid");
+// Helper function to extract JSON from markdown code blocks
+function extractJsonFromMarkdown(text) {
+    // Try to find JSON wrapped in code blocks
+    const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonBlockMatch) {
+        return jsonBlockMatch[1].trim();
+    }
+    // Try to find JSON object directly
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        return jsonMatch[0].trim();
+    }
+    // Return original text if no patterns found
+    return text.trim();
+}
 class DynamicAgent extends base_agent_1.BaseAgent {
     constructor(blueprint) {
         super();
@@ -390,7 +405,8 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         ];
         try {
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
-            const aiBlueprint = JSON.parse(response);
+            const jsonText = extractJsonFromMarkdown(response);
+            const aiBlueprint = JSON.parse(jsonText);
             const blueprint = {
                 id: (0, nanoid_1.nanoid)(),
                 name: aiBlueprint.name || requirements.specialization.toLowerCase().replace(/\s+/g, '-'),
