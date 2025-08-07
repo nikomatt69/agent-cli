@@ -109,7 +109,10 @@ class SecureToolsRegistry {
      */
     async findFiles(pattern, options = {}) {
         const context = this.createContext('safe');
-        return this.executeWithTracking('FindFiles', async () => this.findFilesTool.execute(pattern, options), context, { pathValidated: true, userConfirmed: false });
+        return this.executeWithTracking('FindFiles', async () => {
+            const result = await this.findFilesTool.execute(pattern, options);
+            return result.data;
+        }, context, { pathValidated: true, userConfirmed: false });
     }
     /**
      * Secure command execution with allow-listing and confirmation

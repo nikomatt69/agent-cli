@@ -222,8 +222,8 @@ class BaseAgent {
         return await this.onExecuteTask({
             id: `task_${Date.now()}`,
             type: 'legacy',
-            priority: 'normal',
-            createdAt: new Date()
+            description: 'Legacy agent task',
+            priority: 'normal'
         });
     }
     async cleanup() {

@@ -9,10 +9,6 @@ class DevOpsAgent extends base_agent_1.BaseAgent {
         this.id = 'devops';
         this.capabilities = ["deployment", "ci-cd", "infrastructure", "containers"];
         this.specialization = 'DevOps and infrastructure management';
-        this.name = 'devops';
-        this.description = 'DevOps and infrastructure management';
-        this.name = 'devops-expert';
-        this.description = 'DevOps and infrastructure specialist for CI/CD, Docker, Kubernetes, and cloud deployments';
     }
     async onInitialize() {
         console.log('DevOps Agent initialized');

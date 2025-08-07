@@ -196,7 +196,7 @@ class PromptManager {
      */
     listAvailablePrompts() {
         const categories = {};
-        for (const [path, prompt] of this.promptCache) {
+        for (const [path, prompt] of Array.from(this.promptCache)) {
             const category = prompt.category;
             if (!categories[category]) {
                 categories[category] = [];
@@ -220,7 +220,7 @@ class PromptManager {
      */
     getCacheStats() {
         const categories = {};
-        for (const prompt of this.promptCache.values()) {
+        for (const prompt of Array.from(this.promptCache.values())) {
             const category = prompt.category;
             categories[category] = (categories[category] || 0) + 1;
         }

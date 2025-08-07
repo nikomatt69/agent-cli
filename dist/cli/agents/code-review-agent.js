@@ -10,8 +10,6 @@ class CodeReviewAgent extends base_agent_1.BaseAgent {
         this.id = 'code-review';
         this.capabilities = ["code-review", "quality-analysis", "best-practices"];
         this.specialization = 'Code review and quality analysis';
-        this.name = 'code-review';
-        this.description = 'AI-powered code review agent using Gemini';
     }
     async onInitialize() {
         console.log('Code Review Agent initialized successfully');

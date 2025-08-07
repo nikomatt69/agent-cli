@@ -91,7 +91,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 }
             }
             const duration = Date.now() - startTime;
-            const result = {
+            const writeFileResult = {
                 success: true,
                 filePath: sanitizedPath,
                 bytesWritten: Buffer.byteLength(processedContent, encoding),
@@ -104,8 +104,16 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     mode: options.mode || 0o644
                 }
             };
-            cli_ui_1.CliUI.logSuccess(`File written: ${filePath} (${result.bytesWritten} bytes)`);
-            return result;
+            cli_ui_1.CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
+            return {
+                success: true,
+                data: writeFileResult,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { filePath, contentLength: content.length, options }
+                }
+            };
         }
         catch (error) {
             // Rollback if backup exists
@@ -118,12 +126,13 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     cli_ui_1.CliUI.logWarning(`Rollback failed: ${rollbackError.message}`);
                 }
             }
+            const duration = Date.now() - startTime;
             const errorResult = {
                 success: false,
                 filePath,
                 bytesWritten: 0,
                 backupPath,
-                duration: Date.now() - startTime,
+                duration,
                 error: error.message,
                 metadata: {
                     encoding: options.encoding || 'utf8',
@@ -133,7 +142,16 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 }
             };
             cli_ui_1.CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
-            return errorResult;
+            return {
+                success: false,
+                data: errorResult,
+                error: error.message,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { filePath, contentLength: content.length, options }
+                }
+            };
         }
     }
     /**
@@ -160,10 +178,11 @@ class WriteFileTool extends base_tool_1.BaseTool {
             }
             // Phase 2: Write all files
             for (const file of files) {
-                const result = await this.execute(file.path, file.content, {
+                const toolResult = await this.execute(file.path, file.content, {
                     ...options,
                     createBackup: false // Already handled above
                 });
+                const result = toolResult.data;
                 results.push(result);
                 if (result.success) {
                     successCount++;
@@ -218,11 +237,12 @@ class WriteFileTool extends base_tool_1.BaseTool {
             // Prepare new content
             const separator = options.separator || '\n';
             const newContent = existingContent + (existingContent ? separator : '') + content;
-            return this.execute(filePath, newContent, {
+            const toolResult = await this.execute(filePath, newContent, {
                 encoding: options.encoding,
                 createBackup: options.createBackup,
                 verifyWrite: options.verifyWrite
             });
+            return toolResult.data;
         }
         catch (error) {
             throw new Error(`Failed to append to file: ${error.message}`);

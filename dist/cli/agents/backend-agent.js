@@ -8,7 +8,7 @@ const cli_ui_1 = require("../utils/cli-ui");
  * Handles server-side development, APIs, databases, and backend architecture
  */
 class BackendAgent extends base_agent_1.BaseAgent {
-    constructor(workingDirectory) {
+    constructor(workingDirectory = process.cwd()) {
         super(workingDirectory);
         this.id = 'backend-agent';
         this.capabilities = [

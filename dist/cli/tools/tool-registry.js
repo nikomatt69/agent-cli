@@ -268,9 +268,20 @@ exports.ToolRegistry = ToolRegistry;
  * In production, these would be replaced with actual tool implementations
  */
 class MockTool extends base_tool_1.BaseTool {
+    constructor(workingDirectory) {
+        super('mock-tool', workingDirectory);
+    }
     async execute(...args) {
         // Simulate tool execution
         await new Promise(resolve => setTimeout(resolve, 1000));
-        return { success: true, args, message: 'Mock tool executed successfully' };
+        return {
+            success: true,
+            data: { args, message: 'Mock tool executed successfully' },
+            metadata: {
+                executionTime: 1000,
+                toolName: this.getName(),
+                parameters: args
+            }
+        };
     }
 }

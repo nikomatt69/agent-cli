@@ -26,10 +26,6 @@ class SystemAdminAgent extends base_agent_1.BaseAgent {
         this.id = 'system-admin';
         this.capabilities = ["system-administration", "server-management", "monitoring"];
         this.specialization = 'System administration and server management';
-        this.name = 'system-admin';
-        this.description = 'System administration and server management';
-        this.name = 'system-admin';
-        this.description = 'System administration agent for terminal commands, installations, and system management';
     }
     async onInitialize() {
         console.log('System Admin Agent initialized');

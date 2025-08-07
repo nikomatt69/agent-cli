@@ -134,8 +134,8 @@ Consider parallel execution where possible.`,
                 throw new Error(`Agent ${task.agent} not found`);
             }
             await agent.initialize();
-            const result = await agent.run(task.description);
-            await agent.cleanup();
+            const result = await agent.run?.(task.description);
+            await agent.cleanup?.();
             const endTime = new Date();
             const duration = endTime.getTime() - startTime.getTime();
             return {

@@ -14,10 +14,6 @@ class ReactAgent extends base_agent_1.BaseAgent {
         this.id = 'react';
         this.capabilities = ["react", "jsx", "frontend", "components"];
         this.specialization = 'React and frontend development';
-        this.name = 'react';
-        this.description = 'React and frontend development';
-        this.name = 'react-expert';
-        this.description = 'React/Next.js specialist for components, hooks, and modern patterns';
     }
     async onInitialize() {
         console.log('React Agent initialized');

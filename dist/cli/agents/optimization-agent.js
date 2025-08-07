@@ -10,10 +10,6 @@ class OptimizationAgent extends base_agent_1.BaseAgent {
         this.id = 'optimization';
         this.capabilities = ["performance-optimization", "code-analysis", "profiling"];
         this.specialization = 'Performance optimization and analysis';
-        this.name = 'optimization';
-        this.description = 'Performance optimization and analysis';
-        this.name = 'optimization';
-        this.description = 'AI-powered code optimization agent using Gemini';
     }
     async onInitialize() {
         console.log('Optimization Agent initialized successfully');

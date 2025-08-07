@@ -360,8 +360,8 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             }
             console.log(chalk_1.default.blue(`🤖 Running ${agentName}...`));
             await agent.initialize();
-            const result = await agent.run(task);
-            await agent.cleanup();
+            const result = await agent.run?.(task);
+            await agent.cleanup?.();
             console.log(chalk_1.default.green(`✅ ${agentName} completed:`));
             if (typeof result === 'string') {
                 console.log(result);
@@ -424,8 +424,8 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                     throw new Error(`Agent '${agentName}' not found`);
                 }
                 await agent.initialize();
-                const result = await agent.run(task);
-                await agent.cleanup();
+                const result = await agent.run?.(task);
+                await agent.cleanup?.();
                 return { agentName, result };
             });
             const results = await Promise.all(promises);

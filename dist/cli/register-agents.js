@@ -27,8 +27,8 @@ function registerAgents(agentManager) {
     agentManager.registerAgent(system_admin_agent_1.SystemAdminAgent);
     // Autonomous orchestrator (special case - requires AgentManager)
     class AutonomousOrchestratorWrapper extends autonomous_orchestrator_1.AutonomousOrchestrator {
-        constructor() {
-            super(agentManager);
+        constructor(workingDirectory = process.cwd()) {
+            super(agentManager, workingDirectory);
         }
     }
     agentManager.registerAgent(AutonomousOrchestratorWrapper);
