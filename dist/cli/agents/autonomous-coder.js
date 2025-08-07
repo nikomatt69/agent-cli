@@ -30,10 +30,19 @@ const CodeGenerationSchema = zod_1.z.object({
     explanation: zod_1.z.string(),
 });
 class AutonomousCoder extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'autonomous-coder';
+        this.capabilities = ["autonomous-coding", "file-operations", "code-generation", "debugging"];
+        this.specialization = 'Autonomous coding with full file system access';
         this.name = 'autonomous-coder';
         this.description = 'Autonomous coding agent that can read, write, and modify files independently';
+    }
+    async onInitialize() {
+        console.log('Autonomous Coder initialized');
+    }
+    async onStop() {
+        console.log('Autonomous Coder stopped');
     }
     async analyzeProject() {
         console.log(chalk_1.default.blue('🔍 Analyzing project structure...'));
@@ -356,8 +365,9 @@ Return JSON with:
         }
         return result;
     }
-    async run(task) {
-        if (!task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
+        if (!taskData) {
             return {
                 message: 'Autonomous Coder ready! I can analyze, create, debug, and optimize code independently.',
                 capabilities: [
@@ -370,35 +380,35 @@ Return JSON with:
                 ],
             };
         }
-        const lowerTask = task.toLowerCase();
+        const lowerTask = taskData.toLowerCase();
         try {
             if (lowerTask.includes('analyze') || lowerTask.includes('overview')) {
                 return await this.analyzeProject();
             }
             if (lowerTask.includes('create') || lowerTask.includes('build') || lowerTask.includes('implement')) {
-                const description = task.replace(/(create|build|implement)\s*/i, '');
+                const description = taskData.replace(/(create|build|implement)\s*/i, '');
                 return await this.createFeature(description);
             }
             if (lowerTask.includes('debug') || lowerTask.includes('fix') || lowerTask.includes('errors')) {
                 return await this.debugErrors();
             }
             if (lowerTask.includes('optimize') || lowerTask.includes('improve')) {
-                const fileMatch = task.match(/file:\s*([^\s]+)/);
+                const fileMatch = taskData.match(/file:\s*([^\s]+)/);
                 const filePath = fileMatch ? fileMatch[1] : undefined;
                 return await this.optimizeCode(filePath);
             }
             if (lowerTask.includes('test')) {
-                const patternMatch = task.match(/pattern:\s*([^\s]+)/);
+                const patternMatch = taskData.match(/pattern:\s*([^\s]+)/);
                 const pattern = patternMatch ? patternMatch[1] : undefined;
                 return await this.runTests(pattern);
             }
             // Default: treat as a feature creation request
-            return await this.createFeature(task);
+            return await this.createFeature(taskData);
         }
         catch (error) {
             return {
                 error: `Autonomous coding failed: ${error.message}`,
-                task,
+                taskData,
             };
         }
     }

@@ -1,6 +1,7 @@
 import { BaseAgent } from '../agents/base-agent';
 import { modelProvider, ChatMessage } from '../ai/model-provider';
-import { toolsManager } from '../tools/tools-manager';
+import { secureTools } from '../tools/secure-tools-registry';
+import { toolsManager } from '../tools/migration-to-secure-tools'; // deprecated, for backward compatibility
 import { agentTodoManager } from './agent-todo-manager';
 import { agentStream } from './agent-stream';
 import { workspaceContext } from './workspace-context';
@@ -46,33 +47,59 @@ export interface AgentBlueprint {
 }
 
 export class DynamicAgent extends BaseAgent {
-  name: string;
-  description: string;
+  id: string;
+  capabilities: string[];
+  specialization: string;
   
   private blueprint: AgentBlueprint;
   private isRunning: boolean = false;
   private currentTodos: string[] = [];
 
-  constructor(blueprint: AgentBlueprint) {
-    super();
+  constructor(blueprint: AgentBlueprint, workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+    this.id = blueprint.name;
+    this.capabilities = blueprint.capabilities;
+    this.specialization = blueprint.description;
     this.blueprint = blueprint;
-    this.name = blueprint.name;
-    this.description = blueprint.description;
   }
 
-  async initialize(): Promise<void> {
-    await super.initialize();
+  protected async onInitialize(): Promise<void> {
+    agentStream.startAgentStream(this.id);
+    agentStream.emitEvent(this.id, 'info', `🤖 Dynamic agent ${this.id} initialized`);
+    agentStream.emitEvent(this.id, 'info', `Specialization: ${this.blueprint.specialization}`);
+    agentStream.emitEvent(this.id, 'info', `Autonomy Level: ${this.blueprint.autonomyLevel}`);
+  }
+
+  protected async onStop(): Promise<void> {
+    this.isRunning = false;
+    agentStream.emitEvent(this.id, 'info', `🛑 Dynamic agent ${this.id} stopped`);
+  }
+
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    return this.executeTask(taskData);
+  }
+
+  public async executeTask(task: any): Promise<any> {
+    // Handle both string tasks and AgentTask objects
+    const taskData = typeof task === 'string' ? task : (task?.description || task?.data);
     
-    agentStream.startAgentStream(this.name);
-    agentStream.emitEvent(this.name, 'info', `🤖 Dynamic agent ${this.name} initialized`);
-    agentStream.emitEvent(this.name, 'info', `Specialization: ${this.blueprint.specialization}`);
-    agentStream.emitEvent(this.name, 'info', `Autonomy Level: ${this.blueprint.autonomyLevel}`);
-    
+    if (!taskData) {
+      return {
+        message: `${this.blueprint.description}`,
+        specialization: this.blueprint.specialization,
+        capabilities: this.blueprint.capabilities,
+        autonomyLevel: this.blueprint.autonomyLevel,
+      };
+    }
+
     // Get workspace context based on scope
     if (this.blueprint.contextScope !== 'file') {
-      const context = workspaceContext.getContextForAgent(this.name);
-      agentStream.emitEvent(this.name, 'info', `Context loaded: ${context.relevantFiles.length} files`);
+      const context = workspaceContext.getContextForAgent(this.id);
+      agentStream.emitEvent(this.id, 'info', `Context loaded: ${context.relevantFiles.length} files`);
     }
+
+    return await this.run(taskData);
   }
 
   async run(task?: string): Promise<any> {
@@ -91,7 +118,7 @@ export class DynamicAgent extends BaseAgent {
     
     try {
       // Start autonomous workflow
-      agentStream.emitEvent(this.name, 'thinking', 'Starting autonomous workflow...');
+      agentStream.emitEvent(this.id, 'thinking', 'Starting autonomous workflow...');
       
       // 1. Create todos autonomously
       await this.createAutonomousTodos(task);
@@ -100,12 +127,12 @@ export class DynamicAgent extends BaseAgent {
       const result = await this.executeAutonomousWorkflow();
       
       // 3. Report results
-      agentStream.emitEvent(this.name, 'result', 'Autonomous workflow completed successfully');
+      agentStream.emitEvent(this.id, 'result', 'Autonomous workflow completed successfully');
       
       return result;
       
     } catch (error: any) {
-      agentStream.emitEvent(this.name, 'error', `Autonomous workflow failed: ${error.message}`);
+      agentStream.emitEvent(this.id, 'error', `Autonomous workflow failed: ${error.message}`);
       return { error: error.message, task };
     } finally {
       this.isRunning = false;
@@ -113,10 +140,10 @@ export class DynamicAgent extends BaseAgent {
   }
 
   private async createAutonomousTodos(task: string): Promise<void> {
-    agentStream.emitEvent(this.name, 'planning', 'Analyzing task and creating autonomous plan...');
+    agentStream.emitEvent(this.id, 'planning', 'Analyzing task and creating autonomous plan...');
     
     // Get workspace context
-    const context = workspaceContext.getContextForAgent(this.name);
+    const context = workspaceContext.getContextForAgent(this.id);
     
     // Stream thinking process
     const thoughts = [
@@ -127,10 +154,10 @@ export class DynamicAgent extends BaseAgent {
       'Creating detailed todo breakdown...'
     ];
     
-    await agentStream.streamThinking(this.name, thoughts);
+    await agentStream.streamThinking(this.id, thoughts);
     
     // Generate AI-powered todos based on agent specialization
-    const todos = await agentTodoManager.planTodos(this.name, task, {
+    const todos = await agentTodoManager.planTodos(this.id, task, {
       blueprint: this.blueprint,
       workspaceContext: context,
       specialization: this.blueprint.specialization,
@@ -140,22 +167,22 @@ export class DynamicAgent extends BaseAgent {
     
     // Stream the plan
     const planSteps = todos.map(todo => todo.title);
-    await agentStream.streamPlanning(this.name, planSteps);
+    await agentStream.streamPlanning(this.id, planSteps);
     
-    agentStream.emitEvent(this.name, 'planning', `Created ${todos.length} autonomous todos`);
+    agentStream.emitEvent(this.id, 'planning', `Created ${todos.length} autonomous todos`);
   }
 
   private async executeAutonomousWorkflow(): Promise<any> {
-    const todos = agentTodoManager.getAgentTodos(this.name);
+    const todos = agentTodoManager.getAgentTodos(this.id);
     const results: any[] = [];
     
-    agentStream.emitEvent(this.name, 'executing', `Starting execution of ${todos.length} todos`);
+    agentStream.emitEvent(this.id, 'executing', `Starting execution of ${todos.length} todos`);
     
     for (let i = 0; i < todos.length; i++) {
       const todo = todos[i];
       
       // Stream progress
-      agentStream.streamProgress(this.name, i + 1, todos.length, `Executing: ${todo.title}`);
+      agentStream.streamProgress(this.id, i + 1, todos.length, `Executing: ${todo.title}`);
       
       // Execute todo with full autonomy
       const result = await this.executeAutonomousTodo(todo);
@@ -173,15 +200,15 @@ export class DynamicAgent extends BaseAgent {
       success: true,
       todosCompleted: results.length,
       results,
-      agent: this.name,
+      agent: this.id,
       autonomyLevel: this.blueprint.autonomyLevel,
     };
   }
 
   private async executeAutonomousTodo(todo: any): Promise<any> {
-    const actionId = agentStream.trackAction(this.name, 'analysis', todo.description);
+    const actionId = agentStream.trackAction(this.id, 'analysis', todo.description);
     
-    agentStream.emitEvent(this.name, 'executing', `Working on: ${todo.title}`);
+    agentStream.emitEvent(this.id, 'executing', `Working on: ${todo.title}`);
     
     try {
       let result: any;
@@ -209,10 +236,10 @@ export class DynamicAgent extends BaseAgent {
   }
 
   private async executeFileSystemTodo(todo: any): Promise<any> {
-    agentStream.emitEvent(this.name, 'executing', 'Analyzing file system...');
+    agentStream.emitEvent(this.id, 'executing', 'Analyzing file system...');
     
     // Autonomously decide what files to read/analyze
-    const context = workspaceContext.getContextForAgent(this.name, 10);
+    const context = workspaceContext.getContextForAgent(this.id, 10);
     
     const analysis = {
       filesAnalyzed: context.relevantFiles.length,
@@ -224,10 +251,10 @@ export class DynamicAgent extends BaseAgent {
   }
 
   private async executeAnalysisTodo(todo: any): Promise<any> {
-    agentStream.emitEvent(this.name, 'executing', 'Performing deep analysis...');
+    agentStream.emitEvent(this.id, 'executing', 'Performing deep analysis...');
     
     // Get workspace context for analysis
-    const context = workspaceContext.getContextForAgent(this.name);
+    const context = workspaceContext.getContextForAgent(this.id);
     
     // Generate AI analysis based on agent specialization
     const messages: ChatMessage[] = [
@@ -260,12 +287,12 @@ Analyze the current state and provide insights based on your specialization.`,
   }
 
   private async executeImplementationTodo(todo: any): Promise<any> {
-    agentStream.emitEvent(this.name, 'executing', 'Implementing solution...');
+    agentStream.emitEvent(this.id, 'executing', 'Implementing solution...');
     
     // For fully autonomous agents, actually implement solutions
     if (this.blueprint.autonomyLevel === 'fully-autonomous') {
       // Get workspace context
-      const context = workspaceContext.getContextForAgent(this.name);
+      const context = workspaceContext.getContextForAgent(this.id);
       
       // Generate implementation
       const messages: ChatMessage[] = [
@@ -308,7 +335,7 @@ Generate the necessary files and code to complete this implementation.`,
   }
 
   private async executeTestingTodo(todo: any): Promise<any> {
-    agentStream.emitEvent(this.name, 'executing', 'Running tests and validation...');
+    agentStream.emitEvent(this.id, 'executing', 'Running tests and validation...');
     
     // Run actual tests if fully autonomous
     if (this.blueprint.autonomyLevel === 'fully-autonomous') {
@@ -330,7 +357,7 @@ Generate the necessary files and code to complete this implementation.`,
   }
 
   private async executeGenericTodo(todo: any): Promise<any> {
-    agentStream.emitEvent(this.name, 'executing', `Executing custom todo: ${todo.title}`);
+    agentStream.emitEvent(this.id, 'executing', `Executing custom todo: ${todo.title}`);
     
     const messages: ChatMessage[] = [
       {
@@ -373,15 +400,15 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
         if (!filename) {
           // Generate filename based on specialization
           const extension = this.getExtensionForSpecialization();
-          filename = `generated-${this.name}-${i + 1}${extension}`;
+          filename = `generated-${this.id}-${i + 1}${extension}`;
         }
         
         try {
           await toolsManager.writeFile(filename, code);
           createdFiles.push(filename);
-          agentStream.emitEvent(this.name, 'result', `Created file: ${filename}`);
+          agentStream.emitEvent(this.id, 'result', `Created file: ${filename}`);
         } catch (error) {
-          agentStream.emitEvent(this.name, 'error', `Failed to create file: ${filename}`);
+          agentStream.emitEvent(this.id, 'error', `Failed to create file: ${filename}`);
         }
       }
     }
@@ -424,12 +451,12 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
   }
 
   async cleanup(): Promise<void> {
-    await super.cleanup();
-    agentStream.stopAgentStream(this.name);
+    await super.cleanup?.();
+    agentStream.stopAgentStream(this.id);
     
     // Show final stats
-    const stats = agentTodoManager.getAgentStats(this.name);
-    agentStream.emitEvent(this.name, 'info', 
+    const stats = agentTodoManager.getAgentStats(this.id);
+    agentStream.emitEvent(this.id, 'info', 
       `Final stats: ${stats.completed} completed, efficiency: ${Math.round(stats.efficiency)}%`
     );
   }
@@ -607,9 +634,9 @@ Context Scope: ${requirements.contextScope || 'project'}`,
       console.log(chalk.blue.bold('\n🤖 Active Agents:'));
       activeAgents.forEach(agent => {
         const blueprint = agent.getBlueprint();
-        const stats = agentTodoManager.getAgentStats(agent.name);
+        const stats = agentTodoManager.getAgentStats(agent.id);
         
-        console.log(`  🤖 ${chalk.bold(agent.name)} (${blueprint.specialization})`);
+        console.log(`  🤖 ${chalk.bold(agent.id)} (${blueprint.specialization})`);
         console.log(`    Status: ${agent.isActive() ? chalk.green('Running') : chalk.yellow('Idle')}`);
         console.log(`    Todos: ${stats.completed} completed, ${stats.pending} pending`);
         console.log(`    Efficiency: ${Math.round(stats.efficiency)}%`);

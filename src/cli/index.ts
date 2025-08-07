@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { registerAgents } from './register-agents';
-import chalk from 'chalk';
-import ora from 'ora';
 import { AgentManager } from './agents/agent-manager';
 import { chatInterface } from './chat/chat-interface';
 import { configManager } from './config/config-manager';
+import { CliUI } from './utils/cli-ui';
+import { PlanningManager } from './planning/planning-manager';
 
 const program = new Command();
 
@@ -19,28 +19,41 @@ program
 const agentManager = new AgentManager();
 registerAgents(agentManager);
 
+// Initialize planning manager
+const planningManager = new PlanningManager(process.cwd());
+
 // Run single agent command
 program
   .command('run <agent-name>')
   .description('Run a specific AI agent')
   .option('-t, --task <task>', 'Task description for the agent')
   .action(async (agentName, options) => {
-    const spinner = ora(`Starting agent: ${agentName}`).start();
+    CliUI.startSpinner(`Starting agent: ${CliUI.highlight(agentName)}`);
     try {
       const agent = agentManager.getAgent(agentName);
       if (!agent) {
-        spinner.fail(chalk.red(`Agent ${agentName} not found`));
+        CliUI.failSpinner(`Agent ${CliUI.highlight(agentName)} not found`);
         return;
       }
 
-      spinner.text = `Running agent: ${agentName}`;
+      CliUI.updateSpinner(`Initializing agent: ${CliUI.highlight(agentName)}`);
       await agent.initialize();
-      const result = await agent.run(options.task);
+      
+      CliUI.updateSpinner(`Running agent: ${CliUI.highlight(agentName)}`);
+      const task = {
+        id: `task-${Date.now()}`,
+        type: 'user_request',
+        description: options.task,
+        priority: 'normal' as const,
+        data: { userInput: options.task }
+      };
+      const result = await agent.executeTask(task);
 
-      spinner.succeed(chalk.green(`Agent ${agentName} completed successfully`));
-      console.log(chalk.blue('Result:'), result);
+      CliUI.succeedSpinner(`Agent ${CliUI.highlight(agentName)} completed successfully`);
+      CliUI.logInfo(`Result: ${result}`);
     } catch (error: any) {
-      spinner.fail(chalk.red(`Error running agent ${agentName}: ${error.message}`));
+      CliUI.failSpinner(`Error running agent ${CliUI.highlight(agentName)}`);
+      console.error(CliUI.formatError(error, `Running agent ${agentName}`));
     }
   });
 
@@ -50,7 +63,9 @@ program
   .description('Run multiple agents in parallel')
   .option('-t, --task <task>', 'Task description for all agents')
   .action(async (agents, options) => {
-    const spinner = ora(`Starting ${agents.length} agents in parallel`).start();
+    CliUI.logSection(`Parallel Agent Execution`);
+    CliUI.startSpinner(`Starting ${CliUI.highlight(agents.length.toString())} agents in parallel`);
+    
     try {
       const agentInstances = agents.map((agentName: string) => {
         const agent = agentManager.getAgent(agentName);
@@ -60,10 +75,10 @@ program
         return { name: agentName, instance: agent };
       });
 
-      spinner.text = 'Initializing agents...';
+      CliUI.updateSpinner('Initializing agents...');
       await Promise.all(agentInstances.map(({ instance }: { instance: any }) => instance.initialize()));
 
-      spinner.text = 'Running agents in parallel...';
+      CliUI.updateSpinner('Running agents in parallel...');
       const results = await Promise.all(
         agentInstances.map(async ({ name, instance }: { name: string; instance: any }) => {
           try {
@@ -75,17 +90,19 @@ program
         })
       );
 
-      spinner.succeed(chalk.green(`Completed ${agents.length} agents`));
+      CliUI.succeedSpinner(`Completed ${CliUI.highlight(agents.length.toString())} agents`);
 
+      CliUI.logSubsection('Results');
       results.forEach(({ name, result, error, success }) => {
         if (success) {
-          console.log(chalk.green(`✓ ${name}:`), result);
+          CliUI.logSuccess(`${CliUI.bold(name)}: ${result}`);
         } else {
-          console.log(chalk.red(`✗ ${name}:`), error);
+          CliUI.logError(`${CliUI.bold(name)}: ${error}`);
         }
       });
     } catch (error: any) {
-      spinner.fail(chalk.red(`Error running parallel agents: ${error.message}`));
+      CliUI.failSpinner('Error running parallel agents');
+      console.error(CliUI.formatError(error, 'Parallel agent execution'));
     }
   });
 
@@ -94,15 +111,15 @@ program
   .command('list')
   .description('List available agents')
   .action(() => {
-    console.log(chalk.blue('Available AI Agents:'));
+    CliUI.logSection('Available AI Agents');
     const agents = agentManager.listAgents();
     if (agents.length === 0) {
-      console.log(chalk.yellow('No agents registered'));
+      CliUI.logWarning('No agents registered');
       return;
     }
 
     agents.forEach(agent => {
-      console.log(`${chalk.green('•')} ${chalk.bold(agent.name)}: ${agent.description}`);
+      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
     });
   });
 
@@ -128,9 +145,9 @@ program
   .action((model) => {
     try {
       configManager.setCurrentModel(model);
-      console.log(chalk.green(`✅ Model set to: ${model}`));
+      CliUI.logSuccess(`Model set to: ${CliUI.highlight(model)}`);
     } catch (error: any) {
-      console.log(chalk.red(`❌ ${error.message}`));
+      CliUI.logError(error.message);
     }
   });
 
@@ -140,9 +157,9 @@ program
   .action((model, apiKey) => {
     try {
       configManager.setApiKey(model, apiKey);
-      console.log(chalk.green(`✅ API key set for: ${model}`));
+      CliUI.logSuccess(`API key set for: ${CliUI.highlight(model)}`);
     } catch (error: any) {
-      console.log(chalk.red(`❌ ${error.message}`));
+      CliUI.logError(error.message);
     }
   });
 
@@ -150,8 +167,7 @@ program
   .command('models')
   .description('List available models')
   .action(() => {
-    console.log(chalk.blue.bold('\n🤖 Available Models:'));
-    console.log(chalk.gray('─'.repeat(40)));
+    CliUI.logSection('🤖 Available Models');
     
     const currentModel = configManager.get('currentModel');
     const models = configManager.get('models');
@@ -159,11 +175,11 @@ program
     Object.entries(models).forEach(([name, config]) => {
       const isCurrent = name === currentModel;
       const hasKey = configManager.getApiKey(name) !== undefined;
-      const status = hasKey ? chalk.green('✅') : chalk.red('❌');
-      const prefix = isCurrent ? chalk.yellow('→ ') : '  ';
+      const status = hasKey ? '✅' : '❌';
+      const prefix = isCurrent ? '→ ' : '  ';
       
-      console.log(`${prefix}${status} ${chalk.bold(name)}`);
-      console.log(`    ${chalk.gray(`Provider: ${config.provider} | Model: ${config.model}`)}`);
+      console.log(`${prefix}${status} ${CliUI.bold(name)}`);
+      console.log(`    ${CliUI.dim(`Provider: ${config.provider} | Model: ${config.model}`)}`);
     });
   });
 
@@ -172,21 +188,19 @@ program
   .command('agents')
   .description('List available agents')
   .action(() => {
-    console.log(chalk.blue.bold('\n🤖 Available Agents:'));
-    console.log(chalk.gray('─'.repeat(40)));
+    CliUI.logSection('🤖 Available Agents');
     
     const agents = agentManager.listAgents();
     if (agents.length === 0) {
-      console.log(chalk.yellow('No agents registered'));
+      CliUI.logWarning('No agents registered');
       return;
     }
 
     agents.forEach(agent => {
-      console.log(`${chalk.green('•')} ${chalk.bold(agent.name)}`);
-      console.log(`  ${chalk.gray(agent.description)}`);
+      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
     });
     
-    console.log(chalk.gray('\nUse "npm run chat" for interactive mode'));
+    CliUI.logInfo('Use "npm run chat" for interactive mode');
   });
 
 // Create custom agent command
@@ -197,6 +211,128 @@ program
   .option('-p, --prompt <prompt>', 'System prompt for the agent')
   .action(async (name, options) => {
     await createCustomAgent(name, options.description, options.prompt);
+  });
+
+// Index project command
+program
+  .command('index-project')
+  .description('Index the current project for RAG')
+  .action(async () => {
+    try {
+      const { indexProject } = await import('./ai/rag-system');
+      await indexProject(process.cwd());
+    } catch (error: any) {
+      CliUI.logError(`Error indexing project: ${error.message}`);
+    }
+  });
+
+// Planning system commands
+program
+  .command('plan <request>')
+  .description('Generate and execute an AI plan for the given request')
+  .option('-g, --generate-only', 'Only generate the plan without executing')
+  .option('-p, --project-path <path>', 'Project path to analyze', process.cwd())
+  .action(async (request, options) => {
+    try {
+      if (options.generateOnly) {
+        const plan = await planningManager.generatePlanOnly(request, options.projectPath);
+        CliUI.logSuccess(`Plan generated with ID: ${CliUI.highlight(plan.id)}`);
+        CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute this plan');
+      } else {
+        await planningManager.planAndExecute(request, options.projectPath);
+      }
+    } catch (error: any) {
+      CliUI.logError(`Planning failed: ${error.message}`);
+    }
+  });
+
+program
+  .command('execute-plan <plan-id>')
+  .description('Execute a previously generated plan')
+  .action(async (planId) => {
+    try {
+      await planningManager.executePlan(planId);
+    } catch (error: any) {
+      CliUI.logError(`Plan execution failed: ${error.message}`);
+    }
+  });
+
+program
+  .command('list-plans')
+  .description('List all generated plans')
+  .action(() => {
+    try {
+      const plans = planningManager.listPlans();
+      
+      if (plans.length === 0) {
+        CliUI.logWarning('No plans found');
+        return;
+      }
+
+      CliUI.logSection('Generated Plans');
+      plans.forEach(plan => {
+        const riskIcon = plan.riskAssessment.overallRisk === 'high' ? '🔴' : 
+                        plan.riskAssessment.overallRisk === 'medium' ? '🟡' : '🟢';
+        
+        console.log(`${riskIcon} ${CliUI.bold(plan.id.substring(0, 8))} - ${plan.title}`);
+        console.log(`  ${CliUI.dim(plan.description)}`);
+        console.log(`  ${CliUI.dim(`Steps: ${plan.steps.length} | Duration: ~${Math.round(plan.estimatedTotalDuration / 1000)}s`)}`);
+        console.log();
+      });
+      
+      CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute a plan');
+    } catch (error: any) {
+      CliUI.logError(`Failed to list plans: ${error.message}`);
+    }
+  });
+
+program
+  .command('planning-stats')
+  .description('Show planning system statistics')
+  .action(() => {
+    try {
+      const stats = planningManager.getPlanningStats();
+      
+      CliUI.logSection('Planning System Statistics');
+      CliUI.logKeyValue('Total Plans Generated', stats.totalPlansGenerated.toString());
+      CliUI.logKeyValue('Total Plans Executed', stats.totalPlansExecuted.toString());
+      CliUI.logKeyValue('Successful Executions', stats.successfulExecutions.toString());
+      CliUI.logKeyValue('Failed Executions', stats.failedExecutions.toString());
+      CliUI.logKeyValue('Average Steps per Plan', Math.round(stats.averageStepsPerPlan).toString());
+      CliUI.logKeyValue('Average Execution Time', `${Math.round(stats.averageExecutionTime / 1000)}s`);
+      
+      if (Object.keys(stats.riskDistribution).length > 0) {
+        CliUI.logSubsection('Risk Distribution');
+        Object.entries(stats.riskDistribution).forEach(([risk, count]) => {
+          const icon = risk === 'high' ? '🔴' : risk === 'medium' ? '🟡' : '🟢';
+          CliUI.logKeyValue(`${icon} ${risk}`, count.toString());
+        });
+      }
+      
+      if (Object.keys(stats.toolUsageStats).length > 0) {
+        CliUI.logSubsection('Most Used Tools');
+        const sortedTools = Object.entries(stats.toolUsageStats)
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 5);
+        
+        sortedTools.forEach(([tool, count]) => {
+          CliUI.logKeyValue(`🔧 ${tool}`, count.toString());
+        });
+      }
+    } catch (error: any) {
+      CliUI.logError(`Failed to get planning stats: ${error.message}`);
+    }
+  });
+
+program
+  .command('tools')
+  .description('Show available tools in the planning system')
+  .action(() => {
+    try {
+      planningManager.displayToolRegistry();
+    } catch (error: any) {
+      CliUI.logError(`Failed to display tools: ${error.message}`);
+    }
   });
 
 // Parse arguments
@@ -237,14 +373,14 @@ async function createCustomAgent(name: string, description?: string, systemPromp
     
     require('fs').writeFileSync(filename, agentCode);
     
-    console.log(chalk.green(`✅ Agent created: ${filename}`));
-    console.log(chalk.gray('To use the agent:'));
-    console.log(chalk.white(`1. Add import to src/cli/register-agents.ts`));
-    console.log(chalk.white(`2. Register the agent in registerAgents function`));
-    console.log(chalk.white(`3. Run "npm run chat" to use it`));
+    CliUI.logSuccess(`Agent created: ${CliUI.highlight(filename)}`);
+    CliUI.logInfo('To use the agent:');
+    console.log(`1. Add import to src/cli/register-agents.ts`);
+    console.log(`2. Register the agent in registerAgents function`);
+    console.log(`3. Run "npm run chat" to use it`);
     
   } catch (error: any) {
-    console.log(chalk.red(`❌ Error creating agent: ${error.message}`));
+    CliUI.logError(`Error creating agent: ${error.message}`);
   }
 }
 

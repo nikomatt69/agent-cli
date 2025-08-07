@@ -3,22 +3,29 @@ import { BaseAgent } from './base-agent';
 import { google } from '@ai-sdk/google';
 
 export class AIAnalysisAgent extends BaseAgent {
+  id = 'ai-analysis';
+  capabilities = ['code-analysis', 'ai-insights', 'best-practices'];
+  specialization = 'AI-powered code analysis using Gemini';
   name = 'ai-analysis';
   description = 'AI-powered code analysis agent using Gemini';
 
-  async initialize(): Promise<void> {
-    await super.initialize();
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
     console.log('AI Analysis Agent initialized successfully');
   }
 
-  async run(task?: string): Promise<any> {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
     console.log(`Running AI Analysis Agent`);
-    if (task) {
-      console.log(`Task: ${task}`);
+    if (taskData) {
+      console.log(`Task: ${taskData}`);
     }
     
     // Default code to analyze if no task provided
-    const codeToAnalyze = task || 'function add(a: number, b: number): number { return a + b; }';
+    const codeToAnalyze = taskData || 'function add(a: number, b: number): number { return a + b; }';
     const prompt = `Analyze this code and provide insights about its functionality, potential improvements, and best practices:\n\n${codeToAnalyze}`;
     
     try {
@@ -43,8 +50,16 @@ export class AIAnalysisAgent extends BaseAgent {
     }
   }
 
-  async cleanup(): Promise<void> {
-    await super.cleanup();
+  protected async onStop(): Promise<void> {
     console.log('AI Analysis Agent cleaned up');
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(task?: string): Promise<any> {
+    return await this.onExecuteTask(task);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

@@ -21,8 +21,11 @@ const TaskPlanSchema = zod_1.z.object({
     executionOrder: zod_1.z.array(zod_1.z.string()),
 });
 class AutonomousOrchestrator extends base_agent_1.BaseAgent {
-    constructor(agentManager) {
-        super();
+    constructor(agentManager, workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'autonomous-orchestrator';
+        this.capabilities = ['task-orchestration', 'multi-agent-coordination', 'planning', 'execution'];
+        this.specialization = 'Autonomous agent orchestrator that plans and executes complex multi-agent tasks';
         this.name = 'autonomous-orchestrator';
         this.description = 'Autonomous agent orchestrator that plans and executes complex multi-agent tasks';
         this.runningTasks = new Map();
@@ -109,6 +112,18 @@ Consider parallel execution where possible.`,
             }
         }
         return results;
+    }
+    async onInitialize() {
+        console.log('Autonomous Orchestrator initialized');
+    }
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
+        return await this.planTasks(taskData);
+    }
+    async onStop() {
+        // Wait for all running tasks to complete
+        await Promise.all(this.runningTasks.values());
+        console.log('Autonomous Orchestrator stopped');
     }
     async executeTask(task) {
         const startTime = new Date();

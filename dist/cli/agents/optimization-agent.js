@@ -5,22 +5,27 @@ const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
 const google_1 = require("@ai-sdk/google");
 class OptimizationAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'optimization';
+        this.capabilities = ["performance-optimization", "code-analysis", "profiling"];
+        this.specialization = 'Performance optimization and analysis';
+        this.name = 'optimization';
+        this.description = 'Performance optimization and analysis';
         this.name = 'optimization';
         this.description = 'AI-powered code optimization agent using Gemini';
     }
-    async initialize() {
-        await super.initialize();
+    async onInitialize() {
         console.log('Optimization Agent initialized successfully');
     }
-    async run(task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
         console.log(`Running Optimization Agent`);
-        if (task) {
-            console.log(`Task: ${task}`);
+        if (taskData) {
+            console.log(`Task: ${taskData}`);
         }
-        // Default code to optimize if no task provided
-        const codeToOptimize = task || `
+        // Default code to optimize if no taskData provided
+        const codeToOptimize = taskData || `
 function findUser(users, id) {
   for (let i = 0; i < users.length; i++) {
     if (users[i].id === id) {
@@ -64,9 +69,15 @@ Provide the optimized version with explanations of the improvements made.`;
             };
         }
     }
-    async cleanup() {
-        await super.cleanup();
+    async onStop() {
         console.log('Optimization Agent cleaned up');
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.OptimizationAgent = OptimizationAgent;

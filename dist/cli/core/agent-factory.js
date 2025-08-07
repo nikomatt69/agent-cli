@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.agentFactory = exports.AgentFactory = exports.DynamicAgent = void 0;
 const base_agent_1 = require("../agents/base-agent");
 const model_provider_1 = require("../ai/model-provider");
-const tools_manager_1 = require("../tools/tools-manager");
+const migration_to_secure_tools_1 = require("../tools/migration-to-secure-tools"); // deprecated, for backward compatibility
 const agent_todo_manager_1 = require("./agent-todo-manager");
 const agent_stream_1 = require("./agent-stream");
 const workspace_context_1 = require("./workspace-context");
@@ -248,8 +248,8 @@ Generate the necessary files and code to complete this implementation.`,
         agent_stream_1.agentStream.emitEvent(this.name, 'executing', 'Running tests and validation...');
         // Run actual tests if fully autonomous
         if (this.blueprint.autonomyLevel === 'fully-autonomous') {
-            const buildResult = await tools_manager_1.toolsManager.build();
-            const testResult = await tools_manager_1.toolsManager.runTests();
+            const buildResult = await migration_to_secure_tools_1.toolsManager.build();
+            const testResult = await migration_to_secure_tools_1.toolsManager.runTests();
             return {
                 buildSuccess: buildResult.success,
                 testSuccess: testResult.success,
@@ -303,7 +303,7 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
                     filename = `generated-${this.name}-${i + 1}${extension}`;
                 }
                 try {
-                    await tools_manager_1.toolsManager.writeFile(filename, code);
+                    await migration_to_secure_tools_1.toolsManager.writeFile(filename, code);
                     createdFiles.push(filename);
                     agent_stream_1.agentStream.emitEvent(this.name, 'result', `Created file: ${filename}`);
                 }

@@ -1,0 +1,40 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FindFilesTool = void 0;
+const glob_1 = require("glob");
+const base_tool_1 = require("./base-tool");
+const secure_file_tools_1 = require("./secure-file-tools");
+class FindFilesTool extends base_tool_1.BaseTool {
+    constructor(workingDirectory) {
+        super('find-files-tool', workingDirectory);
+    }
+    async execute(pattern, options = {}) {
+        const startTime = Date.now();
+        try {
+            const sanitizedCwd = (0, secure_file_tools_1.sanitizePath)(options.cwd || '.', this.workingDirectory);
+            const files = glob_1.glob.sync(pattern, { cwd: sanitizedCwd, nodir: true });
+            return {
+                success: true,
+                data: files,
+                metadata: {
+                    executionTime: Date.now() - startTime,
+                    toolName: this.name,
+                    parameters: { pattern, options }
+                }
+            };
+        }
+        catch (error) {
+            return {
+                success: false,
+                data: [],
+                error: error.message,
+                metadata: {
+                    executionTime: Date.now() - startTime,
+                    toolName: this.name,
+                    parameters: { pattern, options }
+                }
+            };
+        }
+    }
+}
+exports.FindFilesTool = FindFilesTool;

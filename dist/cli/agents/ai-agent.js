@@ -5,22 +5,25 @@ const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
 const google_1 = require("@ai-sdk/google");
 class AIAnalysisAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'ai-analysis';
+        this.capabilities = ['code-analysis', 'ai-insights', 'best-practices'];
+        this.specialization = 'AI-powered code analysis using Gemini';
         this.name = 'ai-analysis';
         this.description = 'AI-powered code analysis agent using Gemini';
     }
-    async initialize() {
-        await super.initialize();
+    async onInitialize() {
         console.log('AI Analysis Agent initialized successfully');
     }
-    async run(task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
         console.log(`Running AI Analysis Agent`);
-        if (task) {
-            console.log(`Task: ${task}`);
+        if (taskData) {
+            console.log(`Task: ${taskData}`);
         }
         // Default code to analyze if no task provided
-        const codeToAnalyze = task || 'function add(a: number, b: number): number { return a + b; }';
+        const codeToAnalyze = taskData || 'function add(a: number, b: number): number { return a + b; }';
         const prompt = `Analyze this code and provide insights about its functionality, potential improvements, and best practices:\n\n${codeToAnalyze}`;
         try {
             const { text } = await (0, ai_1.generateText)({
@@ -43,9 +46,15 @@ class AIAnalysisAgent extends base_agent_1.BaseAgent {
             };
         }
     }
-    async cleanup() {
-        await super.cleanup();
+    async onStop() {
         console.log('AI Analysis Agent cleaned up');
+    }
+    // Keep legacy methods for backward compatibility
+    async run(task) {
+        return await this.onExecuteTask(task);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.AIAnalysisAgent = AIAnalysisAgent;

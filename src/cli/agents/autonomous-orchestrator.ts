@@ -29,14 +29,17 @@ export interface TaskResult {
 }
 
 export class AutonomousOrchestrator extends BaseAgent {
+  id = 'autonomous-orchestrator';
+  capabilities = ['task-orchestration', 'multi-agent-coordination', 'planning', 'execution'];
+  specialization = 'Autonomous agent orchestrator that plans and executes complex multi-agent tasks';
   name = 'autonomous-orchestrator';
   description = 'Autonomous agent orchestrator that plans and executes complex multi-agent tasks';
 
   private agentManager: AgentManager;
   private runningTasks: Map<string, Promise<TaskResult>> = new Map();
 
-  constructor(agentManager: AgentManager) {
-    super();
+  constructor(agentManager: AgentManager, workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
     this.agentManager = agentManager;
   }
 
@@ -130,7 +133,22 @@ Consider parallel execution where possible.`,
     return results;
   }
 
-  private async executeTask(task: any): Promise<TaskResult> {
+  protected async onInitialize(): Promise<void> {
+    console.log('Autonomous Orchestrator initialized');
+  }
+
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    return await this.planTasks(taskData);
+  }
+
+  protected async onStop(): Promise<void> {
+    // Wait for all running tasks to complete
+    await Promise.all(this.runningTasks.values());
+    console.log('Autonomous Orchestrator stopped');
+  }
+
+  public async executeTask(task: any): Promise<TaskResult> {
     const startTime = new Date();
     console.log(chalk.cyan(`🔄 Starting task: ${task.description} (${task.agent})`));
     
@@ -141,8 +159,8 @@ Consider parallel execution where possible.`,
       }
 
       await agent.initialize();
-      const result = await agent.run(task.description);
-      await agent.cleanup();
+      const result = await agent.run?.(task.description);
+      await agent.cleanup?.();
 
       const endTime = new Date();
       const duration = endTime.getTime() - startTime.getTime();
@@ -227,7 +245,7 @@ Consider parallel execution where possible.`,
       });
 
       const confirm = await new Promise<boolean>((resolve) => {
-        readline.question(chalk.yellow('\nProceed with execution? (y/N): '), (answer) => {
+        readline.question(chalk.yellow('\nProceed with execution? (y/N): '), (answer: string) => {
           readline.close();
           resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
         });

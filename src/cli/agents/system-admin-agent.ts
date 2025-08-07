@@ -17,8 +17,20 @@ const SystemCommandSchema = z.object({
 });
 
 export class SystemAdminAgent extends BaseAgent {
-  name = 'system-admin';
-  description = 'System administration agent for terminal commands, installations, and system management';
+  id = 'system-admin';
+  capabilities = ["system-administration","server-management","monitoring"];
+  specialization = 'System administration and server management';
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
+    console.log('System Admin Agent initialized');
+  }
+
+  protected async onStop(): Promise<void> {
+    console.log('System Admin Agent stopped');
+  }
 
   async analyzeSystem(): Promise<any> {
     console.log(chalk.blue('🔍 Analyzing system...'));
@@ -116,7 +128,7 @@ Generate a structured plan with commands to execute.`,
       });
 
       const confirm = await new Promise<boolean>((resolve) => {
-        readline.question(chalk.yellow('\nExecute these commands? (y/N): '), (answer) => {
+        readline.question(chalk.yellow('\nExecute these commands? (y/N): '), (answer: string) => {
           readline.close();
           resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
         });
@@ -309,8 +321,9 @@ Generate a structured plan with commands to execute.`,
     };
   }
 
-  async run(task?: string): Promise<any> {
-    if (!task) {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    if (!taskData) {
       return {
         message: 'System Admin Agent ready! I can execute terminal commands, manage processes, install packages, and monitor the system.',
         capabilities: [
@@ -335,7 +348,7 @@ Generate a structured plan with commands to execute.`,
       };
     }
 
-    const lowerTask = task.toLowerCase();
+    const lowerTask = taskData.toLowerCase();
     
     try {
       if (lowerTask.includes('analyze') || lowerTask.includes('system info')) {
@@ -343,7 +356,7 @@ Generate a structured plan with commands to execute.`,
       }
       
       if (lowerTask.includes('install')) {
-        const packages = task.match(/install\s+(.+)/i)?.[1]?.split(/\s+/) || [];
+        const packages = taskData.match(/install\s+(.+)/i)?.[1]?.split(/\s+/) || [];
         const isGlobal = lowerTask.includes('global') || lowerTask.includes('-g');
         const isDev = lowerTask.includes('dev') || lowerTask.includes('--save-dev');
         
@@ -351,12 +364,12 @@ Generate a structured plan with commands to execute.`,
       }
       
       if (lowerTask.includes('run command') || lowerTask.includes('execute')) {
-        const command = task.replace(/(run command|execute):\s*/i, '');
+        const command = taskData.replace(/(run command|execute):\s*/i, '');
         return await this.executeCommands(command);
       }
       
       if (lowerTask.includes('create project')) {
-        const match = task.match(/create project\s+(\w+)\s+(.+)/i);
+        const match = taskData.match(/create project\s+(\w+)\s+(.+)/i);
         if (match) {
           const [, type, name] = match;
           return await this.createProject(type, name);
@@ -364,7 +377,7 @@ Generate a structured plan with commands to execute.`,
       }
       
       if (lowerTask.includes('run script')) {
-        const script = task.replace(/run script:\s*/i, '');
+        const script = taskData.replace(/run script:\s*/i, '');
         const language = lowerTask.includes('python') ? 'python' : 
                         lowerTask.includes('node') ? 'node' : 'bash';
         return await this.runScript(script, language);
@@ -375,25 +388,34 @@ Generate a structured plan with commands to execute.`,
       }
       
       if (lowerTask.includes('kill process')) {
-        const pid = parseInt(task.match(/kill process\s+(\d+)/i)?.[1] || '');
+        const pid = parseInt(taskData.match(/kill process\s+(\d+)/i)?.[1] || '');
         if (pid) {
           return await this.manageProcesses('kill', pid);
         }
       }
       
       if (lowerTask.includes('monitor')) {
-        const duration = parseInt(task.match(/monitor.*?(\d+)/)?.[1] || '30');
+        const duration = parseInt(taskData.match(/monitor.*?(\d+)/)?.[1] || '30');
         return await this.monitorSystem(duration);
       }
 
       // Default: treat as command execution
-      return await this.executeCommands(task);
+      return await this.executeCommands(taskData);
       
     } catch (error: any) {
       return {
         error: `System administration failed: ${error.message}`,
-        task,
+        taskData,
       };
     }
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

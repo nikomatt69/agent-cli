@@ -1,0 +1,144 @@
+WORKFLOW AUTOMATION - TOOL CHAINS
+
+Sistema per eseguire catene di tool calls automatiche per raggiungere obiettivi complessi.
+
+## PRINCIPI DELLE CATENE
+
+1. **SEQUENZIALITÀ**: Ogni tool call dipende dal risultato del precedente
+2. **AUTONOMIA**: Esecuzione automatica senza intervento umano per task sicuri
+3. **TRASPARENZA**: Log dettagliato di ogni step della catena
+4. **RECOVERY**: Gestione errori e retry automatici
+5. **BRANCHING**: Catene condizionali basate sui risultati
+
+## TIPI DI CATENE
+
+### CATENA ANALISI-IMPLEMENTAZIONE
+```
+1. read-file-tool → Analizza codice esistente
+2. grep-search → Trova pattern e dipendenze  
+3. write-file-tool → Crea nuovi file
+4. replace-in-file-tool → Modifica file esistenti
+5. run-command-tool → Testa implementazione
+```
+
+### CATENA REFACTORING
+```
+1. grep-search → Trova tutte le occorrenze
+2. read-file-tool → Analizza ogni file
+3. replace-in-file-tool → Applica modifiche
+4. run-command-tool → Verifica che tutto funzioni
+5. write-file-tool → Aggiorna documentazione
+```
+
+### CATENA TESTING
+```
+1. read-file-tool → Analizza codice da testare
+2. write-file-tool → Crea test files
+3. run-command-tool → Esegue test
+4. replace-in-file-tool → Fix eventuali errori
+5. run-command-tool → Re-run test fino al successo
+```
+
+### CATENA DEPLOYMENT
+```
+1. run-command-tool → Build del progetto
+2. run-command-tool → Run test suite
+3. read-file-tool → Verifica configurazioni
+4. run-command-tool → Deploy
+5. run-command-tool → Health check post-deploy
+```
+
+## PATTERN DI AUTOMAZIONE
+
+### AUTO-APPROVAL RULES
+- Operazioni CRUD standard → AUTO-APPROVE
+- Test execution → AUTO-APPROVE  
+- File reads/analysis → AUTO-APPROVE
+- Build operations → AUTO-APPROVE
+- Schema changes → REQUIRE APPROVAL
+- Delete operations → REQUIRE APPROVAL
+- External API calls → REQUIRE APPROVAL
+
+### RETRY LOGIC
+```
+IF tool_call_fails:
+  IF retry_count < 3:
+    WAIT exponential_backoff
+    RETRY with adjusted parameters
+  ELSE:
+    ESCALATE to human review
+```
+
+### BRANCHING CONDITIONS
+```
+IF test_results == "PASS":
+  CONTINUE to deployment chain
+ELSE:
+  BRANCH to fix-and-retry chain
+```
+
+## ESEMPI DI CATENE COMPLETE
+
+### ESEMPIO 1: Aggiungere nuova feature
+```
+GOAL: Implementare login con Google OAuth
+
+CHAIN:
+1. read-file-tool("package.json") → Verifica dipendenze
+2. run-command-tool("npm install passport passport-google-oauth20") → Installa deps
+3. write-file-tool("src/auth/google-strategy.js") → Crea strategia OAuth
+4. read-file-tool("src/app.js") → Analizza app principale
+5. replace-in-file-tool("src/app.js") → Integra OAuth middleware
+6. write-file-tool("src/routes/auth.js") → Crea route autenticazione
+7. write-file-tool("tests/auth.test.js") → Crea test
+8. run-command-tool("npm test") → Verifica implementazione
+9. write-file-tool("docs/oauth-setup.md") → Aggiorna documentazione
+```
+
+### ESEMPIO 2: Refactoring globale
+```
+GOAL: Rinominare funzione getUserData → fetchUserProfile
+
+CHAIN:
+1. grep-search("getUserData", recursive=true) → Trova tutte occorrenze
+2. FOR EACH file_found:
+   a. read-file-tool(file_path) → Analizza contesto
+   b. replace-in-file-tool(file_path, "getUserData", "fetchUserProfile")
+3. grep-search("getUserData", recursive=true) → Verifica completamento
+4. run-command-tool("npm test") → Verifica che tutto funzioni
+5. run-command-tool("npm run lint") → Verifica code style
+```
+
+### ESEMPIO 3: Setup completo progetto
+```
+GOAL: Setup nuovo progetto React con TypeScript
+
+CHAIN:
+1. run-command-tool("npx create-react-app . --template typescript")
+2. run-command-tool("npm install @types/react @types/react-dom")
+3. write-file-tool("src/components/App.tsx") → Component principale
+4. write-file-tool("src/hooks/useApi.ts") → Custom hook
+5. write-file-tool("src/utils/constants.ts") → Costanti
+6. replace-in-file-tool("src/index.tsx") → Setup iniziale
+7. write-file-tool("tests/App.test.tsx") → Test component
+8. run-command-tool("npm test") → Verifica setup
+9. run-command-tool("npm start") → Avvia dev server
+```
+
+## MONITORING E LOGGING
+
+Ogni catena deve loggare:
+- Timestamp di inizio/fine
+- Tool calls eseguiti con parametri
+- Risultati di ogni step
+- Errori e retry attempts
+- Tempo totale di esecuzione
+- Metriche di successo
+
+## SAFETY MECHANISMS
+
+- Dry-run mode per preview delle azioni
+- Rollback automatico in caso di errori critici
+- Backup automatico prima di modifiche importanti
+- Rate limiting per evitare spam di tool calls
+- Human escalation per operazioni rischiose

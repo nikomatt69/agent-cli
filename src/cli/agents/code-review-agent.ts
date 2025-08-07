@@ -3,22 +3,27 @@ import { BaseAgent } from './base-agent';
 import { google } from '@ai-sdk/google';
 
 export class CodeReviewAgent extends BaseAgent {
-  name = 'code-review';
-  description = 'AI-powered code review agent using Gemini';
+  id = 'code-review';
+  capabilities = ["code-review","quality-analysis","best-practices"];
+  specialization = 'Code review and quality analysis';
 
-  async initialize(): Promise<void> {
-    await super.initialize();
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
     console.log('Code Review Agent initialized successfully');
   }
 
-  async run(task?: string): Promise<any> {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
     console.log(`Running Code Review Agent`);
-    if (task) {
-      console.log(`Task: ${task}`);
+    if (taskData) {
+      console.log(`Task: ${taskData}`);
     }
     
-    // Default code to review if no task provided
-    const codeToReview = task || `
+    // Default code to review if no taskData provided
+    const codeToReview = taskData || `
 function processUser(user) {
   if (user.name && user.email) {
     return user.name + " - " + user.email;
@@ -63,8 +68,16 @@ Provide specific suggestions for improvement.`;
     }
   }
 
-  async cleanup(): Promise<void> {
-    await super.cleanup();
+  protected async onStop(): Promise<void> {
     console.log('Code Review Agent cleaned up');
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

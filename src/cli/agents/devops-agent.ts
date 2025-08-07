@@ -2,11 +2,25 @@ import { BaseAgent } from './base-agent';
 import { modelProvider, ChatMessage } from '../ai/model-provider';
 
 export class DevOpsAgent extends BaseAgent {
-  name = 'devops-expert';
-  description = 'DevOps and infrastructure specialist for CI/CD, Docker, Kubernetes, and cloud deployments';
+  id = 'devops';
+  capabilities = ["deployment","ci-cd","infrastructure","containers"];
+  specialization = 'DevOps and infrastructure management';
 
-  async run(task?: string): Promise<any> {
-    if (!task) {
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
+    console.log('DevOps Agent initialized');
+  }
+
+  protected async onStop(): Promise<void> {
+    console.log('DevOps Agent stopped');
+  }
+
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    if (!taskData) {
       return {
         message: 'DevOps Expert ready! I can help with CI/CD, containerization, infrastructure, and cloud deployments',
         specialties: [
@@ -47,15 +61,24 @@ export class DevOpsAgent extends BaseAgent {
       },
       {
         role: 'user',
-        content: task,
+        content: taskData,
       },
     ];
 
     try {
       const response = await modelProvider.generateResponse({ messages });
-      return { response, task, agent: 'DevOps Expert' };
+      return { response, taskData, agent: 'DevOps Expert' };
     } catch (error: any) {
-      return { error: error.message, task, agent: 'DevOps Expert' };
+      return { error: error.message, taskData, agent: 'DevOps Expert' };
     }
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

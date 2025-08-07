@@ -3,22 +3,27 @@ import { BaseAgent } from './base-agent';
 import { google } from '@ai-sdk/google';
 
 export class OptimizationAgent extends BaseAgent {
-  name = 'optimization';
-  description = 'AI-powered code optimization agent using Gemini';
+  id = 'optimization';
+  capabilities = ["performance-optimization","code-analysis","profiling"];
+  specialization = 'Performance optimization and analysis';
 
-  async initialize(): Promise<void> {
-    await super.initialize();
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
     console.log('Optimization Agent initialized successfully');
   }
 
-  async run(task?: string): Promise<any> {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
     console.log(`Running Optimization Agent`);
-    if (task) {
-      console.log(`Task: ${task}`);
+    if (taskData) {
+      console.log(`Task: ${taskData}`);
     }
 
-    // Default code to optimize if no task provided
-    const codeToOptimize = task || `
+    // Default code to optimize if no taskData provided
+    const codeToOptimize = taskData || `
 function findUser(users, id) {
   for (let i = 0; i < users.length; i++) {
     if (users[i].id === id) {
@@ -65,8 +70,16 @@ Provide the optimized version with explanations of the improvements made.`;
     }
   }
 
-  async cleanup(): Promise<void> {
-    await super.cleanup();
+  protected async onStop(): Promise<void> {
     console.log('Optimization Agent cleaned up');
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

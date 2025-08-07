@@ -28,8 +28,8 @@ export function registerAgents(agentManager: AgentManager): void {
   
   // Autonomous orchestrator (special case - requires AgentManager)
   class AutonomousOrchestratorWrapper extends AutonomousOrchestrator {
-    constructor() {
-      super(agentManager);
+    constructor(workingDirectory: string = process.cwd()) {
+      super(agentManager, workingDirectory);
     }
   }
   agentManager.registerAgent(AutonomousOrchestratorWrapper);

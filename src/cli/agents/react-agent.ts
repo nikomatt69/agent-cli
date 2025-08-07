@@ -4,11 +4,24 @@ import { toolsManager } from '../tools/tools-manager';
 import chalk from 'chalk';
 
 export class ReactAgent extends BaseAgent {
-  name = 'react-expert';
-  description = 'React/Next.js specialist for components, hooks, and modern patterns';
+  id = 'react';
+  capabilities = ["react","jsx","frontend","components"];
+  specialization = 'React and frontend development';
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
 
-  async run(task?: string): Promise<any> {
-    if (!task) {
+  protected async onInitialize(): Promise<void> {
+    console.log('React Agent initialized');
+  }
+
+  protected async onStop(): Promise<void> {
+    console.log('React Agent stopped');
+  }
+
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    if (!taskData) {
       return {
         message: 'React Expert ready! I can help with components, hooks, state management, and Next.js',
         specialties: [
@@ -79,25 +92,25 @@ Always provide complete, working solutions with:
         },
         {
           role: 'user',
-          content: task,
+          content: taskData,
         },
       ];
 
       const response = await modelProvider.generateResponse({ messages });
       
       // Try to extract and create files if the AI suggests them
-      await this.processReactResponse(response, task);
+      await this.processReactResponse(response, taskData);
       
       return { 
         response, 
-        task, 
+        taskData, 
         agent: 'React Expert',
         projectAnalyzed: true,
         frameworkDetected: projectInfo.framework,
       };
       
     } catch (error: any) {
-      return { error: error.message, task, agent: 'React Expert' };
+      return { error: error.message, taskData, agent: 'React Expert' };
     }
   }
 
@@ -158,5 +171,14 @@ Always provide complete, working solutions with:
     }
     
     return null;
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

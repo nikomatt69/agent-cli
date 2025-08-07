@@ -5,22 +5,25 @@ const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
 const google_1 = require("@ai-sdk/google");
 class CodeReviewAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'code-review';
+        this.capabilities = ["code-review", "quality-analysis", "best-practices"];
+        this.specialization = 'Code review and quality analysis';
         this.name = 'code-review';
         this.description = 'AI-powered code review agent using Gemini';
     }
-    async initialize() {
-        await super.initialize();
+    async onInitialize() {
         console.log('Code Review Agent initialized successfully');
     }
-    async run(task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
         console.log(`Running Code Review Agent`);
-        if (task) {
-            console.log(`Task: ${task}`);
+        if (taskData) {
+            console.log(`Task: ${taskData}`);
         }
-        // Default code to review if no task provided
-        const codeToReview = task || `
+        // Default code to review if no taskData provided
+        const codeToReview = taskData || `
 function processUser(user) {
   if (user.name && user.email) {
     return user.name + " - " + user.email;
@@ -62,9 +65,15 @@ Provide specific suggestions for improvement.`;
             };
         }
     }
-    async cleanup() {
-        await super.cleanup();
+    async onStop() {
         console.log('Code Review Agent cleaned up');
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.CodeReviewAgent = CodeReviewAgent;

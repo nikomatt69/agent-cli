@@ -4,13 +4,25 @@ exports.DevOpsAgent = void 0;
 const base_agent_1 = require("./base-agent");
 const model_provider_1 = require("../ai/model-provider");
 class DevOpsAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'devops';
+        this.capabilities = ["deployment", "ci-cd", "infrastructure", "containers"];
+        this.specialization = 'DevOps and infrastructure management';
+        this.name = 'devops';
+        this.description = 'DevOps and infrastructure management';
         this.name = 'devops-expert';
         this.description = 'DevOps and infrastructure specialist for CI/CD, Docker, Kubernetes, and cloud deployments';
     }
-    async run(task) {
-        if (!task) {
+    async onInitialize() {
+        console.log('DevOps Agent initialized');
+    }
+    async onStop() {
+        console.log('DevOps Agent stopped');
+    }
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
+        if (!taskData) {
             return {
                 message: 'DevOps Expert ready! I can help with CI/CD, containerization, infrastructure, and cloud deployments',
                 specialties: [
@@ -50,16 +62,23 @@ class DevOpsAgent extends base_agent_1.BaseAgent {
             },
             {
                 role: 'user',
-                content: task,
+                content: taskData,
             },
         ];
         try {
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
-            return { response, task, agent: 'DevOps Expert' };
+            return { response, taskData, agent: 'DevOps Expert' };
         }
         catch (error) {
-            return { error: error.message, task, agent: 'DevOps Expert' };
+            return { error: error.message, taskData, agent: 'DevOps Expert' };
         }
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.DevOpsAgent = DevOpsAgent;

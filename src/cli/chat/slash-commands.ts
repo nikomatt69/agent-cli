@@ -417,8 +417,8 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       console.log(chalk.blue(`🤖 Running ${agentName}...`));
       
       await agent.initialize();
-      const result = await agent.run(task);
-      await agent.cleanup();
+      const result = await agent.run?.(task);
+      await agent.cleanup?.();
 
       console.log(chalk.green(`✅ ${agentName} completed:`));
       if (typeof result === 'string') {
@@ -494,8 +494,8 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
 
         await agent.initialize();
-        const result = await agent.run(task);
-        await agent.cleanup();
+        const result = await agent.run?.(task);
+        await agent.cleanup?.();
         
         return { agentName, result };
       });

@@ -9,13 +9,25 @@ const model_provider_1 = require("../ai/model-provider");
 const tools_manager_1 = require("../tools/tools-manager");
 const chalk_1 = __importDefault(require("chalk"));
 class ReactAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'react';
+        this.capabilities = ["react", "jsx", "frontend", "components"];
+        this.specialization = 'React and frontend development';
+        this.name = 'react';
+        this.description = 'React and frontend development';
         this.name = 'react-expert';
         this.description = 'React/Next.js specialist for components, hooks, and modern patterns';
     }
-    async run(task) {
-        if (!task) {
+    async onInitialize() {
+        console.log('React Agent initialized');
+    }
+    async onStop() {
+        console.log('React Agent stopped');
+    }
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
+        if (!taskData) {
             return {
                 message: 'React Expert ready! I can help with components, hooks, state management, and Next.js',
                 specialties: [
@@ -80,22 +92,22 @@ Always provide complete, working solutions with:
                 },
                 {
                     role: 'user',
-                    content: task,
+                    content: taskData,
                 },
             ];
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
             // Try to extract and create files if the AI suggests them
-            await this.processReactResponse(response, task);
+            await this.processReactResponse(response, taskData);
             return {
                 response,
-                task,
+                taskData,
                 agent: 'React Expert',
                 projectAnalyzed: true,
                 frameworkDetected: projectInfo.framework,
             };
         }
         catch (error) {
-            return { error: error.message, task, agent: 'React Expert' };
+            return { error: error.message, taskData, agent: 'React Expert' };
         }
     }
     async processReactResponse(response, originalTask) {
@@ -146,6 +158,13 @@ Always provide complete, working solutions with:
             return `${componentMatch[1]}.tsx`;
         }
         return null;
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.ReactAgent = ReactAgent;

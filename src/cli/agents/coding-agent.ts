@@ -31,8 +31,23 @@ const CodeGenerationSchema = z.object({
 });
 
 export class CodingAgent extends BaseAgent {
+  id = 'coding';
+  capabilities = ["general-coding","refactoring","problem-solving"];
+  specialization = 'General purpose coding assistance';
   name = 'coding-agent';
   description = 'Advanced coding assistant for analysis, generation, and optimization';
+
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
+    console.log('Coding Agent initialized');
+  }
+
+  protected async onStop(): Promise<void> {
+    console.log('Coding Agent stopped');
+  }
 
   async analyzeCode(code: string): Promise<any> {
     const messages: ChatMessage[] = [
@@ -201,8 +216,9 @@ export class CodingAgent extends BaseAgent {
     }
   }
 
-  async run(task?: string): Promise<any> {
-    if (!task) {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    if (!taskData) {
       return {
         message: 'Coding agent ready! Available commands: analyze, generate, optimize, explain, debug, test',
         capabilities: [
@@ -216,12 +232,12 @@ export class CodingAgent extends BaseAgent {
       };
     }
 
-    // Parse task to determine action
-    const lowerTask = task.toLowerCase();
+    // Parse taskData to determine action
+    const lowerTask = taskData.toLowerCase();
     
     if (lowerTask.includes('analyze') || lowerTask.includes('review')) {
-      // Extract code from task (assume code is in backticks or after "analyze:")
-      const codeMatch = task.match(/```[\s\S]*?```|analyze:\s*([\s\S]*)/i);
+      // Extract code from taskData (assume code is in backticks or after "analyze:")
+      const codeMatch = taskData.match(/```[\s\S]*?```|analyze:\s*([\s\S]*)/i);
       if (codeMatch) {
         const code = codeMatch[0].replace(/```/g, '').trim();
         return await this.analyzeCode(code);
@@ -229,12 +245,12 @@ export class CodingAgent extends BaseAgent {
     }
 
     if (lowerTask.includes('generate') || lowerTask.includes('create')) {
-      const description = task.replace(/(generate|create)\s*/i, '');
+      const description = taskData.replace(/(generate|create)\s*/i, '');
       return await this.generateCode(description);
     }
 
     if (lowerTask.includes('optimize') || lowerTask.includes('improve')) {
-      const codeMatch = task.match(/```[\s\S]*?```|optimize:\s*([\s\S]*)/i);
+      const codeMatch = taskData.match(/```[\s\S]*?```|optimize:\s*([\s\S]*)/i);
       if (codeMatch) {
         const code = codeMatch[0].replace(/```/g, '').trim();
         return await this.optimizeCode(code);
@@ -242,7 +258,7 @@ export class CodingAgent extends BaseAgent {
     }
 
     if (lowerTask.includes('explain') || lowerTask.includes('understand')) {
-      const codeMatch = task.match(/```[\s\S]*?```|explain:\s*([\s\S]*)/i);
+      const codeMatch = taskData.match(/```[\s\S]*?```|explain:\s*([\s\S]*)/i);
       if (codeMatch) {
         const code = codeMatch[0].replace(/```/g, '').trim();
         return await this.explainCode(code);
@@ -250,7 +266,7 @@ export class CodingAgent extends BaseAgent {
     }
 
     if (lowerTask.includes('debug') || lowerTask.includes('fix')) {
-      const codeMatch = task.match(/```[\s\S]*?```|debug:\s*([\s\S]*)/i);
+      const codeMatch = taskData.match(/```[\s\S]*?```|debug:\s*([\s\S]*)/i);
       if (codeMatch) {
         const code = codeMatch[0].replace(/```/g, '').trim();
         return await this.debugCode(code);
@@ -258,7 +274,7 @@ export class CodingAgent extends BaseAgent {
     }
 
     if (lowerTask.includes('test') || lowerTask.includes('spec')) {
-      const codeMatch = task.match(/```[\s\S]*?```|test:\s*([\s\S]*)/i);
+      const codeMatch = taskData.match(/```[\s\S]*?```|test:\s*([\s\S]*)/i);
       if (codeMatch) {
         const code = codeMatch[0].replace(/```/g, '').trim();
         return await this.generateTests(code);
@@ -273,15 +289,24 @@ export class CodingAgent extends BaseAgent {
       },
       {
         role: 'user',
-        content: task,
+        content: taskData,
       },
     ];
 
     try {
       const response = await modelProvider.generateResponse({ messages });
-      return { response, task };
+      return { response, taskData };
     } catch (error: any) {
-      return { error: error.message, task };
+      return { error: error.message, taskData };
     }
+  }
+
+  // Keep legacy methods for backward compatibility
+  async run(taskData: string): Promise<any> {
+    return await this.onExecuteTask(taskData);
+  }
+
+  async cleanup(): Promise<void> {
+    return await this.onStop();
   }
 }

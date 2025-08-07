@@ -27,8 +27,23 @@ const CodeGenerationSchema = z.object({
 });
 
 export class AutonomousCoder extends BaseAgent {
+  id = 'autonomous-coder';
+  capabilities = ["autonomous-coding","file-operations","code-generation","debugging"];
+  specialization = 'Autonomous coding with full file system access';
   name = 'autonomous-coder';
   description = 'Autonomous coding agent that can read, write, and modify files independently';
+
+  constructor(workingDirectory: string = process.cwd()) {
+    super(workingDirectory);
+  }
+
+  protected async onInitialize(): Promise<void> {
+    console.log('Autonomous Coder initialized');
+  }
+
+  protected async onStop(): Promise<void> {
+    console.log('Autonomous Coder stopped');
+  }
 
   async analyzeProject(): Promise<any> {
     console.log(chalk.blue('🔍 Analyzing project structure...'));
@@ -390,8 +405,9 @@ Return JSON with:
     return result;
   }
 
-  async run(task?: string): Promise<any> {
-    if (!task) {
+  protected async onExecuteTask(task: any): Promise<any> {
+    const taskData = typeof task === 'string' ? task : task.data;
+    if (!taskData) {
       return {
         message: 'Autonomous Coder ready! I can analyze, create, debug, and optimize code independently.',
         capabilities: [
@@ -405,7 +421,7 @@ Return JSON with:
       };
     }
 
-    const lowerTask = task.toLowerCase();
+    const lowerTask = taskData.toLowerCase();
     
     try {
       if (lowerTask.includes('analyze') || lowerTask.includes('overview')) {
@@ -413,7 +429,7 @@ Return JSON with:
       }
       
       if (lowerTask.includes('create') || lowerTask.includes('build') || lowerTask.includes('implement')) {
-        const description = task.replace(/(create|build|implement)\s*/i, '');
+        const description = taskData.replace(/(create|build|implement)\s*/i, '');
         return await this.createFeature(description);
       }
       
@@ -422,24 +438,24 @@ Return JSON with:
       }
       
       if (lowerTask.includes('optimize') || lowerTask.includes('improve')) {
-        const fileMatch = task.match(/file:\s*([^\s]+)/);
+        const fileMatch = taskData.match(/file:\s*([^\s]+)/);
         const filePath = fileMatch ? fileMatch[1] : undefined;
         return await this.optimizeCode(filePath);
       }
       
       if (lowerTask.includes('test')) {
-        const patternMatch = task.match(/pattern:\s*([^\s]+)/);
+        const patternMatch = taskData.match(/pattern:\s*([^\s]+)/);
         const pattern = patternMatch ? patternMatch[1] : undefined;
         return await this.runTests(pattern);
       }
 
       // Default: treat as a feature creation request
-      return await this.createFeature(task);
+      return await this.createFeature(taskData);
       
     } catch (error: any) {
       return {
         error: `Autonomous coding failed: ${error.message}`,
-        task,
+        taskData,
       };
     }
   }

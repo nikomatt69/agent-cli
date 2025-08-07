@@ -5,22 +5,25 @@ const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
 const google_1 = require("@ai-sdk/google");
 class CodeGeneratorAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'code-generator';
+        this.capabilities = ["code-generation", "template-creation", "scaffolding"];
+        this.specialization = 'Code generation and template creation';
         this.name = 'code-generator';
-        this.description = 'AI-powered code generation agent using Gemini';
+        this.description = 'Code generation and template creation';
     }
-    async initialize() {
-        await super.initialize();
+    async onInitialize() {
         console.log('Code Generator Agent initialized successfully');
     }
-    async run(task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
         console.log(`Running Code Generator Agent`);
-        if (task) {
-            console.log(`Task: ${task}`);
+        if (taskData) {
+            console.log(`Task: ${taskData}`);
         }
-        // Default task if none provided
-        const generationTask = task || 'Create a TypeScript function that validates email addresses';
+        // Default taskData if none provided
+        const generationTask = taskData || 'Create a TypeScript function that validates email addresses';
         const prompt = `Generate clean, well-documented TypeScript code for the following requirement:\n\n${generationTask}\n\nInclude proper types, error handling, and JSDoc comments.`;
         try {
             const { text } = await (0, ai_1.generateText)({
@@ -43,9 +46,15 @@ class CodeGeneratorAgent extends base_agent_1.BaseAgent {
             };
         }
     }
-    async cleanup() {
-        await super.cleanup();
+    async onStop() {
         console.log('Code Generator Agent cleaned up');
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.CodeGeneratorAgent = CodeGeneratorAgent;

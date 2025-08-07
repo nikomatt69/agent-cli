@@ -34,10 +34,19 @@ const CodeGenerationSchema = zod_1.z.object({
     tests: zod_1.z.string().optional(),
 });
 class CodingAgent extends base_agent_1.BaseAgent {
-    constructor() {
-        super(...arguments);
+    constructor(workingDirectory = process.cwd()) {
+        super(workingDirectory);
+        this.id = 'coding';
+        this.capabilities = ["general-coding", "refactoring", "problem-solving"];
+        this.specialization = 'General purpose coding assistance';
         this.name = 'coding-agent';
         this.description = 'Advanced coding assistant for analysis, generation, and optimization';
+    }
+    async onInitialize() {
+        console.log('Coding Agent initialized');
+    }
+    async onStop() {
+        console.log('Coding Agent stopped');
     }
     async analyzeCode(code) {
         const messages = [
@@ -200,8 +209,9 @@ class CodingAgent extends base_agent_1.BaseAgent {
             return `Error in test generation: ${error.message}`;
         }
     }
-    async run(task) {
-        if (!task) {
+    async onExecuteTask(task) {
+        const taskData = typeof task === 'string' ? task : task.data;
+        if (!taskData) {
             return {
                 message: 'Coding agent ready! Available commands: analyze, generate, optimize, explain, debug, test',
                 capabilities: [
@@ -214,43 +224,43 @@ class CodingAgent extends base_agent_1.BaseAgent {
                 ],
             };
         }
-        // Parse task to determine action
-        const lowerTask = task.toLowerCase();
+        // Parse taskData to determine action
+        const lowerTask = taskData.toLowerCase();
         if (lowerTask.includes('analyze') || lowerTask.includes('review')) {
-            // Extract code from task (assume code is in backticks or after "analyze:")
-            const codeMatch = task.match(/```[\s\S]*?```|analyze:\s*([\s\S]*)/i);
+            // Extract code from taskData (assume code is in backticks or after "analyze:")
+            const codeMatch = taskData.match(/```[\s\S]*?```|analyze:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
                 return await this.analyzeCode(code);
             }
         }
         if (lowerTask.includes('generate') || lowerTask.includes('create')) {
-            const description = task.replace(/(generate|create)\s*/i, '');
+            const description = taskData.replace(/(generate|create)\s*/i, '');
             return await this.generateCode(description);
         }
         if (lowerTask.includes('optimize') || lowerTask.includes('improve')) {
-            const codeMatch = task.match(/```[\s\S]*?```|optimize:\s*([\s\S]*)/i);
+            const codeMatch = taskData.match(/```[\s\S]*?```|optimize:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
                 return await this.optimizeCode(code);
             }
         }
         if (lowerTask.includes('explain') || lowerTask.includes('understand')) {
-            const codeMatch = task.match(/```[\s\S]*?```|explain:\s*([\s\S]*)/i);
+            const codeMatch = taskData.match(/```[\s\S]*?```|explain:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
                 return await this.explainCode(code);
             }
         }
         if (lowerTask.includes('debug') || lowerTask.includes('fix')) {
-            const codeMatch = task.match(/```[\s\S]*?```|debug:\s*([\s\S]*)/i);
+            const codeMatch = taskData.match(/```[\s\S]*?```|debug:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
                 return await this.debugCode(code);
             }
         }
         if (lowerTask.includes('test') || lowerTask.includes('spec')) {
-            const codeMatch = task.match(/```[\s\S]*?```|test:\s*([\s\S]*)/i);
+            const codeMatch = taskData.match(/```[\s\S]*?```|test:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
                 return await this.generateTests(code);
@@ -264,16 +274,23 @@ class CodingAgent extends base_agent_1.BaseAgent {
             },
             {
                 role: 'user',
-                content: task,
+                content: taskData,
             },
         ];
         try {
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
-            return { response, task };
+            return { response, taskData };
         }
         catch (error) {
-            return { error: error.message, task };
+            return { error: error.message, taskData };
         }
+    }
+    // Keep legacy methods for backward compatibility
+    async run(taskData) {
+        return await this.onExecuteTask(taskData);
+    }
+    async cleanup() {
+        return await this.onStop();
     }
 }
 exports.CodingAgent = CodingAgent;
