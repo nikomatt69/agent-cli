@@ -1,4 +1,4 @@
-import * as hljs from 'highlight.js';
+import hljs from 'highlight.js';
 
 export interface HighlightedLine {
   text: string;
@@ -131,7 +131,7 @@ export const formatCode = (code: string, language: string): string => {
     const trimmed = line.trim();
     
     // Decrease indent for closing brackets
-    if (trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith(')'))) {
+    if (trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith(')')) {
       indentLevel = Math.max(0, indentLevel - 1);
     }
     

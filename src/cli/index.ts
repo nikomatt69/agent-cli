@@ -335,6 +335,39 @@ program
     }
   });
 
+// TUI (Terminal User Interface) command
+program
+  .command('tui')
+  .description('Launch the Terminal User Interface (TUI)')
+  .action(async () => {
+    try {
+      CliUI.logSection('🖥️  Terminal User Interface');
+      CliUI.logInfo('Starting TUI mode...');
+      
+      const { default: CLITUIIntegration } = await import('./ui/cli-integration');
+      const tuiIntegration = new CLITUIIntegration();
+      
+      // Handle graceful shutdown
+      process.on('SIGINT', async () => {
+        console.log('\nShutting down TUI...');
+        await tuiIntegration.stop();
+        process.exit(0);
+      });
+
+      process.on('SIGTERM', async () => {
+        console.log('\nShutting down TUI...');
+        await tuiIntegration.stop();
+        process.exit(0);
+      });
+      
+      await tuiIntegration.start();
+    } catch (error: any) {
+      CliUI.logError(`Failed to start TUI: ${error.message}`);
+      console.error('\nTIP: Make sure all dependencies are installed and try again.');
+      console.error('If the issue persists, run the CLI in regular mode.');
+    }
+  });
+
 // Parse arguments
 program.parse();
 
