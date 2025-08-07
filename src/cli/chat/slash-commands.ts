@@ -2,12 +2,14 @@ import chalk from 'chalk';
 import { chatManager } from './chat-manager';
 import { configManager } from '../config/config-manager';
 import { modelProvider } from '../ai/model-provider';
-import { AgentManager } from '../agents/agent-manager';
+import { AgentManager } from '../core/agent-manager';
 import { registerAgents } from '../register-agents';
 import { toolsManager } from '../tools/tools-manager';
 import { agentFactory } from '../core/agent-factory';
 import { workspaceContext } from '../core/workspace-context';
 import { agentStream } from '../core/agent-stream';
+import { AgentTask } from '../core/types';
+
 
 export interface CommandResult {
   shouldExit: boolean;
@@ -50,7 +52,7 @@ export class SlashCommandHandler {
     this.commands.set('launch-agent', this.launchAgentCommand.bind(this));
     this.commands.set('context', this.contextCommand.bind(this));
     this.commands.set('stream', this.streamCommand.bind(this));
-    
+
     // File operations
     this.commands.set('read', this.readFileCommand.bind(this));
     this.commands.set('write', this.writeFileCommand.bind(this));
@@ -58,7 +60,7 @@ export class SlashCommandHandler {
     this.commands.set('ls', this.listFilesCommand.bind(this));
     this.commands.set('search', this.searchCommand.bind(this));
     this.commands.set('grep', this.searchCommand.bind(this));
-    
+
     // Terminal operations
     this.commands.set('run', this.runCommandCommand.bind(this));
     this.commands.set('sh', this.runCommandCommand.bind(this));
@@ -70,7 +72,7 @@ export class SlashCommandHandler {
     this.commands.set('docker', this.dockerCommand.bind(this));
     this.commands.set('ps', this.processCommand.bind(this));
     this.commands.set('kill', this.killCommand.bind(this));
-    
+
     // Project operations
     this.commands.set('build', this.buildCommand.bind(this));
     this.commands.set('test', this.testCommand.bind(this));
@@ -182,7 +184,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     const modelName = args[0];
     try {
       configManager.setCurrentModel(modelName);
-      
+
       // Validate the new model
       if (modelProvider.validateApiKey()) {
         console.log(chalk.green(`✅ Switched to model: ${modelName}`));
@@ -200,23 +202,23 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async modelsCommand(): Promise<CommandResult> {
     console.log(chalk.blue.bold('\n🤖 Available Models:'));
     console.log(chalk.gray('─'.repeat(40)));
-    
+
     const currentModel = configManager.get('currentModel');
     const models = configManager.get('models');
-    
+
     Object.entries(models).forEach(([name, config]) => {
       const isCurrent = name === currentModel;
       const hasKey = configManager.getApiKey(name) !== undefined;
       const status = hasKey ? chalk.green('✅') : chalk.red('❌');
       const prefix = isCurrent ? chalk.yellow('→ ') : '  ';
-      
+
       console.log(`${prefix}${status} ${chalk.bold(name)}`);
       console.log(`    ${chalk.gray(`Provider: ${config.provider} | Model: ${config.model}`)}`);
     });
 
     console.log(chalk.gray('\nUse /model <name> to switch models'));
     console.log(chalk.gray('Use /set-key <model> <key> to add API keys'));
-    
+
     return { shouldExit: false, shouldUpdatePrompt: false };
   }
 
@@ -271,7 +273,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       const isCurrent = session.id === current?.id;
       const prefix = isCurrent ? chalk.yellow('→ ') : '  ';
       const messageCount = session.messages.filter(m => m.role !== 'system').length;
-      
+
       console.log(`${prefix}${chalk.bold(session.title)} ${chalk.gray(`(${session.id.slice(0, 8)})`)}`);
       console.log(`    ${chalk.gray(`${messageCount} messages | ${session.updatedAt.toLocaleString()}`)}`);
     });
@@ -283,10 +285,10 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const sessionId = args[0];
       const markdown = chatManager.exportSession(sessionId);
-      
+
       const filename = `chat-export-${Date.now()}.md`;
       require('fs').writeFileSync(filename, markdown);
-      
+
       console.log(chalk.green(`✅ Session exported to ${filename}`));
     } catch (error: any) {
       console.log(chalk.red(`❌ ${error.message}`));
@@ -378,7 +380,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async listAgentsCommand(): Promise<CommandResult> {
     console.log(chalk.blue.bold('\n🤖 Available Agents:'));
     console.log(chalk.gray('─'.repeat(40)));
-    
+
     const agents = this.agentManager.listAgents();
     if (agents.length === 0) {
       console.log(chalk.yellow('No agents registered'));
@@ -389,7 +391,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       console.log(`${chalk.green('•')} ${chalk.bold(agent.name)}`);
       console.log(`  ${chalk.gray(agent.description)}`);
     });
-    
+
     console.log(chalk.gray('\nUse /agent <name> <task> to run a specific agent'));
     console.log(chalk.gray('Use /auto <description> for autonomous multi-agent execution'));
 
@@ -415,9 +417,20 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       }
 
       console.log(chalk.blue(`🤖 Running ${agentName}...`));
-      
+
       await agent.initialize();
-      const result = await agent.run?.(task);
+      const result = await agent.run?.({
+        id: `task-${Date.now()}`,
+        type: 'user_request' as const,
+        title: 'User Request',
+        description: task,
+        priority: 'medium' as const,
+        status: 'pending' as const,
+        data: { userInput: task },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        progress: 0
+      } as AgentTask);
       await agent.cleanup?.();
 
       console.log(chalk.green(`✅ ${agentName} completed:`));
@@ -446,7 +459,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
 
     try {
       console.log(chalk.blue('🧠 Creating autonomous agent for task...'));
-      
+
       // Create specialized agent for this task
       const agent = await agentFactory.createAndLaunchAgent({
         specialization: `Autonomous Developer for: ${description}`,
@@ -456,7 +469,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       });
 
       console.log(chalk.blue('🚀 Starting autonomous execution with streaming...'));
-      
+
       const result = await agent.run(description);
       await agent.cleanup();
 
@@ -486,7 +499,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
 
     try {
       console.log(chalk.blue(`⚡ Running ${agentNames.length} agents in parallel...`));
-      
+
       const promises = agentNames.map(async (agentName) => {
         const agent = this.agentManager.getAgent(agentName);
         if (!agent) {
@@ -494,14 +507,25 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
 
         await agent.initialize();
-        const result = await agent.run?.(task);
+        const result = await agent.run?.({
+          id: `task-${Date.now()}`,
+          type: 'user_request' as const,
+          title: 'User Request',
+          description: task,
+          priority: 'medium' as const,
+          status: 'pending' as const,
+          data: { userInput: task },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          progress: 0
+        } as AgentTask);
         await agent.cleanup?.();
-        
+
         return { agentName, result };
       });
 
       const results = await Promise.all(promises);
-      
+
       console.log(chalk.green('✅ Parallel execution completed:'));
       results.forEach(({ agentName, result }) => {
         console.log(chalk.blue(`\n--- ${agentName} ---`));
@@ -529,12 +553,12 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const filePath = args[0];
       const fileInfo = await toolsManager.readFile(filePath);
-      
+
       console.log(chalk.blue(`📄 File: ${filePath} (${fileInfo.size} bytes, ${fileInfo.language || 'unknown'})`));
       console.log(chalk.gray('─'.repeat(50)));
       console.log(fileInfo.content);
       console.log(chalk.gray('─'.repeat(50)));
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error reading file: ${error.message}`));
     }
@@ -551,10 +575,10 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const filePath = args[0];
       const content = args.slice(1).join(' ');
-      
+
       await toolsManager.writeFile(filePath, content);
       console.log(chalk.green(`✅ File written: ${filePath}`));
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error writing file: ${error.message}`));
     }
@@ -571,10 +595,10 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const filePath = args[0];
       console.log(chalk.blue(`📝 Use your system editor to edit: ${filePath}`));
-      
+
       // Use system editor
       await toolsManager.runCommand('code', [filePath]);
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error opening editor: ${error.message}`));
     }
@@ -586,22 +610,22 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const directory = args[0] || '.';
       const files = await toolsManager.listFiles(directory);
-      
+
       console.log(chalk.blue(`📁 Files in ${directory}:`));
       console.log(chalk.gray('─'.repeat(40)));
-      
+
       if (files.length === 0) {
         console.log(chalk.yellow('No files found'));
       } else {
         files.slice(0, 50).forEach(file => { // Limit to 50 files
           console.log(`${chalk.cyan('•')} ${file}`);
         });
-        
+
         if (files.length > 50) {
           console.log(chalk.gray(`... and ${files.length - 50} more files`));
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error listing files: ${error.message}`));
     }
@@ -618,27 +642,27 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const query = args[0];
       const directory = args[1] || '.';
-      
+
       console.log(chalk.blue(`🔍 Searching for "${query}" in ${directory}...`));
-      
+
       const results = await toolsManager.searchInFiles(query, directory);
-      
+
       if (results.length === 0) {
         console.log(chalk.yellow('No matches found'));
       } else {
         console.log(chalk.green(`Found ${results.length} matches:`));
         console.log(chalk.gray('─'.repeat(50)));
-        
+
         results.slice(0, 20).forEach(result => { // Limit to 20 results
           console.log(chalk.cyan(`${result.file}:${result.line}`));
           console.log(`  ${result.content}`);
         });
-        
+
         if (results.length > 20) {
           console.log(chalk.gray(`... and ${results.length - 20} more matches`));
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error searching: ${error.message}`));
     }
@@ -656,15 +680,15 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const [command, ...commandArgs] = args;
       console.log(chalk.blue(`⚡ Running: ${command} ${commandArgs.join(' ')}`));
-      
+
       const result = await toolsManager.runCommand(command, commandArgs, { stream: true });
-      
+
       if (result.code === 0) {
         console.log(chalk.green('✅ Command completed successfully'));
       } else {
         console.log(chalk.red(`❌ Command failed with exit code ${result.code}`));
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error running command: ${error.message}`));
     }
@@ -683,18 +707,18 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       const packages = args.filter(arg => !arg.startsWith('--'));
       const isGlobal = args.includes('--global') || args.includes('-g');
       const isDev = args.includes('--dev') || args.includes('-D');
-      const manager = args.includes('--yarn') ? 'yarn' : 
-                     args.includes('--pnpm') ? 'pnpm' : 'npm';
+      const manager = args.includes('--yarn') ? 'yarn' :
+        args.includes('--pnpm') ? 'pnpm' : 'npm';
 
       console.log(chalk.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
-      
+
       for (const pkg of packages) {
         const success = await toolsManager.installPackage(pkg, { global: isGlobal, dev: isDev, manager: manager as any });
         if (!success) {
           console.log(chalk.yellow(`⚠️ Failed to install ${pkg}`));
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error installing packages: ${error.message}`));
     }
@@ -721,10 +745,10 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async processCommand(): Promise<CommandResult> {
     try {
       const processes = toolsManager.getRunningProcesses();
-      
+
       console.log(chalk.blue('🔄 Running Processes:'));
       console.log(chalk.gray('─'.repeat(50)));
-      
+
       if (processes.length === 0) {
         console.log(chalk.yellow('No processes currently running'));
       } else {
@@ -735,7 +759,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           console.log(`  Working Dir: ${proc.cwd}`);
         });
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error listing processes: ${error.message}`));
     }
@@ -757,15 +781,15 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       }
 
       console.log(chalk.yellow(`⚠️ Attempting to kill process ${pid}...`));
-      
+
       const success = await toolsManager.killProcess(pid);
-      
+
       if (success) {
         console.log(chalk.green(`✅ Process ${pid} terminated`));
       } else {
         console.log(chalk.red(`❌ Could not kill process ${pid}`));
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error killing process: ${error.message}`));
     }
@@ -777,9 +801,9 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async buildCommand(): Promise<CommandResult> {
     try {
       console.log(chalk.blue('🔨 Building project...'));
-      
+
       const result = await toolsManager.build();
-      
+
       if (result.success) {
         console.log(chalk.green('✅ Build completed successfully'));
       } else {
@@ -791,7 +815,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           });
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error building: ${error.message}`));
     }
@@ -803,9 +827,9 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const pattern = args[0];
       console.log(chalk.blue(`🧪 Running tests${pattern ? ` (${pattern})` : ''}...`));
-      
+
       const result = await toolsManager.runTests(pattern);
-      
+
       if (result.success) {
         console.log(chalk.green('✅ All tests passed'));
       } else {
@@ -817,7 +841,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           });
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error running tests: ${error.message}`));
     }
@@ -828,9 +852,9 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async lintCommand(): Promise<CommandResult> {
     try {
       console.log(chalk.blue('🔍 Running linter...'));
-      
+
       const result = await toolsManager.lint();
-      
+
       if (result.success) {
         console.log(chalk.green('✅ No linting errors found'));
       } else {
@@ -842,7 +866,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           });
         }
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error running linter: ${error.message}`));
     }
@@ -860,16 +884,16 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const [type, name] = args;
       console.log(chalk.blue(`🚀 Creating ${type} project: ${name}`));
-      
+
       const result = await toolsManager.setupProject(type as any, name);
-      
+
       if (result.success) {
         console.log(chalk.green(`✅ Project ${name} created successfully!`));
         console.log(chalk.gray(`📁 Location: ${result.path}`));
       } else {
         console.log(chalk.red(`❌ Failed to create project ${name}`));
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error creating project: ${error.message}`));
     }
@@ -893,7 +917,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
 
     try {
       const specialization = args.join(' ');
-      
+
       const blueprint = await agentFactory.createAgentBlueprint({
         specialization,
         autonomyLevel: 'fully-autonomous',
@@ -903,7 +927,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       console.log(chalk.green(`✅ Agent blueprint created: ${blueprint.name}`));
       console.log(chalk.gray(`Blueprint ID: ${blueprint.id}`));
       console.log(chalk.gray('Use /launch-agent <id> to launch this agent'));
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error creating agent: ${error.message}`));
     }
@@ -921,9 +945,9 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const blueprintId = args[0];
       const task = args.slice(1).join(' ');
-      
+
       const agent = await agentFactory.launchAgent(blueprintId);
-      
+
       if (task) {
         console.log(chalk.blue(`🚀 Running agent with task: ${task}`));
         const result = await agent.run(task);
@@ -933,7 +957,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
         console.log(chalk.blue('🤖 Agent launched and ready'));
         console.log(chalk.gray('Use /agent <name> <task> to run tasks'));
       }
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error launching agent: ${error.message}`));
     }
@@ -950,10 +974,10 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const paths = args;
       await workspaceContext.selectPaths(paths);
-      
+
       console.log(chalk.green('✅ Workspace context updated'));
       console.log(chalk.gray('Use /context with no args to see current context'));
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Error updating context: ${error.message}`));
     }
@@ -971,7 +995,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     } else {
       agentStream.showLiveDashboard();
     }
-    
+
     return { shouldExit: false, shouldUpdatePrompt: false };
   }
 }

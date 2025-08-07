@@ -16,7 +16,20 @@ export interface AppConfig {
   chatHistory: boolean;
   maxHistoryLength: number;
   temperature: number;
+  // Additional enterprise config properties
+  logLevel?: string;
+  enableAuditLog?: boolean;
+  defaultAgentTimeout?: number;
+  maxConcurrentAgents?: number;
+  enableGuidanceSystem?: boolean;
+  sandbox?: string;
+  approvalPolicy?: string;
+  requireApprovalForNetwork?: boolean;
+  mcpServers?: any[];
 }
+
+// Export CliConfig as alias for backward compatibility
+export type CliConfig = AppConfig;
 
 const defaultConfig: AppConfig = {
   currentModel: 'claude-sonnet-4-20250514',
@@ -288,6 +301,15 @@ export class ConfigManager {
       
       console.log('');
     });
+  }
+
+  // Additional methods for enterprise compatibility
+  load(): AppConfig {
+    return this.loadConfig();
+  }
+
+  getConfig(): AppConfig {
+    return { ...this.config };
   }
 }
 

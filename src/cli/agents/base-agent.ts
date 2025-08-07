@@ -362,6 +362,19 @@ export interface AgentMetrics {
   averageExecutionTime: number;
   totalExecutionTime: number;
   lastActive: Date;
+  // Additional properties for UniversalAgent compatibility
+  totalTasks?: number;
+  tasksCompleted?: number;
+  lastExecutionTime?: Date;
 }
 
 export type TaskExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+
+// Additional interfaces for UniversalAgent compatibility
+export interface AgentTaskResult {
+  success: boolean;
+  message: string;
+  data?: any;
+  executionTime: number;
+  metadata?: Record<string, any>;
+}

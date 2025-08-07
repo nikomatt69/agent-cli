@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { registerAgents } from './register-agents';
-import { AgentManager } from './agents/agent-manager';
+import { AgentManager } from './core/agent-manager';
 import { chatInterface } from './chat/chat-interface';
 import { configManager } from './config/config-manager';
 import { CliUI } from './utils/cli-ui';
@@ -42,12 +42,17 @@ program
       CliUI.updateSpinner(`Running agent: ${CliUI.highlight(agentName)}`);
       const task = {
         id: `task-${Date.now()}`,
-        type: 'user_request',
-        description: options.task,
-        priority: 'normal' as const,
-        data: { userInput: options.task }
+        type: 'user_request' as const,
+        title: 'User Request',
+        description: options.task || 'No task specified',
+        priority: 'medium' as const,
+        status: 'pending' as const,
+        data: { userInput: options.task },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        progress: 0
       };
-      const result = await agent.executeTask(task);
+      const result = await agent.run(task);
 
       CliUI.succeedSpinner(`Agent ${CliUI.highlight(agentName)} completed successfully`);
       CliUI.logInfo(`Result: ${result}`);
@@ -67,37 +72,32 @@ program
     CliUI.startSpinner(`Starting ${CliUI.highlight(agents.length.toString())} agents in parallel`);
     
     try {
-      const agentInstances = agents.map((agentName: string) => {
-        const agent = agentManager.getAgent(agentName);
-        if (!agent) {
-          throw new Error(`Agent ${agentName} not found`);
-        }
-        return { name: agentName, instance: agent };
-      });
-
-      CliUI.updateSpinner('Initializing agents...');
-      await Promise.all(agentInstances.map(({ instance }: { instance: any }) => instance.initialize()));
+      // Create tasks for parallel execution
+      const tasks = agents.map((agentName: string) => ({
+        id: `task-${Date.now()}-${agentName}`,
+        type: 'user_request' as const,
+        title: 'Parallel User Request',
+        description: options.task || 'No task specified',
+        priority: 'medium' as const,
+        status: 'pending' as const,
+        data: { userInput: options.task, agentName },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        progress: 0
+      }));
 
       CliUI.updateSpinner('Running agents in parallel...');
-      const results = await Promise.all(
-        agentInstances.map(async ({ name, instance }: { name: string; instance: any }) => {
-          try {
-            const result = await instance.run(options.task);
-            return { name, result, success: true };
-          } catch (error: any) {
-            return { name, error: error.message, success: false };
-          }
-        })
-      );
+      const results = await agentManager.executeTasksParallel(tasks);
 
       CliUI.succeedSpinner(`Completed ${CliUI.highlight(agents.length.toString())} agents`);
 
       CliUI.logSubsection('Results');
-      results.forEach(({ name, result, error, success }) => {
-        if (success) {
-          CliUI.logSuccess(`${CliUI.bold(name)}: ${result}`);
+      results.forEach((taskResult, index) => {
+        const agentName = agents[index] || 'Unknown';
+        if (taskResult.status === 'completed') {
+          CliUI.logSuccess(`${CliUI.bold(agentName)}: ${taskResult.output || 'Completed'}`);
         } else {
-          CliUI.logError(`${CliUI.bold(name)}: ${error}`);
+          CliUI.logError(`${CliUI.bold(agentName)}: ${taskResult.error || 'Failed'}`);
         }
       });
     } catch (error: any) {
@@ -112,14 +112,14 @@ program
   .description('List available agents')
   .action(() => {
     CliUI.logSection('Available AI Agents');
-    const agents = agentManager.listAgents();
+    const agents = agentManager.listRegisteredAgents();
     if (agents.length === 0) {
       CliUI.logWarning('No agents registered');
       return;
     }
 
-    agents.forEach(agent => {
-      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
+    agents.forEach(agentInfo => {
+      CliUI.logKeyValue(`• ${CliUI.bold(agentInfo.id)}`, agentInfo.specialization);
     });
   });
 
@@ -190,14 +190,14 @@ program
   .action(() => {
     CliUI.logSection('🤖 Available Agents');
     
-    const agents = agentManager.listAgents();
+    const agents = agentManager.listRegisteredAgents();
     if (agents.length === 0) {
       CliUI.logWarning('No agents registered');
       return;
     }
 
-    agents.forEach(agent => {
-      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
+    agents.forEach(agentInfo => {
+      CliUI.logKeyValue(`• ${CliUI.bold(agentInfo.id)}`, agentInfo.specialization);
     });
     
     CliUI.logInfo('Use "npm run chat" for interactive mode');
