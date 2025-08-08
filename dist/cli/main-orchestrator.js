@@ -11,7 +11,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MainOrchestrator = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
-const gradient_string_1 = __importDefault(require("gradient-string"));
 const streaming_orchestrator_1 = require("./streaming-orchestrator");
 const agent_service_1 = require("./services/agent-service");
 const tool_service_1 = require("./services/tool-service");
@@ -133,7 +132,6 @@ class MainOrchestrator {
             // Check critical dependencies
             require('chalk');
             require('boxen');
-            require('gradient-string');
             require('nanoid');
             require('diff');
             console.log(chalk_1.default.green('✅ All dependencies available'));
@@ -146,7 +144,7 @@ class MainOrchestrator {
     }
     showStartupBanner() {
         console.clear();
-        const banner = (0, boxen_1.default)(`${gradient_string_1.default.rainbow.multiline([
+        const banner = (0, boxen_1.default)(`${chalk_1.default.cyanBright([
             '╔═══════════════════════════════════════════╗',
             '║        AI DEVELOPMENT ORCHESTRATOR        ║',
             '╚═══════════════════════════════════════════╝'

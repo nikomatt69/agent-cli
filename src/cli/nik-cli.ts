@@ -15,6 +15,11 @@ import { ModernAgentOrchestrator } from './automation/agents/modern-agent-system
 import { advancedAIProvider, AdvancedAIProvider } from './ai/advanced-ai-provider';
 import { SimpleConfigManager, simpleConfigManager } from './core/config-manager';
 import { ExecutionPlan } from './planning/types';
+import { SlashCommandHandler } from './chat/nik-cli-commands';
+import { chatManager } from './chat/chat-manager';
+import { agentService } from './services/agent-service';
+import { planningService } from './services/planning-service';
+import { AgentTask } from './types/types';
 
 // Configure marked for terminal rendering
 marked.setOptions({
@@ -71,6 +76,7 @@ export class NikCLI {
     private currentAgent?: string;
     private projectContextFile: string;
     private sessionContext: Map<string, any> = new Map();
+    private slashHandler: SlashCommandHandler;
 
     constructor() {
         this.workingDirectory = process.cwd();
@@ -80,8 +86,11 @@ export class NikCLI {
         this.configManager = simpleConfigManager;
         this.agentManager = new AgentManager(this.configManager);
         this.planningManager = new PlanningManager(this.workingDirectory);
+        this.slashHandler = new SlashCommandHandler();
 
         this.setupEventHandlers();
+        // Bridge orchestrator events into NikCLI output
+        this.setupOrchestratorEventBridge();
     }
 
     private setupEventHandlers(): void {
@@ -92,6 +101,37 @@ export class NikCLI {
 
         process.on('SIGTERM', () => {
             this.shutdown();
+        });
+    }
+
+    // Bridge StreamingOrchestrator agent lifecycle events into NikCLI output
+    private orchestratorEventsInitialized = false;
+    private setupOrchestratorEventBridge(): void {
+        if (this.orchestratorEventsInitialized) return;
+        this.orchestratorEventsInitialized = true;
+
+        agentService.on('task_start', (task) => {
+            console.log(chalk.blue(`🤖 Agent ${task.agentType} started: ${task.task.slice(0, 60)}...`));
+        });
+
+        agentService.on('task_progress', (_task, update) => {
+            const progress = typeof update.progress === 'number' ? `${update.progress}% ` : '';
+            const desc = update.description ? `- ${update.description}` : '';
+            console.log(chalk.cyan(`📊 ${progress}${desc}`));
+        });
+
+        agentService.on('tool_use', (_task, update) => {
+            console.log(chalk.magenta(`🔧 ${update.tool}: ${update.description}`));
+        });
+
+        agentService.on('task_complete', (task) => {
+            if (task.status === 'completed') {
+                console.log(chalk.green(`✅ ${task.agentType} completed`));
+            } else {
+                console.log(chalk.red(`❌ ${task.agentType} failed: ${task.error}`));
+            }
+            // Keep prompt visible after background updates
+            this.showPrompt();
         });
     }
 
@@ -142,9 +182,11 @@ export class NikCLI {
                 return;
             }
 
-            // Handle slash commands
+            // Route slash and agent-prefixed commands, otherwise treat as chat
             if (trimmed.startsWith('/')) {
-                await this.handleSlashCommand(trimmed);
+                await this.dispatchSlash(trimmed);
+            } else if (trimmed.startsWith('@')) {
+                await this.dispatchAt(trimmed);
             } else {
                 await this.handleChatInput(trimmed);
             }
@@ -154,6 +196,66 @@ export class NikCLI {
             this.shutdown();
         });
 
+        this.showPrompt();
+    }
+
+    /**
+     * Dispatch /slash commands to rich SlashCommandHandler while preserving mode controls
+     */
+    private async dispatchSlash(command: string): Promise<void> {
+        const parts = command.slice(1).split(' ');
+        const cmd = parts[0];
+        const args = parts.slice(1);
+
+        try {
+            switch (cmd) {
+                case 'plan':
+                    if (args.length === 0) {
+                        this.currentMode = 'plan';
+                        console.log(chalk.green('✓ Switched to plan mode'));
+                    } else {
+                        await this.generatePlan(args.join(' '), {});
+                    }
+                    break;
+
+                case 'auto':
+                    if (args.length === 0) {
+                        this.currentMode = 'auto';
+                        console.log(chalk.green('✓ Switched to auto mode'));
+                    } else {
+                        await this.autoExecute(args.join(' '), {});
+                    }
+                    break;
+
+                case 'default':
+                    this.currentMode = 'default';
+                    console.log(chalk.green('✓ Switched to default mode'));
+                    break;
+
+                default: {
+                    const result = await this.slashHandler.handle(command);
+                    if (result.shouldExit) {
+                        this.shutdown();
+                        return;
+                    }
+                }
+            }
+        } catch (error: any) {
+            console.log(chalk.red(`Error executing ${command}: ${error.message}`));
+        }
+
+        this.showPrompt();
+    }
+
+    /**
+     * Dispatch @agent commands through the unified command router
+     */
+    private async dispatchAt(input: string): Promise<void> {
+        const result = await this.slashHandler.handle(input);
+        if (result.shouldExit) {
+            this.shutdown();
+            return;
+        }
         this.showPrompt();
     }
 
@@ -330,11 +432,38 @@ export class NikCLI {
             const task = input.replace(agentMatch[0], '').trim();
             await this.executeAgent(agentName, task, {});
         } else {
-            // Use chat interface for general conversation
-            // Use chat interface for general conversation
-            console.log(chalk.blue('💬 Processing with chat interface...'));
-            // Note: Direct handleInput is private, so we'll implement basic chat here
-            console.log(chalk.green('Chat response would appear here'));
+            // Real chatbot conversation in default mode
+            try {
+                // Record user message in session
+                chatManager.addMessage(input, 'user');
+
+                // Build model-ready messages from session history (respects history setting)
+                const messages = chatManager.getContextMessages().map(m => ({
+                    role: m.role as 'system' | 'user' | 'assistant',
+                    content: m.content,
+                }));
+
+                // Stream assistant response
+                process.stdout.write(`${chalk.cyan('\nAssistant: ')}`);
+                let assistantText = '';
+                for await (const ev of advancedAIProvider.streamChatWithFullAutonomy(messages)) {
+                    if (ev.type === 'text_delta' && ev.content) {
+                        assistantText += ev.content;
+                        process.stdout.write(ev.content);
+                    } else if (ev.type === 'error') {
+                        console.log(`${chalk.red(ev.content || ev.error || 'Unknown error')}`);
+                    }
+                }
+
+                // Save assistant message to history
+                if (assistantText.trim().length > 0) {
+                    chatManager.addMessage(assistantText.trim(), 'assistant');
+                }
+
+                console.log(); // newline after streaming
+            } catch (err: any) {
+                console.log(chalk.red(`Chat error: ${err.message}`));
+            }
         }
     }
 
@@ -369,21 +498,9 @@ export class NikCLI {
         console.log(chalk.blue(`🤖 Executing with ${chalk.cyan(name)} agent...`));
 
         try {
-            // Check if agent exists
-            // Mock available agents for now
-            const availableAgents = ['coding-agent', 'devops-agent', 'frontend-agent'];
-            if (!availableAgents.includes(name)) {
-                console.log(chalk.red(`Agent '${name}' not found`));
-                console.log(chalk.dim(`Available agents: ${availableAgents.join(', ')}`));
-                return;
-            }
-
-            // Execute with specific agent
-            // Mock agent execution for now
-            console.log(chalk.green(`✅ Agent ${name} executed task successfully`));
-
-            console.log(chalk.green('✓ Agent execution completed'));
-
+            // Launch real agent via AgentService; run asynchronously
+            const taskId = await agentService.executeTask(name, task);
+            console.log(chalk.blue(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
         } catch (error: any) {
             console.log(chalk.red(`Agent execution failed: ${error.message}`));
         }
@@ -397,19 +514,31 @@ export class NikCLI {
 
         try {
             if (options.planFirst) {
-                // Generate plan first, then execute
-                const plan = await this.planningManager.generatePlanOnly(task, this.workingDirectory);
-                await this.planningManager.executePlan(plan.id);
+                // Use real PlanningService to create and execute plan asynchronously
+                const plan = await planningService.createPlan(task, {
+                    showProgress: true,
+                    autoExecute: true,
+                    confirmSteps: false,
+                });
+                console.log(chalk.cyan(`📋 Generated plan with ${plan.steps.length} steps (id: ${plan.id}). Executing in background...`));
+                // Fire-and-forget execution to keep CLI responsive
+                (async () => {
+                    try {
+                        await planningService.executePlan(plan.id, {
+                            showProgress: true,
+                            autoExecute: true,
+                            confirmSteps: false,
+                        });
+                    } catch (err: any) {
+                        console.log(chalk.red(`❌ Plan execution error: ${err.message}`));
+                    }
+                })();
             } else {
-                // Direct autonomous execution - suggest best agent first
-                console.log(chalk.blue(`🤖 Executing task with default agent...`));
-
-                try {
-                    // Simple task execution - can be enhanced later
-                    console.log(chalk.green(`✅ Task completed`));
-                } catch (error) {
-                    console.log(chalk.red(`❌ Task failed: ${error}`));
-                }
+                // Direct autonomous execution - select best agent and launch
+                const selected = this.agentManager.findBestAgentForTask(task as any);
+                console.log(chalk.blue(`🤖 Selected agent: ${chalk.cyan(selected)}`));
+                const taskId = await agentService.executeTask(selected as any, task);
+                console.log(chalk.blue(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
             }
         } catch (error: any) {
             console.log(chalk.red(`Auto execution failed: ${error.message}`));
@@ -541,16 +670,9 @@ export class NikCLI {
     async listAgents(): Promise<void> {
         console.log(chalk.cyan.bold('🤖 Available Agents'));
         console.log(chalk.gray('─'.repeat(50)));
-
-        // Mock agent capabilities for now
-        const mockAgents = [
-            { id: 'coding-agent', description: 'Code generation and debugging' },
-            { id: 'devops-agent', description: 'Infrastructure and deployment' },
-            { id: 'frontend-agent', description: 'UI development and styling' }
-        ];
-
-        mockAgents.forEach(agent => {
-            console.log(chalk.white(`  • ${agent.id}`));
+        const available = agentService.getAvailableAgents();
+        available.forEach(agent => {
+            console.log(chalk.white(`  • ${agent.name}`));
             console.log(chalk.gray(`    ${agent.description}`));
         });
     }
@@ -580,6 +702,10 @@ export class NikCLI {
     // Utility methods
     private async initializeSystems(): Promise<void> {
         await this.agentManager.initialize();
+        // Ensure orchestrator services share our working directory
+        planningService.setWorkingDirectory(this.workingDirectory);
+        // Event bridge is idempotent
+        this.setupOrchestratorEventBridge();
         console.log(chalk.dim('✓ Systems initialized'));
     }
 

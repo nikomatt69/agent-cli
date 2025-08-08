@@ -18,6 +18,8 @@ const ConfigSchema = z.object({
   maxTokens: z.number().min(1).max(8000).default(4000),
   chatHistory: z.boolean().default(true),
   maxHistoryLength: z.number().min(1).max(1000).default(100),
+  // Optional system prompt for general chat mode
+  systemPrompt: z.string().optional(),
   autoAnalyzeWorkspace: z.boolean().default(true),
   enableAutoApprove: z.boolean().default(false),
   preferredAgent: z.string().optional(),
@@ -101,6 +103,7 @@ export class SimpleConfigManager {
     maxTokens: 4000,
     chatHistory: true,
     maxHistoryLength: 100,
+    systemPrompt: undefined,
     autoAnalyzeWorkspace: true,
     enableAutoApprove: false,
     models: this.defaultModels,

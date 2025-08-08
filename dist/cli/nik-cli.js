@@ -47,7 +47,6 @@ const path = __importStar(require("path"));
 // Import existing modules
 const agent_manager_1 = require("./core/agent-manager");
 const planning_manager_1 = require("./planning/planning-manager");
-const autonomous_claude_interface_1 = require("./chat/autonomous-claude-interface");
 const advanced_ai_provider_1 = require("./ai/advanced-ai-provider");
 const config_manager_1 = require("./core/config-manager");
 // Configure marked for terminal rendering
@@ -62,13 +61,13 @@ class NikCLI {
     constructor() {
         this.currentMode = 'default';
         this.sessionContext = new Map();
+        this.chatMessages = [];
         this.workingDirectory = process.cwd();
         this.projectContextFile = path.join(this.workingDirectory, 'CLAUDE.md');
         // Initialize core managers
         this.configManager = config_manager_1.simpleConfigManager;
         this.agentManager = new agent_manager_1.AgentManager(this.configManager);
         this.planningManager = new planning_manager_1.PlanningManager(this.workingDirectory);
-        this.chatInterface = new autonomous_claude_interface_1.AutonomousClaudeInterface();
         this.setupEventHandlers();
     }
     setupEventHandlers() {
@@ -101,6 +100,14 @@ class NikCLI {
         }
         // Initialize systems
         await this.initializeSystems();
+        // Initialize chat system prompt if configured
+        try {
+            const sysPrompt = this.configManager.get('systemPrompt');
+            if (sysPrompt && !this.chatMessages.find(m => m.role === 'system')) {
+                this.chatMessages.push({ role: 'system', content: sysPrompt });
+            }
+        }
+        catch { }
         // Start enhanced chat interface with slash commands
         await this.startEnhancedChat();
     }
@@ -286,10 +293,53 @@ class NikCLI {
         }
         else {
             // Use chat interface for general conversation
-            // Use chat interface for general conversation
             console.log(chalk_1.default.blue('💬 Processing with chat interface...'));
-            // Note: Direct handleInput is private, so we'll implement basic chat here
-            console.log(chalk_1.default.green('Chat response would appear here'));
+            // Ensure API key is configured
+            if (!advanced_ai_provider_1.advancedAIProvider.validateApiKey()) {
+                console.log(chalk_1.default.red('❌ No API key configured for the current model.'));
+                console.log(chalk_1.default.dim('Set it via environment variable or update your config.'));
+                return;
+            }
+            // Build message history and stream response
+            this.chatMessages.push({ role: 'user', content: input });
+            let assistantText = '';
+            try {
+                for await (const event of advanced_ai_provider_1.advancedAIProvider.streamChatWithFullAutonomy(this.chatMessages)) {
+                    switch (event.type) {
+                        case 'text_delta':
+                            if (event.content) {
+                                process.stdout.write(chalk_1.default.white(event.content));
+                            }
+                            break;
+                        case 'tool_call':
+                            console.log(`\n${chalk_1.default.dim('🔧 Tool:')} ${chalk_1.default.cyan(event.toolName || '')}`);
+                            if (event.toolArgs)
+                                console.log(chalk_1.default.gray(`Args: ${JSON.stringify(event.toolArgs)}`));
+                            break;
+                        case 'tool_result':
+                            if (event.toolName)
+                                console.log(chalk_1.default.green(`✅ ${event.toolName} completed`));
+                            break;
+                        case 'complete':
+                            // Add a newline if the stream didn't end with one
+                            process.stdout.write('\n');
+                            break;
+                        case 'error':
+                            console.log(chalk_1.default.red(`Error: ${event.error || event.content || 'unknown error'}`));
+                            break;
+                    }
+                    if (event.type === 'text_delta' && event.content) {
+                        assistantText += event.content;
+                    }
+                }
+                // Save assistant message to history
+                if (assistantText.trim().length > 0) {
+                    this.chatMessages.push({ role: 'assistant', content: assistantText });
+                }
+            }
+            catch (err) {
+                console.log(chalk_1.default.red(`Chat failed: ${err.message || err}`));
+            }
         }
     }
     /**

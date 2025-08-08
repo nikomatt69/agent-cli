@@ -57,6 +57,7 @@ const diff_manager_1 = require("./ui/diff-manager");
 const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
 const register_agents_1 = require("./register-agents");
+const agent_manager_1 = require("./core/agent-manager");
 // ASCII Art Banner
 const banner = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
@@ -175,9 +176,21 @@ class ServiceModule {
         console.log(chalk_1.default.dim('   Services configured'));
     }
     static async initializeAgents() {
-        // Register all available agents
-        (0, register_agents_1.registerAgents)(agent_service_1.agentService);
-        const agents = agent_service_1.agentService.getAvailableAgents();
+        // Create and initialize the core AgentManager
+        if (!this.agentManager) {
+            this.agentManager = new agent_manager_1.AgentManager(config_manager_1.simpleConfigManager);
+            await this.agentManager.initialize();
+        }
+        // Register agent classes (e.g., UniversalAgent)
+        (0, register_agents_1.registerAgents)(this.agentManager);
+        // Ensure at least one agent instance is created (universal-agent)
+        try {
+            await this.agentManager.createAgent('universal-agent');
+        }
+        catch (_) {
+            // If already created or creation failed silently, proceed
+        }
+        const agents = this.agentManager.listAgents();
         console.log(chalk_1.default.dim(`   Loaded ${agents.length} agents`));
     }
     static async initializeTools() {
@@ -222,6 +235,7 @@ class ServiceModule {
 }
 exports.ServiceModule = ServiceModule;
 ServiceModule.initialized = false;
+ServiceModule.agentManager = null;
 /**
  * Streaming Orchestrator Module
  */

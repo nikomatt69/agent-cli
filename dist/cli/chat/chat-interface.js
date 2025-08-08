@@ -40,7 +40,6 @@ exports.chatInterface = exports.ChatInterface = void 0;
 const readline = __importStar(require("readline"));
 const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
-const gradient_string_1 = __importDefault(require("gradient-string"));
 const marked_1 = require("marked");
 const marked_terminal_1 = __importDefault(require("marked-terminal"));
 const chat_manager_1 = require("./chat-manager");
@@ -95,7 +94,7 @@ class ChatInterface {
     getPrompt() {
         const modelInfo = model_provider_1.modelProvider.getCurrentModelInfo();
         const sessionId = chat_manager_1.chatManager.getCurrentSession()?.id.slice(0, 8) || 'new';
-        return gradient_string_1.default.rainbow(`┌─[${modelInfo.name}:${sessionId}]\n└─❯ `);
+        return `┌─[${chalk_1.default.green(modelInfo.name)}:${chalk_1.default.cyan(sessionId)}]\n└─❯ `;
     }
     updatePrompt() {
         this.rl.setPrompt(this.getPrompt());
@@ -113,7 +112,7 @@ class ChatInterface {
         this.prompt();
     }
     showWelcome() {
-        const title = gradient_string_1.default.rainbow('🤖 AI Coder CLI');
+        const title = chalk_1.default.cyanBright('🤖 AI Coder CLI');
         const modelInfo = model_provider_1.modelProvider.getCurrentModelInfo();
         const welcomeText = `
 ${title}

@@ -107,9 +107,12 @@ export class ModelProvider {
   }
 
   getCurrentModelInfo(): { name: string; config: ModelConfig } {
+    const name = configManager.get('currentModel');
+    const models = configManager.get('models');
+    const cfg = models[name];
     return {
-      name: configManager.get('currentModel'),
-      config: {},
+      name,
+      config: cfg,
     };
   }
 }

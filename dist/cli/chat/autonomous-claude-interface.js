@@ -40,7 +40,6 @@ exports.autonomousClaudeInterface = exports.AutonomousClaudeInterface = void 0;
 const readline = __importStar(require("readline"));
 const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
-const gradient_string_1 = __importDefault(require("gradient-string"));
 const marked_1 = require("marked");
 const marked_terminal_1 = __importDefault(require("marked-terminal"));
 const advanced_ai_provider_1 = require("../ai/advanced-ai-provider");
@@ -195,7 +194,7 @@ class AutonomousClaudeInterface {
         return true;
     }
     showWelcome() {
-        const title = gradient_string_1.default.rainbow('🤖 Autonomous Claude Assistant');
+        const title = chalk_1.default.cyanBright('🤖 Autonomous Claude Assistant');
         const subtitle = chalk_1.default.gray('Terminal Velocity Development - Fully Autonomous Mode');
         const version = chalk_1.default.dim('v2.0.0 Advanced');
         console.log((0, boxen_1.default)(`${title}\\n${subtitle}\\n\\n${version}\\n\\n` +
@@ -858,7 +857,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             // Build mode indicators
             const indicators = this.updatePromptIndicators();
             const modeIndicator = indicators.length > 0 ? ` ${indicators.join(' ')} ` : '';
-            const prompt = gradient_string_1.default.rainbow(`\\n┌─[${autonomousIndicator}${modelName}:${workingDir}${modeIndicator}]\\n└─❯ `);
+            const prompt = chalk_1.default.cyanBright(`\\n┌─[${autonomousIndicator}${modelName}:${workingDir}${modeIndicator}]\\n└─❯ `);
             this.rl.setPrompt(prompt);
             this.rl.prompt();
         }
@@ -1110,7 +1109,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     showGoodbye() {
         const executionCount = this.session.executionHistory.length;
         const toolsUsed = this.session.executionHistory.filter(e => e.type === 'tool_call').length;
-        console.log((0, boxen_1.default)(`${gradient_string_1.default.rainbow('🤖 Autonomous Claude Assistant')}\\n\\n` +
+        console.log((0, boxen_1.default)(`${chalk_1.default.cyanBright('🤖 Autonomous Claude Assistant')}\\n\\n` +
             `${chalk_1.default.gray('Session completed!')}\\n\\n` +
             `${chalk_1.default.dim('Autonomous Actions:')}\\n` +
             `• ${chalk_1.default.blue('Messages:')} ${this.session.messages.length}\\n` +
