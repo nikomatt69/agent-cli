@@ -1,4 +1,4 @@
-import { EventBus, EventTypes } from '../agents/event-bus';
+import { EventBus, EventTypes } from './agents/event-bus';
 import { ToolRegistry } from '../tools/tool-registry';
 import { CliUI } from '../utils/cli-ui';
 

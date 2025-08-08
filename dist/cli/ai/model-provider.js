@@ -5,7 +5,7 @@ const ai_1 = require("ai");
 const openai_1 = require("@ai-sdk/openai");
 const anthropic_1 = require("@ai-sdk/anthropic");
 const google_1 = require("@ai-sdk/google");
-const config_manager_1 = require("../config/config-manager");
+const config_manager_1 = require("../core/config-manager");
 class ModelProvider {
     getModel(config) {
         const currentModelName = config_manager_1.configManager.get('currentModel');
@@ -74,12 +74,12 @@ class ModelProvider {
         return object;
     }
     validateApiKey() {
-        return config_manager_1.configManager.validateCurrentModel();
+        return config_manager_1.configManager.validateConfig();
     }
     getCurrentModelInfo() {
         return {
             name: config_manager_1.configManager.get('currentModel'),
-            config: config_manager_1.configManager.getCurrentModel(),
+            config: {},
         };
     }
 }

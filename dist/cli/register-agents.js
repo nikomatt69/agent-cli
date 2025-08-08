@@ -1,35 +1,99 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAgents = registerAgents;
-const ai_agent_1 = require("./agents/ai-agent");
-const code_generator_agent_1 = require("./agents/code-generator-agent");
-const code_review_agent_1 = require("./agents/code-review-agent");
-const optimization_agent_1 = require("./agents/optimization-agent");
-const coding_agent_1 = require("./agents/coding-agent");
-const react_agent_1 = require("./agents/react-agent");
-const backend_agent_1 = require("./agents/backend-agent");
-const devops_agent_1 = require("./agents/devops-agent");
-const autonomous_orchestrator_1 = require("./agents/autonomous-orchestrator");
-const autonomous_coder_1 = require("./agents/autonomous-coder");
-const system_admin_agent_1 = require("./agents/system-admin-agent");
+const universal_agent_1 = require("./automation/agents/universal-agent");
 function registerAgents(agentManager) {
-    // Legacy agents (for backward compatibility)
-    agentManager.registerAgent(ai_agent_1.AIAnalysisAgent);
-    agentManager.registerAgent(code_generator_agent_1.CodeGeneratorAgent);
-    agentManager.registerAgent(code_review_agent_1.CodeReviewAgent);
-    agentManager.registerAgent(optimization_agent_1.OptimizationAgent);
-    // New specialized coding agents
-    agentManager.registerAgent(coding_agent_1.CodingAgent);
-    agentManager.registerAgent(react_agent_1.ReactAgent);
-    agentManager.registerAgent(backend_agent_1.BackendAgent);
-    agentManager.registerAgent(devops_agent_1.DevOpsAgent);
-    agentManager.registerAgent(autonomous_coder_1.AutonomousCoder);
-    agentManager.registerAgent(system_admin_agent_1.SystemAdminAgent);
-    // Autonomous orchestrator (special case - requires AgentManager)
-    class AutonomousOrchestratorWrapper extends autonomous_orchestrator_1.AutonomousOrchestrator {
-        constructor() {
-            super(agentManager);
+    // Register the unified UniversalAgent for enterprise production use
+    agentManager.registerAgentClass(universal_agent_1.UniversalAgent, {
+        id: 'universal-agent',
+        name: 'Universal Agent',
+        description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
+        specialization: 'universal',
+        version: '3.0.0',
+        capabilities: [
+            // Core capabilities
+            'code-generation',
+            'code-analysis',
+            'code-review',
+            'optimization',
+            'debugging',
+            'refactoring',
+            'testing',
+            // Frontend capabilities
+            'react',
+            'nextjs',
+            'typescript',
+            'javascript',
+            'html',
+            'css',
+            'frontend',
+            'components',
+            'hooks',
+            'jsx',
+            'tsx',
+            // Backend capabilities
+            'backend',
+            'nodejs',
+            'api-development',
+            'database',
+            'server-architecture',
+            'rest-api',
+            'graphql',
+            'microservices',
+            // DevOps capabilities
+            'devops',
+            'ci-cd',
+            'docker',
+            'kubernetes',
+            'deployment',
+            'infrastructure',
+            'monitoring',
+            'security',
+            // Autonomous capabilities
+            'file-operations',
+            'project-creation',
+            'autonomous-coding',
+            'system-administration',
+            'full-stack-development',
+            // Analysis capabilities
+            'performance-analysis',
+            'security-analysis',
+            'quality-assessment',
+            'architecture-review',
+            'documentation-generation'
+        ],
+        category: 'enterprise',
+        tags: ['universal', 'all-in-one', 'enterprise', 'autonomous', 'fullstack'],
+        requiresGuidance: false,
+        defaultConfig: {
+            autonomyLevel: 'fully-autonomous',
+            maxConcurrentTasks: 3,
+            defaultTimeout: 300000,
+            retryPolicy: {
+                maxAttempts: 3,
+                backoffMs: 1000,
+                backoffMultiplier: 2,
+                retryableErrors: ['timeout', 'network', 'temporary']
+            },
+            enabledTools: ['file', 'terminal', 'git', 'npm', 'analysis'],
+            guidanceFiles: [],
+            logLevel: 'info',
+            permissions: {
+                canReadFiles: true,
+                canWriteFiles: true,
+                canDeleteFiles: true,
+                allowedPaths: ['*'],
+                forbiddenPaths: ['/etc', '/system'],
+                canExecuteCommands: true,
+                allowedCommands: ['*'],
+                forbiddenCommands: ['rm -rf /', 'format', 'fdisk'],
+                canAccessNetwork: true,
+                allowedDomains: ['*'],
+                canInstallPackages: true,
+                canModifyConfig: true,
+                canAccessSecrets: false
+            },
+            sandboxRestrictions: []
         }
-    }
-    agentManager.registerAgent(AutonomousOrchestratorWrapper);
+    });
 }

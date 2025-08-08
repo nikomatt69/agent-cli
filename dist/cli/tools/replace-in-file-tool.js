@@ -10,6 +10,9 @@ const cli_ui_1 = require("../utils/cli-ui");
  * Safely performs content replacements with validation and rollback
  */
 class ReplaceInFileTool extends base_tool_1.BaseTool {
+    constructor(workingDirectory) {
+        super('replace-in-file-tool', workingDirectory);
+    }
     async execute(filePath, searchPattern, replacement, options = {}) {
         const startTime = Date.now();
         let backupContent;
@@ -39,7 +42,7 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 await (0, promises_1.writeFile)(sanitizedPath, replaceResult.newContent, 'utf8');
             }
             const duration = Date.now() - startTime;
-            const result = {
+            const replaceResult_ = {
                 success: true,
                 filePath: sanitizedPath,
                 matchCount: replaceResult.matchCount,
@@ -61,9 +64,18 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             else {
                 cli_ui_1.CliUI.logInfo(`No matches found in ${filePath}`);
             }
-            return result;
+            return {
+                success: true,
+                data: replaceResult_,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { filePath, searchPattern: searchPattern.toString(), replacement, options }
+                }
+            };
         }
         catch (error) {
+            const duration = Date.now() - startTime;
             const errorResult = {
                 success: false,
                 filePath,
@@ -71,7 +83,7 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 replacementsMade: 0,
                 originalSize: backupContent ? Buffer.byteLength(backupContent, 'utf8') : 0,
                 newSize: 0,
-                duration: Date.now() - startTime,
+                duration,
                 error: error.message,
                 metadata: {
                     searchPattern: searchPattern.toString(),
@@ -81,7 +93,16 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 }
             };
             cli_ui_1.CliUI.logError(`Failed to replace in file ${filePath}: ${error.message}`);
-            return errorResult;
+            return {
+                success: false,
+                data: errorResult,
+                error: error.message,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { filePath, searchPattern: searchPattern.toString(), replacement, options }
+                }
+            };
         }
     }
     /**
@@ -94,10 +115,10 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
         for (const filePath of filePaths) {
             try {
                 const result = await this.execute(filePath, searchPattern, replacement, options);
-                results.push(result);
+                results.push(result.data);
                 if (result.success) {
                     successCount++;
-                    totalReplacements += result.replacementsMade;
+                    totalReplacements += result.data.replacementsMade;
                 }
                 else if (options.stopOnFirstError) {
                     break;

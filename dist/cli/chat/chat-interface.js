@@ -45,7 +45,7 @@ const marked_1 = require("marked");
 const marked_terminal_1 = __importDefault(require("marked-terminal"));
 const chat_manager_1 = require("./chat-manager");
 const model_provider_1 = require("../ai/model-provider");
-const slash_commands_1 = require("./slash-commands");
+const nik_cli_commands_1 = require("./nik-cli-commands");
 // Configure marked for terminal rendering
 const renderer = new marked_terminal_1.default();
 marked_1.marked.setOptions({
@@ -60,7 +60,7 @@ class ChatInterface {
             prompt: this.getPrompt(),
             historySize: 100,
         });
-        this.slashCommands = new slash_commands_1.SlashCommandHandler();
+        this.slashCommands = new nik_cli_commands_1.SlashCommandHandler();
         this.setupEventHandlers();
     }
     setupEventHandlers() {

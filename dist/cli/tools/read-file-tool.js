@@ -138,7 +138,7 @@ class ReadFileTool extends base_tool_1.BaseTool {
      */
     async readMultiple(filePaths, options = {}) {
         const readPromises = filePaths.map(path => this.execute(path, options));
-        return Promise.all(readPromises);
+        return (await Promise.all(readPromises)).map(result => result.data);
     }
     /**
      * Read file with streaming for large files

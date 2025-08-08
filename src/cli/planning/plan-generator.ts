@@ -1,11 +1,13 @@
 import { nanoid } from 'nanoid';
-import { 
-  ExecutionPlan, 
-  ExecutionStep, 
-  PlannerContext, 
-  ToolCapability, 
-  PlanValidationResult 
+import {
+  ExecutionPlan,
+  ExecutionStep,
+  PlannerContext,
+  PlanValidationResult,
+  RiskAssessment,
+  PlanningToolCapability
 } from './types';
+import { ToolCapability } from '../services/tool-service';
 import { CliUI } from '../utils/cli-ui';
 
 /**
@@ -13,7 +15,7 @@ import { CliUI } from '../utils/cli-ui';
  * Analyzes user requests and generates detailed, executable plans
  */
 export class PlanGenerator {
-  private toolCapabilities: Map<string, ToolCapability> = new Map();
+  private toolCapabilities: Map<string, PlanningToolCapability> = new Map();
 
   constructor() {
     this.initializeToolCapabilities();
@@ -28,16 +30,16 @@ export class PlanGenerator {
     try {
       // Parse and analyze the user request
       const requestAnalysis = this.analyzeUserRequest(context.userRequest);
-      
+
       // Generate steps based on analysis
       const steps = await this.generateSteps(requestAnalysis, context);
-      
+
       // Calculate risk assessment
       const riskAssessment = this.assessPlanRisk(steps);
-      
+
       // Calculate estimated duration
       const estimatedTotalDuration = steps.reduce(
-        (total, step) => total + (step.estimatedDuration || 0), 
+        (total, step) => total + (step.estimatedDuration || 0),
         0
       );
 
@@ -46,6 +48,8 @@ export class PlanGenerator {
         title: this.generatePlanTitle(requestAnalysis),
         description: this.generatePlanDescription(requestAnalysis, steps),
         steps,
+        todos: [],
+        status: 'pending',
         estimatedTotalDuration,
         riskAssessment,
         createdAt: new Date(),
@@ -54,6 +58,7 @@ export class PlanGenerator {
           userRequest: context.userRequest,
           projectPath: context.projectPath,
           relevantFiles: context.projectAnalysis ? [] : undefined
+
         }
       };
 
@@ -119,7 +124,7 @@ export class PlanGenerator {
    */
   private analyzeUserRequest(request: string): RequestAnalysis {
     const lowerRequest = request.toLowerCase();
-    
+
     // Detect operation types
     const operations: string[] = [];
     const entities: string[] = [];
@@ -152,7 +157,7 @@ export class PlanGenerator {
 
     // Complexity assessment
     const complexity = this.assessRequestComplexity(lowerRequest);
-    
+
     return {
       originalRequest: request,
       operations,
@@ -217,7 +222,7 @@ export class PlanGenerator {
         reversible: true,
         dependencies: steps.slice(0, -1).map(s => s.id) // Depends on all previous steps
       };
-      
+
       // Insert before the last high-risk step
       const lastHighRiskIndex = this.findLastIndex(steps, (step: ExecutionStep) => step.riskLevel === 'high');
       if (lastHighRiskIndex >= 0) {
@@ -308,15 +313,15 @@ export class PlanGenerator {
    */
   private assessPlanRisk(steps: ExecutionStep[]) {
     const destructiveOperations = steps.filter(s => !s.reversible).length;
-    const fileModifications = steps.filter(s => 
+    const fileModifications = steps.filter(s =>
       s.toolName?.includes('write') || s.toolName?.includes('delete') || s.toolName?.includes('replace')
     ).length;
-    const externalCalls = steps.filter(s => 
+    const externalCalls = steps.filter(s =>
       s.toolName?.includes('api') || s.toolName?.includes('network')
     ).length;
 
     let overallRisk: 'low' | 'medium' | 'high' = 'low';
-    
+
     if (destructiveOperations > 0 || steps.some(s => s.riskLevel === 'high')) {
       overallRisk = 'high';
     } else if (fileModifications > 2 || steps.some(s => s.riskLevel === 'medium')) {
@@ -364,7 +369,7 @@ export class PlanGenerator {
    * Initialize tool capabilities registry
    */
   private initializeToolCapabilities(): void {
-    const tools: ToolCapability[] = [
+    const tools: PlanningToolCapability[] = [
       {
         name: 'find-files-tool',
         description: 'Find files matching patterns',
@@ -421,7 +426,7 @@ export class PlanGenerator {
   private generatePlanTitle(analysis: RequestAnalysis): string {
     const operations = analysis.operations.join(', ');
     const entities = analysis.entities.join(', ');
-    
+
     if (operations && entities) {
       return `${operations.charAt(0).toUpperCase() + operations.slice(1)} ${entities}`;
     } else if (operations) {
@@ -436,9 +441,9 @@ export class PlanGenerator {
    */
   private generatePlanDescription(analysis: RequestAnalysis, steps: ExecutionStep[]): string {
     const stepCount = steps.length;
-    const riskLevel = steps.some(s => s.riskLevel === 'high') ? 'high' : 
-                     steps.some(s => s.riskLevel === 'medium') ? 'medium' : 'low';
-    
+    const riskLevel = steps.some(s => s.riskLevel === 'high') ? 'high' :
+      steps.some(s => s.riskLevel === 'medium') ? 'medium' : 'low';
+
     return `Execution plan with ${stepCount} steps to fulfill: "${analysis.originalRequest}". Risk level: ${riskLevel}.`;
   }
 
@@ -457,7 +462,7 @@ export class PlanGenerator {
     ];
 
     const complexityScore = indicators.filter(Boolean).length;
-    
+
     if (complexityScore >= 4) return 'complex';
     if (complexityScore >= 2) return 'moderate';
     return 'simple';

@@ -81,16 +81,25 @@ class RunCommandTool extends base_tool_1.BaseTool {
             else {
                 cli_ui_1.CliUI.logWarning(`Command failed with exit code ${result.exitCode}: ${command}`);
             }
-            return commandResult;
+            return {
+                success: result.exitCode === 0,
+                data: commandResult,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { command, options }
+                }
+            };
         }
         catch (error) {
+            const duration = Date.now() - startTime;
             const errorResult = {
                 success: false,
                 command,
                 exitCode: -1,
                 stdout: '',
                 stderr: error.message,
-                duration: Date.now() - startTime,
+                duration,
                 workingDirectory: options.cwd || this.workingDirectory,
                 error: error.message,
                 metadata: {
@@ -99,7 +108,16 @@ class RunCommandTool extends base_tool_1.BaseTool {
                 }
             };
             cli_ui_1.CliUI.logError(`Command execution failed: ${command} - ${error.message}`);
-            return errorResult;
+            return {
+                success: false,
+                data: errorResult,
+                error: error.message,
+                metadata: {
+                    executionTime: duration,
+                    toolName: this.name,
+                    parameters: { command, options }
+                }
+            };
         }
     }
     /**
@@ -111,7 +129,8 @@ class RunCommandTool extends base_tool_1.BaseTool {
         for (let i = 0; i < commands.length; i++) {
             const command = commands[i];
             try {
-                const result = await this.execute(command, options);
+                const toolResult = await this.execute(command, options);
+                const result = toolResult.data;
                 results.push(result);
                 if (result.success) {
                     successCount++;

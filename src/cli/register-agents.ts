@@ -1,36 +1,103 @@
-import { AgentManager } from './agents/agent-manager';
-import { AIAnalysisAgent } from './agents/ai-agent';
-import { CodeGeneratorAgent } from './agents/code-generator-agent';
-import { CodeReviewAgent } from './agents/code-review-agent';
-import { OptimizationAgent } from './agents/optimization-agent';
-import { CodingAgent } from './agents/coding-agent';
-import { ReactAgent } from './agents/react-agent';
-import { BackendAgent } from './agents/backend-agent';
-import { DevOpsAgent } from './agents/devops-agent';
-import { AutonomousOrchestrator } from './agents/autonomous-orchestrator';
-import { AutonomousCoder } from './agents/autonomous-coder';
-import { SystemAdminAgent } from './agents/system-admin-agent';
+import { AgentManager } from './core/agent-manager';
+import { UniversalAgent } from './automation/agents/universal-agent';
 
 export function registerAgents(agentManager: AgentManager): void {
-  // Legacy agents (for backward compatibility)
-  agentManager.registerAgent(AIAnalysisAgent);
-  agentManager.registerAgent(CodeGeneratorAgent);
-  agentManager.registerAgent(CodeReviewAgent);
-  agentManager.registerAgent(OptimizationAgent);
-  
-  // New specialized coding agents
-  agentManager.registerAgent(CodingAgent);
-  agentManager.registerAgent(ReactAgent);
-  agentManager.registerAgent(BackendAgent);
-  agentManager.registerAgent(DevOpsAgent);
-  agentManager.registerAgent(AutonomousCoder);
-  agentManager.registerAgent(SystemAdminAgent);
-  
-  // Autonomous orchestrator (special case - requires AgentManager)
-  class AutonomousOrchestratorWrapper extends AutonomousOrchestrator {
-    constructor(workingDirectory: string = process.cwd()) {
-      super(agentManager, workingDirectory);
+  // Register the unified UniversalAgent for enterprise production use
+  agentManager.registerAgentClass(UniversalAgent, {
+    id: 'universal-agent',
+    name: 'Universal Agent',
+    description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
+    specialization: 'universal',
+    version: '3.0.0',
+    capabilities: [
+      // Core capabilities
+      'code-generation',
+      'code-analysis', 
+      'code-review',
+      'optimization',
+      'debugging',
+      'refactoring',
+      'testing',
+      
+      // Frontend capabilities
+      'react',
+      'nextjs',
+      'typescript',
+      'javascript',
+      'html',
+      'css',
+      'frontend',
+      'components',
+      'hooks',
+      'jsx',
+      'tsx',
+      
+      // Backend capabilities
+      'backend',
+      'nodejs',
+      'api-development',
+      'database',
+      'server-architecture',
+      'rest-api',
+      'graphql',
+      'microservices',
+      
+      // DevOps capabilities
+      'devops',
+      'ci-cd',
+      'docker',
+      'kubernetes',
+      'deployment',
+      'infrastructure',
+      'monitoring',
+      'security',
+      
+      // Autonomous capabilities
+      'file-operations',
+      'project-creation',
+      'autonomous-coding',
+      'system-administration',
+      'full-stack-development',
+      
+      // Analysis capabilities
+      'performance-analysis',
+      'security-analysis',
+      'quality-assessment',
+      'architecture-review',
+      'documentation-generation'
+    ],
+    category: 'enterprise',
+    tags: ['universal', 'all-in-one', 'enterprise', 'autonomous', 'fullstack'],
+    requiresGuidance: false,
+    defaultConfig: {
+      autonomyLevel: 'fully-autonomous',
+      maxConcurrentTasks: 3,
+      defaultTimeout: 300000,
+      retryPolicy: {
+        maxAttempts: 3,
+        backoffMs: 1000,
+        backoffMultiplier: 2,
+        retryableErrors: ['timeout', 'network', 'temporary']
+      },
+      enabledTools: ['file', 'terminal', 'git', 'npm', 'analysis'],
+      guidanceFiles: [],
+      logLevel: 'info',
+      permissions: {
+        canReadFiles: true,
+        canWriteFiles: true,
+        canDeleteFiles: true,
+        allowedPaths: ['*'],
+        forbiddenPaths: ['/etc', '/system'],
+        canExecuteCommands: true,
+        allowedCommands: ['*'],
+        forbiddenCommands: ['rm -rf /', 'format', 'fdisk'],
+        canAccessNetwork: true,
+        allowedDomains: ['*'],
+        canInstallPackages: true,
+        canModifyConfig: true,
+        canAccessSecrets: false
+      },
+      sandboxRestrictions: []
     }
-  }
-  agentManager.registerAgent(AutonomousOrchestratorWrapper);
+  });
 }

@@ -31,6 +31,8 @@ class PlanGenerator {
                 title: this.generatePlanTitle(requestAnalysis),
                 description: this.generatePlanDescription(requestAnalysis, steps),
                 steps,
+                todos: [],
+                status: 'pending',
                 estimatedTotalDuration,
                 riskAssessment,
                 createdAt: new Date(),

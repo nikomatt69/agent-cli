@@ -238,7 +238,7 @@ class ListTool extends base_tool_1.BaseTool {
                         children: [],
                         path: (0, path_1.join)(basePath, partialPath)
                     };
-                    currentNode.children.push(newNode);
+                    currentNode.children?.push(newNode);
                     nodeMap.set(partialPath, newNode);
                 }
                 currentNode = nodeMap.get(partialPath);
@@ -253,7 +253,7 @@ class ListTool extends base_tool_1.BaseTool {
                 modified: entry.modified,
                 extension: entry.extension
             };
-            currentNode.children.push(finalNode);
+            currentNode.children?.push(finalNode);
             if (entry.type === 'directory') {
                 nodeMap.set(entry.relativePath, finalNode);
             }

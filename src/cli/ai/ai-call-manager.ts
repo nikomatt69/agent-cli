@@ -1,7 +1,7 @@
 import { modelProvider, ChatMessage, GenerateOptions } from './model-provider';
 import { secureTools, BatchSession } from '../tools/secure-tools-registry';
 import { CommandResult } from '../tools/secure-command-tool';
-import * as ragSystem from './rag-system';
+import * as ragSystem from "../context/rag-system"
 import chalk from 'chalk';
 import ora from 'ora';
 import { z } from 'zod';

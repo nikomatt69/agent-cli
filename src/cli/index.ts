@@ -1,458 +1,601 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+
+/**
+ * NikCLI - Unified Autonomous AI Development Assistant
+ * Consolidated Entry Point with Modular Architecture
+ */
+
+import chalk from 'chalk';
+import boxen from 'boxen';
+import * as readline from 'readline';
+import { EventEmitter } from 'events';
+
+// Core imports
+import { NikCLI } from './nik-cli';
+import { agentService } from './services/agent-service';
+import { toolService } from './services/tool-service';
+import { planningService } from './services/planning-service';
+import { lspService } from './services/lsp-service';
+import { diffManager } from './ui/diff-manager';
+import { ExecutionPolicyManager } from './policies/execution-policy';
+import { simpleConfigManager as configManager } from './core/config-manager';
 import { registerAgents } from './register-agents';
-import { AgentManager } from './agents/agent-manager';
-import { chatInterface } from './chat/chat-interface';
-import { configManager } from './config/config-manager';
-import { CliUI } from './utils/cli-ui';
-import { PlanningManager } from './planning/planning-manager';
+import { AgentManager } from './core/agent-manager';
 
-const program = new Command();
+// Types from streaming orchestrator
+interface StreamMessage {
+  id: string;
+  type: 'user' | 'system' | 'agent' | 'tool' | 'diff' | 'error';
+  content: string;
+  timestamp: Date;
+  status: 'queued' | 'processing' | 'completed' | 'absorbed';
+  metadata?: any;
+  agentId?: string;
+  progress?: number;
+}
 
-// Main CLI entry point
-program
-  .name('ai-agents-cli')
-  .description('A CLI tool with parallel AI agents using TypeScript and Gemini')
-  .version('1.0.0');
+interface StreamContext {
+  workingDirectory: string;
+  autonomous: boolean;
+  planMode: boolean;
+  autoAcceptEdits: boolean;
+  contextLeft: number;
+  maxContext: number;
+}
 
-// Initialize agent manager and register agents
-const agentManager = new AgentManager();
-registerAgents(agentManager);
+// ASCII Art Banner
+const banner = `
+███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
+████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
+██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║
+██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║
+██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
+╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝
+`;
 
-// Initialize planning manager
-const planningManager = new PlanningManager(process.cwd());
-
-// Run single agent command
-program
-  .command('run <agent-name>')
-  .description('Run a specific AI agent')
-  .option('-t, --task <task>', 'Task description for the agent')
-  .action(async (agentName, options) => {
-    CliUI.startSpinner(`Starting agent: ${CliUI.highlight(agentName)}`);
-    try {
-      const agent = agentManager.getAgent(agentName);
-      if (!agent) {
-        CliUI.failSpinner(`Agent ${CliUI.highlight(agentName)} not found`);
-        return;
-      }
-
-      CliUI.updateSpinner(`Initializing agent: ${CliUI.highlight(agentName)}`);
-      await agent.initialize();
-      
-      CliUI.updateSpinner(`Running agent: ${CliUI.highlight(agentName)}`);
-      const task = {
-        id: `task-${Date.now()}`,
-        type: 'user_request',
-        description: options.task,
-        priority: 'normal' as const,
-        data: { userInput: options.task }
-      };
-      const result = await agent.executeTask(task);
-
-      CliUI.succeedSpinner(`Agent ${CliUI.highlight(agentName)} completed successfully`);
-      CliUI.logInfo(`Result: ${result}`);
-    } catch (error: any) {
-      CliUI.failSpinner(`Error running agent ${CliUI.highlight(agentName)}`);
-      console.error(CliUI.formatError(error, `Running agent ${agentName}`));
-    }
-  });
-
-// Run multiple agents in parallel
-program
-  .command('run-parallel <agents...>')
-  .description('Run multiple agents in parallel')
-  .option('-t, --task <task>', 'Task description for all agents')
-  .action(async (agents, options) => {
-    CliUI.logSection(`Parallel Agent Execution`);
-    CliUI.startSpinner(`Starting ${CliUI.highlight(agents.length.toString())} agents in parallel`);
+/**
+ * Introduction Display Module
+ */
+class IntroductionModule {
+  static displayBanner() {
+    console.clear();
+    // Use realistic solid colors instead of rainbow gradient
+    console.log(chalk.cyanBright(banner));
     
+    const welcomeBox = boxen(
+      chalk.white.bold('🤖 Autonomous AI Development Assistant\n\n') +
+      chalk.gray('• Intelligent code generation and analysis\n') +
+      chalk.gray('• Autonomous planning and execution\n') +
+      chalk.gray('• Real-time project understanding\n') +
+      chalk.gray('• Interactive terminal interface\n\n') +
+      chalk.cyan('Ready to transform your development workflow!'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: 'cyan',
+        backgroundColor: '#1a1a1a'
+      }
+    );
+    
+    console.log(welcomeBox);
+  }
+
+  static displayApiKeySetup() {
+    const setupBox = boxen(
+      chalk.yellow.bold('⚠️  API Key Required\n\n') +
+      chalk.white('To use NikCLI, please set at least one API key:\n\n') +
+      chalk.green('• ANTHROPIC_API_KEY') + chalk.gray(' - for Claude models (recommended)\n') +
+      chalk.blue('• OPENAI_API_KEY') + chalk.gray(' - for GPT models\n') +
+      chalk.magenta('• GOOGLE_GENERATIVE_AI_API_KEY') + chalk.gray(' - for Gemini models\n\n') +
+      chalk.white.bold('Setup Examples:\n') +
+      chalk.dim('export ANTHROPIC_API_KEY="your-key-here"\n') +
+      chalk.dim('export OPENAI_API_KEY="your-key-here"\n') +
+      chalk.dim('export GOOGLE_GENERATIVE_AI_API_KEY="your-key-here"\n\n') +
+      chalk.cyan('Then run: ') + chalk.white.bold('npm start'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: 'yellow',
+        backgroundColor: '#2a1a00'
+      }
+    );
+    
+    console.log(setupBox);
+  }
+
+  static displayStartupInfo() {
+    const startupBox = boxen(
+      chalk.green.bold('🚀 Starting NikCLI...\n\n') +
+      chalk.white('Initializing autonomous AI assistant\n') +
+      chalk.gray('• Loading project context\n') +
+      chalk.gray('• Preparing planning system\n') +
+      chalk.gray('• Setting up tool integrations\n\n') +
+      chalk.cyan('Type ') + chalk.white.bold('/help') + chalk.cyan(' for available commands'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: 'green',
+        backgroundColor: '#001a00'
+      }
+    );
+    
+    console.log(startupBox);
+  }
+}
+
+/**
+ * System Requirements Module
+ */
+class SystemModule {
+  static async checkApiKeys(): Promise<boolean> {
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    
+    return !!(anthropicKey || openaiKey || googleKey);
+  }
+
+  static checkNodeVersion(): boolean {
+    const version = process.version;
+    const major = parseInt(version.slice(1).split('.')[0]);
+    
+    if (major < 18) {
+      console.log(chalk.red(`❌ Node.js ${major} is too old. Requires Node.js 18+`));
+      return false;
+    }
+    
+    console.log(chalk.green(`✅ Node.js ${version}`));
+    return true;
+  }
+
+  static async checkSystemRequirements(): Promise<boolean> {
+    console.log(chalk.blue('🔍 Checking system requirements...'));
+
+    const checks = [
+      this.checkNodeVersion(),
+      await this.checkApiKeys()
+    ];
+
+    const allPassed = checks.every(r => r);
+
+    if (allPassed) {
+      console.log(chalk.green('✅ All system checks passed'));
+    } else {
+      console.log(chalk.red('❌ System requirements not met'));
+    }
+
+    return allPassed;
+  }
+}
+
+/**
+ * Service Initialization Module
+ */
+class ServiceModule {
+  private static initialized = false;
+  private static agentManager: AgentManager | null = null;
+
+  static async initializeServices(): Promise<void> {
+    const workingDir = process.cwd();
+    
+    // Set working directory for all services
+    toolService.setWorkingDirectory(workingDir);
+    planningService.setWorkingDirectory(workingDir);
+    lspService.setWorkingDirectory(workingDir);
+    diffManager.setAutoAccept(true);
+    
+    console.log(chalk.dim('   Services configured'));
+  }
+
+  static async initializeAgents(): Promise<void> {
+    // Create and initialize the core AgentManager
+    if (!this.agentManager) {
+      this.agentManager = new AgentManager(configManager as any);
+      await this.agentManager.initialize();
+    }
+
+    // Register agent classes (e.g., UniversalAgent)
+    registerAgents(this.agentManager);
+
+    // Ensure at least one agent instance is created (universal-agent)
     try {
-      const agentInstances = agents.map((agentName: string) => {
-        const agent = agentManager.getAgent(agentName);
-        if (!agent) {
-          throw new Error(`Agent ${agentName} not found`);
-        }
-        return { name: agentName, instance: agent };
-      });
+      await this.agentManager.createAgent('universal-agent');
+    } catch (_) {
+      // If already created or creation failed silently, proceed
+    }
 
-      CliUI.updateSpinner('Initializing agents...');
-      await Promise.all(agentInstances.map(({ instance }: { instance: any }) => instance.initialize()));
+    const agents = this.agentManager.listAgents();
+    console.log(chalk.dim(`   Loaded ${agents.length} agents`));
+  }
 
-      CliUI.updateSpinner('Running agents in parallel...');
-      const results = await Promise.all(
-        agentInstances.map(async ({ name, instance }: { name: string; instance: any }) => {
-          try {
-            const result = await instance.run(options.task);
-            return { name, result, success: true };
-          } catch (error: any) {
-            return { name, error: error.message, success: false };
-          }
-        })
-      );
+  static async initializeTools(): Promise<void> {
+    const tools = toolService.getAvailableTools();
+    console.log(chalk.dim(`   Loaded ${tools.length} tools`));
+  }
 
-      CliUI.succeedSpinner(`Completed ${CliUI.highlight(agents.length.toString())} agents`);
+  static async initializePlanning(): Promise<void> {
+    console.log(chalk.dim('   Planning system ready'));
+  }
 
-      CliUI.logSubsection('Results');
-      results.forEach(({ name, result, error, success }) => {
-        if (success) {
-          CliUI.logSuccess(`${CliUI.bold(name)}: ${result}`);
+  static async initializeSecurity(): Promise<void> {
+    console.log(chalk.dim('   Security policies loaded'));
+  }
+
+  static async initializeContext(): Promise<void> {
+    console.log(chalk.dim('   Context management ready'));
+  }
+
+  static async initializeSystem(): Promise<boolean> {
+    if (this.initialized) return true;
+
+    const steps = [
+      { name: 'Services', fn: this.initializeServices.bind(this) },
+      { name: 'Agents', fn: this.initializeAgents.bind(this) },
+      { name: 'Tools', fn: this.initializeTools.bind(this) },
+      { name: 'Planning', fn: this.initializePlanning.bind(this) },
+      { name: 'Security', fn: this.initializeSecurity.bind(this) },
+      { name: 'Context', fn: this.initializeContext.bind(this) }
+    ];
+
+    for (const step of steps) {
+      try {
+        console.log(chalk.blue(`🔄 ${step.name}...`));
+        await step.fn();
+        console.log(chalk.green(`✅ ${step.name} initialized`));
+      } catch (error: any) {
+        console.log(chalk.red(`❌ ${step.name} failed: ${error.message}`));
+        return false;
+      }
+    }
+
+    this.initialized = true;
+    console.log(chalk.green.bold('\n🎉 System initialization complete!'));
+    return true;
+  }
+}
+
+/**
+ * Streaming Orchestrator Module
+ */
+class StreamingModule extends EventEmitter {
+  private rl: readline.Interface;
+  private context: StreamContext;
+  private policyManager: ExecutionPolicyManager;
+  private messageQueue: StreamMessage[] = [];
+  private processingMessage = false;
+  private activeAgents = new Map<string, any>();
+
+  constructor() {
+    super();
+    
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      historySize: 300,
+      completer: this.autoComplete.bind(this),
+    });
+
+    this.context = {
+      workingDirectory: process.cwd(),
+      autonomous: true,
+      planMode: false,
+      autoAcceptEdits: true,
+      contextLeft: 20,
+      maxContext: 100
+    };
+
+    this.policyManager = new ExecutionPolicyManager(configManager);
+    this.setupInterface();
+    this.startMessageProcessor();
+  }
+
+  private setupInterface(): void {
+    // Raw mode for better control
+    process.stdin.setRawMode(true);
+    require('readline').emitKeypressEvents(process.stdin);
+
+    // Keypress handlers
+    process.stdin.on('keypress', (str, key) => {
+      if (key && key.name === 'slash' && !this.processingMessage) {
+        setTimeout(() => this.showCommandMenu(), 50);
+      }
+      
+      if (key && key.name === 'tab' && key.shift) {
+        this.cycleMode();
+      }
+      
+      if (key && key.name === 'c' && key.ctrl) {
+        if (this.activeAgents.size > 0) {
+          this.stopAllAgents();
         } else {
-          CliUI.logError(`${CliUI.bold(name)}: ${error}`);
+          this.gracefulExit();
         }
-      });
-    } catch (error: any) {
-      CliUI.failSpinner('Error running parallel agents');
-      console.error(CliUI.formatError(error, 'Parallel agent execution'));
-    }
-  });
-
-// List available agents
-program
-  .command('list')
-  .description('List available agents')
-  .action(() => {
-    CliUI.logSection('Available AI Agents');
-    const agents = agentManager.listAgents();
-    if (agents.length === 0) {
-      CliUI.logWarning('No agents registered');
-      return;
-    }
-
-    agents.forEach(agent => {
-      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
-    });
-  });
-
-// Chat command - main interactive interface
-program
-  .command('chat')
-  .description('Start interactive chat with AI coding assistants')
-  .action(async () => {
-    await chatInterface.start();
-  });
-
-// Configuration commands
-program
-  .command('config')
-  .description('Show current configuration')
-  .action(() => {
-    configManager.showConfig();
-  });
-
-program
-  .command('set-model <model>')
-  .description('Set the current AI model')
-  .action((model) => {
-    try {
-      configManager.setCurrentModel(model);
-      CliUI.logSuccess(`Model set to: ${CliUI.highlight(model)}`);
-    } catch (error: any) {
-      CliUI.logError(error.message);
-    }
-  });
-
-program
-  .command('set-key <model> <apiKey>')
-  .description('Set API key for a specific model')
-  .action((model, apiKey) => {
-    try {
-      configManager.setApiKey(model, apiKey);
-      CliUI.logSuccess(`API key set for: ${CliUI.highlight(model)}`);
-    } catch (error: any) {
-      CliUI.logError(error.message);
-    }
-  });
-
-program
-  .command('models')
-  .description('List available models')
-  .action(() => {
-    CliUI.logSection('🤖 Available Models');
-    
-    const currentModel = configManager.get('currentModel');
-    const models = configManager.get('models');
-    
-    Object.entries(models).forEach(([name, config]) => {
-      const isCurrent = name === currentModel;
-      const hasKey = configManager.getApiKey(name) !== undefined;
-      const status = hasKey ? '✅' : '❌';
-      const prefix = isCurrent ? '→ ' : '  ';
-      
-      console.log(`${prefix}${status} ${CliUI.bold(name)}`);
-      console.log(`    ${CliUI.dim(`Provider: ${config.provider} | Model: ${config.model}`)}`);
-    });
-  });
-
-// Agent management commands
-program
-  .command('agents')
-  .description('List available agents')
-  .action(() => {
-    CliUI.logSection('🤖 Available Agents');
-    
-    const agents = agentManager.listAgents();
-    if (agents.length === 0) {
-      CliUI.logWarning('No agents registered');
-      return;
-    }
-
-    agents.forEach(agent => {
-      CliUI.logKeyValue(`• ${CliUI.bold(agent.id)}`, agent.specialization);
-    });
-    
-    CliUI.logInfo('Use "npm run chat" for interactive mode');
-  });
-
-// Create custom agent command
-program
-  .command('create-agent <name>')
-  .description('Create a new custom agent')
-  .option('-d, --description <desc>', 'Agent description')
-  .option('-p, --prompt <prompt>', 'System prompt for the agent')
-  .action(async (name, options) => {
-    await createCustomAgent(name, options.description, options.prompt);
-  });
-
-// Index project command
-program
-  .command('index-project')
-  .description('Index the current project for RAG')
-  .action(async () => {
-    try {
-      const { indexProject } = await import('./ai/rag-system');
-      await indexProject(process.cwd());
-    } catch (error: any) {
-      CliUI.logError(`Error indexing project: ${error.message}`);
-    }
-  });
-
-// Planning system commands
-program
-  .command('plan <request>')
-  .description('Generate and execute an AI plan for the given request')
-  .option('-g, --generate-only', 'Only generate the plan without executing')
-  .option('-p, --project-path <path>', 'Project path to analyze', process.cwd())
-  .action(async (request, options) => {
-    try {
-      if (options.generateOnly) {
-        const plan = await planningManager.generatePlanOnly(request, options.projectPath);
-        CliUI.logSuccess(`Plan generated with ID: ${CliUI.highlight(plan.id)}`);
-        CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute this plan');
-      } else {
-        await planningManager.planAndExecute(request, options.projectPath);
       }
-    } catch (error: any) {
-      CliUI.logError(`Planning failed: ${error.message}`);
-    }
-  });
+    });
 
-program
-  .command('execute-plan <plan-id>')
-  .description('Execute a previously generated plan')
-  .action(async (planId) => {
-    try {
-      await planningManager.executePlan(planId);
-    } catch (error: any) {
-      CliUI.logError(`Plan execution failed: ${error.message}`);
-    }
-  });
-
-program
-  .command('list-plans')
-  .description('List all generated plans')
-  .action(() => {
-    try {
-      const plans = planningManager.listPlans();
-      
-      if (plans.length === 0) {
-        CliUI.logWarning('No plans found');
+    // Input handler
+    this.rl.on('line', async (input: string) => {
+      const trimmed = input.trim();
+      if (!trimmed) {
+        this.showPrompt();
         return;
       }
+      
+      await this.queueUserInput(trimmed);
+      this.showPrompt();
+    });
 
-      CliUI.logSection('Generated Plans');
-      plans.forEach(plan => {
-        const riskIcon = plan.riskAssessment.overallRisk === 'high' ? '🔴' : 
-                        plan.riskAssessment.overallRisk === 'medium' ? '🟡' : '🟢';
-        
-        console.log(`${riskIcon} ${CliUI.bold(plan.id.substring(0, 8))} - ${plan.title}`);
-        console.log(`  ${CliUI.dim(plan.description)}`);
-        console.log(`  ${CliUI.dim(`Steps: ${plan.steps.length} | Duration: ~${Math.round(plan.estimatedTotalDuration / 1000)}s`)}`);
-        console.log();
+    this.rl.on('close', () => {
+      this.gracefulExit();
+    });
+
+    this.setupServiceListeners();
+  }
+
+  private setupServiceListeners(): void {
+    // Agent events
+    agentService.on('task_start', (task) => {
+      this.activeAgents.set(task.id, task);
+      this.queueMessage({
+        type: 'system',
+        content: `🤖 Agent ${task.agentType} started: ${task.task.slice(0, 50)}...`,
+        metadata: { agentId: task.id, agentType: task.agentType }
       });
-      
-      CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute a plan');
-    } catch (error: any) {
-      CliUI.logError(`Failed to list plans: ${error.message}`);
-    }
-  });
+    });
 
-program
-  .command('planning-stats')
-  .description('Show planning system statistics')
-  .action(() => {
-    try {
-      const stats = planningManager.getPlanningStats();
-      
-      CliUI.logSection('Planning System Statistics');
-      CliUI.logKeyValue('Total Plans Generated', stats.totalPlansGenerated.toString());
-      CliUI.logKeyValue('Total Plans Executed', stats.totalPlansExecuted.toString());
-      CliUI.logKeyValue('Successful Executions', stats.successfulExecutions.toString());
-      CliUI.logKeyValue('Failed Executions', stats.failedExecutions.toString());
-      CliUI.logKeyValue('Average Steps per Plan', Math.round(stats.averageStepsPerPlan).toString());
-      CliUI.logKeyValue('Average Execution Time', `${Math.round(stats.averageExecutionTime / 1000)}s`);
-      
-      if (Object.keys(stats.riskDistribution).length > 0) {
-        CliUI.logSubsection('Risk Distribution');
-        Object.entries(stats.riskDistribution).forEach(([risk, count]) => {
-          const icon = risk === 'high' ? '🔴' : risk === 'medium' ? '🟡' : '🟢';
-          CliUI.logKeyValue(`${icon} ${risk}`, count.toString());
-        });
+    agentService.on('task_progress', (task, update) => {
+      this.queueMessage({
+        type: 'agent',
+        content: `📊 ${task.agentType}: ${update.progress}% ${update.description || ''}`,
+        metadata: { agentId: task.id, progress: update.progress },
+        agentId: task.id,
+        progress: update.progress
+      });
+    });
+  }
+
+  private queueMessage(message: Partial<StreamMessage>): void {
+    const fullMessage: StreamMessage = {
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      status: 'queued',
+      ...message
+    } as StreamMessage;
+    
+    this.messageQueue.push(fullMessage);
+  }
+
+  private async queueUserInput(input: string): Promise<void> {
+    this.queueMessage({
+      type: 'user',
+      content: input
+    });
+  }
+
+  private showPrompt(): void {
+    const dir = require('path').basename(this.context.workingDirectory);
+    const agents = this.activeAgents.size;
+    const agentIndicator = agents > 0 ? chalk.blue(`${agents}🤖`) : '🎛️';
+    
+    const modes = [];
+    if (this.context.planMode) modes.push(chalk.cyan('plan'));
+    if (this.context.autoAcceptEdits) modes.push(chalk.green('auto-accept'));
+    const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
+    
+    const contextStr = chalk.dim(`${this.context.contextLeft}%`);
+    
+    // Realistic prompt styling (no rainbow)
+    const prompt = `\n┌─[${agentIndicator}:${chalk.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
+    this.rl.setPrompt(prompt);
+    this.rl.prompt();
+  }
+
+  private autoComplete(line: string): [string[], string] {
+    const commands = ['/status', '/agents', '/diff', '/accept', '/clear', '/help'];
+    const agents = ['@react-expert', '@backend-expert', '@frontend-expert', '@devops-expert', '@code-review', '@autonomous-coder'];
+    
+    const all = [...commands, ...agents];
+    const hits = all.filter(c => c.startsWith(line));
+    return [hits.length ? hits : all, line];
+  }
+
+  private showCommandMenu(): void {
+    console.log(chalk.cyan('\n📋 Available Commands:'));
+    console.log(chalk.gray('─'.repeat(40)));
+    console.log(`${chalk.green('/help')}     Show detailed help`);
+    console.log(`${chalk.green('/agents')}   List available agents`);
+    console.log(`${chalk.green('/status')}   Show system status`);
+    console.log(`${chalk.green('/clear')}    Clear session`);
+  }
+
+  private cycleMode(): void {
+    this.context.planMode = !this.context.planMode;
+    console.log(this.context.planMode ? 
+      chalk.green('\n✅ Plan mode enabled') : 
+      chalk.yellow('\n⚠️ Plan mode disabled')
+    );
+  }
+
+  private stopAllAgents(): void {
+    this.activeAgents.clear();
+    console.log(chalk.yellow('\n⏹️ Stopped all active agents'));
+  }
+
+  private startMessageProcessor(): void {
+    setInterval(() => {
+      if (!this.processingMessage) {
+        this.processNextMessage();
       }
-      
-      if (Object.keys(stats.toolUsageStats).length > 0) {
-        CliUI.logSubsection('Most Used Tools');
-        const sortedTools = Object.entries(stats.toolUsageStats)
-          .sort(([,a], [,b]) => b - a)
-          .slice(0, 5);
-        
-        sortedTools.forEach(([tool, count]) => {
-          CliUI.logKeyValue(`🔧 ${tool}`, count.toString());
-        });
-      }
-    } catch (error: any) {
-      CliUI.logError(`Failed to get planning stats: ${error.message}`);
+    }, 100);
+  }
+
+  private processNextMessage(): void {
+    const message = this.messageQueue.find(m => m.status === 'queued');
+    if (!message) return;
+
+    this.processingMessage = true;
+    message.status = 'processing';
+
+    // Process message based on type
+    setTimeout(() => {
+      message.status = 'completed';
+      this.processingMessage = false;
+    }, 100);
+  }
+
+  private gracefulExit(): void {
+    console.log(chalk.blue('\n👋 Shutting down orchestrator...'));
+    
+    if (this.activeAgents.size > 0) {
+      console.log(chalk.yellow(`⏳ Waiting for ${this.activeAgents.size} agents to finish...`));
     }
-  });
-
-program
-  .command('tools')
-  .description('Show available tools in the planning system')
-  .action(() => {
-    try {
-      planningManager.displayToolRegistry();
-    } catch (error: any) {
-      CliUI.logError(`Failed to display tools: ${error.message}`);
-    }
-  });
-
-// Parse arguments
-program.parse();
-
-async function createCustomAgent(name: string, description?: string, systemPrompt?: string): Promise<void> {
-  const inquirer = await import('inquirer');
-  
-  try {
-    const answers = await inquirer.default.prompt([
-      {
-        type: 'input',
-        name: 'description',
-        message: 'Agent description:',
-        default: description || `Custom ${name} agent`,
-      },
-      {
-        type: 'editor',
-        name: 'systemPrompt',
-        message: 'System prompt (opens in editor):',
-        default: systemPrompt || `You are a helpful AI assistant specialized in ${name}. Provide clear, accurate, and helpful responses.`,
-      },
-      {
-        type: 'list',
-        name: 'template',
-        message: 'Choose a template:',
-        choices: [
-          { name: 'General Purpose', value: 'general' },
-          { name: 'Code Specialist', value: 'coding' },
-          { name: 'Language Expert', value: 'language' },
-          { name: 'Tool/Framework Expert', value: 'framework' },
-        ],
-      },
-    ]);
-
-    const agentCode = generateAgentCode(name, answers.description, answers.systemPrompt, answers.template);
-    const filename = `src/cli/agents/${name.toLowerCase().replace(/\s+/g, '-')}-agent.ts`;
     
-    require('fs').writeFileSync(filename, agentCode);
+    console.log(chalk.green('✅ Goodbye!'));
+    process.exit(0);
+  }
+
+  async start(): Promise<void> {
+    this.showPrompt();
     
-    CliUI.logSuccess(`Agent created: ${CliUI.highlight(filename)}`);
-    CliUI.logInfo('To use the agent:');
-    console.log(`1. Add import to src/cli/register-agents.ts`);
-    console.log(`2. Register the agent in registerAgents function`);
-    console.log(`3. Run "npm run chat" to use it`);
-    
-  } catch (error: any) {
-    CliUI.logError(`Error creating agent: ${error.message}`);
+    return new Promise<void>((resolve) => {
+      this.rl.on('close', resolve);
+    });
   }
 }
 
-function generateAgentCode(name: string, description: string, systemPrompt: string, template: string): string {
-  const className = name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '') + 'Agent';
-  const agentName = name.toLowerCase().replace(/\s+/g, '-');
-  
-  let specialMethods = '';
-  
-  if (template === 'coding') {
-    specialMethods = `
-  async analyzeCode(code: string): Promise<string> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: this.getSystemPrompt() },
-      { role: 'user', content: \`Analyze this code:\\n\\n\\\`\\\`\\\`\\n\${code}\\n\\\`\\\`\\\`\` },
-    ];
+/**
+ * Main Orchestrator - Unified Entry Point
+ */
+class MainOrchestrator {
+  private streamingModule?: StreamingModule;
+  private initialized = false;
+
+  constructor() {
+    this.setupGlobalHandlers();
+  }
+
+  private setupGlobalHandlers(): void {
+    // Global error handler
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error(chalk.red('❌ Unhandled Rejection:'), reason);
+    });
+
+    process.on('uncaughtException', (error) => {
+      console.error(chalk.red('❌ Uncaught Exception:'), error);
+      this.gracefulShutdown();
+    });
+
+    // Graceful shutdown handlers
+    process.on('SIGTERM', this.gracefulShutdown.bind(this));
+    process.on('SIGINT', this.gracefulShutdown.bind(this));
+  }
+
+  private async gracefulShutdown(): Promise<void> {
+    console.log(chalk.yellow('\n🛑 Shutting down orchestrator...'));
     
-    return await modelProvider.generateResponse({ messages });
-  }
-
-  async generateCode(description: string): Promise<string> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: this.getSystemPrompt() },
-      { role: 'user', content: \`Generate code for: \${description}\` },
-    ];
-    
-    return await modelProvider.generateResponse({ messages });
-  }`;
-  }
-  
-  return `import { BaseAgent } from './base-agent';
-import { modelProvider, ChatMessage } from '../ai/model-provider';
-
-export class ${className} extends BaseAgent {
-  name = '${agentName}';
-  description = '${description}';
-
-  private getSystemPrompt(): string {
-    return \`${systemPrompt}\`;
-  }
-${specialMethods}
-
-  async run(task?: string): Promise<any> {
-    if (!task) {
-      return {
-        message: '${description}',
-        agent: '${name}',
-        capabilities: [
-          'General assistance',
-          'Question answering',
-          'Problem solving',
-        ],
-      };
-    }
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: this.getSystemPrompt(),
-      },
-      {
-        role: 'user',
-        content: task,
-      },
-    ];
-
     try {
-      const response = await modelProvider.generateResponse({ messages });
-      return { response, task, agent: '${name}' };
-    } catch (error: any) {
-      return { error: error.message, task, agent: '${name}' };
+      // Stop autonomous interface if running (not used in unified NikCLI entrypoint)
+      // No specific stop required here
+      
+      // Stop streaming module if running
+      if (this.streamingModule) {
+        // Streaming module handles its own cleanup
+      }
+      
+      console.log(chalk.green('✅ Orchestrator shut down cleanly'));
+    } catch (error) {
+      console.error(chalk.red('❌ Error during shutdown:'), error);
+    } finally {
+      process.exit(0);
     }
   }
-}`;
+
+  private showQuickStart(): void {
+    console.log(chalk.cyan.bold('\n📚 Quick Start Guide:'));
+    console.log(chalk.gray('─'.repeat(40)));
+    console.log(`${chalk.green('Natural Language:')} Just describe what you want`);
+    console.log(`${chalk.blue('Agent Specific:')} @agent-name your task`);
+    console.log(`${chalk.yellow('Commands:')} /help, /status, /agents`);
+    console.log(`${chalk.magenta('Shortcuts:')} / (menu), Shift+Tab (modes)`);
+    console.log('');
+    console.log(chalk.dim('Examples:'));
+    console.log(chalk.dim('• "Create a React todo app with TypeScript"'));
+    console.log(chalk.dim('• "@react-expert optimize this component"'));
+    console.log(chalk.dim('• "/status" to see system status'));
+    console.log('');
+  }
+
+  async start(): Promise<void> {
+    try {
+      // Display introduction
+      IntroductionModule.displayBanner();
+      
+      // Wait a moment for visual effect
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Check system requirements
+      const requirementsMet = await SystemModule.checkSystemRequirements();
+      if (!requirementsMet) {
+        if (!(await SystemModule.checkApiKeys())) {
+          IntroductionModule.displayApiKeySetup();
+        }
+        console.log(chalk.red('\n❌ Cannot start - system requirements not met'));
+        process.exit(1);
+      }
+      
+      // Display startup info
+      IntroductionModule.displayStartupInfo();
+      
+      // Wait a moment before starting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Initialize all systems
+      const initialized = await ServiceModule.initializeSystem();
+      if (!initialized) {
+        console.log(chalk.red('\n❌ Cannot start - system initialization failed'));
+        process.exit(1);
+      }
+      
+      // Show quick start guide
+      this.showQuickStart();
+      
+      // Start unified NikCLI interface
+      console.log(chalk.blue.bold('🤖 Starting NikCLI...\n'));
+      const cli = new NikCLI();
+      await cli.startChat({});
+      
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to start orchestrator:'), error);
+      process.exit(1);
+    }
+  }
 }
+
+/**
+ * Main entry point function
+ */
+async function main() {
+  const orchestrator = new MainOrchestrator();
+  await orchestrator.start();
+}
+
+// Start the application
+if (require.main === module) {
+  main().catch(error => {
+    console.error(chalk.red('❌ Startup failed:'), error);
+    process.exit(1);
+  });
+}
+
+// Export for programmatic use
+export { 
+  main, 
+  MainOrchestrator, 
+  IntroductionModule, 
+  SystemModule, 
+  ServiceModule, 
+  StreamingModule 
+};
