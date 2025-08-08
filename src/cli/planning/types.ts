@@ -3,6 +3,25 @@
  * Production-ready interfaces for step-by-step plan generation and execution
  */
 
+import { ToolCapability } from '../services/tool-service';
+
+export interface RiskAssessment {
+  overallRisk: 'low' | 'medium' | 'high';
+  destructiveOperations: number;
+  fileModifications: number;
+  externalCalls: number;
+}
+
+export interface PlanningToolCapability {
+  name: string;
+  description: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  reversible: boolean;
+  estimatedDuration: number;
+  requiredArgs: string[];
+  optionalArgs: string[];
+}
+
 export interface ExecutionStep {
   id: string;
   type: 'tool' | 'validation' | 'user_input' | 'decision';
@@ -22,7 +41,10 @@ export interface ExecutionPlan {
   title: string;
   description: string;
   steps: ExecutionStep[];
+  todos: PlanTodo[];
+  status: 'pending' | 'running' | 'completed' | 'failed';
   estimatedTotalDuration: number;
+  actualDuration?: number;
   riskAssessment: {
     overallRisk: 'low' | 'medium' | 'high';
     destructiveOperations: number;
@@ -35,6 +57,8 @@ export interface ExecutionPlan {
     userRequest: string;
     projectPath: string;
     relevantFiles?: string[];
+    reasoning?: string;
+    simple?: boolean;
   };
 }
 
@@ -84,15 +108,7 @@ export interface PlannerConfig {
   timeoutPerStep: number; // milliseconds
 }
 
-export interface ToolCapability {
-  name: string;
-  description: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  reversible: boolean;
-  estimatedDuration: number;
-  requiredArgs: string[];
-  optionalArgs: string[];
-}
+
 
 export interface PlanValidationResult {
   isValid: boolean;
@@ -104,7 +120,7 @@ export interface PlanValidationResult {
 export interface PlannerContext {
   userRequest: string;
   projectPath: string;
-  availableTools: ToolCapability[];
+  availableTools: PlanningToolCapability[];
   projectAnalysis?: {
     fileCount: number;
     languages: string[];
@@ -117,4 +133,34 @@ export interface PlannerContext {
     preferredTools: string[];
     excludedOperations: string[];
   };
+}
+
+export interface PlanTodo {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  priority: 'low' | 'medium' | 'high';
+  assignedAgent?: string;
+  dependencies?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  estimatedDuration?: number;
+  actualDuration?: number;
+  progress: number; // 0-100
+  reasoning?: string;
+  tools?: string[];
+}
+
+export interface ConversationContext {
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: Date;
+  }>;
+  sessionId: string;
+  workspaceAnalysis?: any;
+  activeFiles?: string[];
+  lastModified?: Date;
 }

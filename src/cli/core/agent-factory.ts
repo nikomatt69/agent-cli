@@ -1,10 +1,10 @@
-import { BaseAgent } from '../agents/base-agent';
+import { BaseAgent } from '../automation/agents/base-agent';
 import { modelProvider, ChatMessage } from '../ai/model-provider';
 import { secureTools } from '../tools/secure-tools-registry';
 import { toolsManager } from '../tools/migration-to-secure-tools'; // deprecated, for backward compatibility
 import { agentTodoManager } from './agent-todo-manager';
 import { agentStream } from './agent-stream';
-import { workspaceContext } from './workspace-context';
+import { workspaceContext } from '../context/workspace-context';
 import chalk from 'chalk';
 import { nanoid } from 'nanoid';
 

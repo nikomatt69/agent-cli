@@ -39,7 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiCallManager = exports.AICallManager = void 0;
 const model_provider_1 = require("./model-provider");
 const secure_tools_registry_1 = require("../tools/secure-tools-registry");
-const ragSystem = __importStar(require("./rag-system"));
+const ragSystem = __importStar(require("../context/rag-system"));
 const chalk_1 = __importDefault(require("chalk"));
 const ora_1 = __importDefault(require("ora"));
 const zod_1 = require("zod");

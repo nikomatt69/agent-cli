@@ -1,13 +1,12 @@
 import * as readline from 'readline';
 import chalk from 'chalk';
 import boxen from 'boxen';
-import gradient from 'gradient-string';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 import { chatManager } from './chat-manager';
 import { modelProvider } from '../ai/model-provider';
-import { configManager } from '../config/config-manager';
-import { SlashCommandHandler } from './slash-commands';
+import { simpleConfigManager as configManager } from '../core/config-manager';
+import { SlashCommandHandler } from './nik-cli-commands';
 
 // Configure marked for terminal rendering
 const renderer = new TerminalRenderer() as any;
@@ -48,7 +47,7 @@ export class ChatInterface {
     // Handle line input
     this.rl.on('line', async (input) => {
       const trimmed = input.trim();
-      
+
       if (!trimmed) {
         this.prompt();
         return;
@@ -68,8 +67,8 @@ export class ChatInterface {
   private getPrompt(): string {
     const modelInfo = modelProvider.getCurrentModelInfo();
     const sessionId = chatManager.getCurrentSession()?.id.slice(0, 8) || 'new';
-    
-    return gradient.rainbow(`┌─[${modelInfo.name}:${sessionId}]\n└─❯ `);
+
+    return `┌─[${chalk.green(modelInfo.name)}:${chalk.cyan(sessionId)}]\n└─❯ `;
   }
 
   private updatePrompt(): void {
@@ -78,7 +77,7 @@ export class ChatInterface {
 
   async start(): Promise<void> {
     this.showWelcome();
-    
+
     // Validate API key
     if (!modelProvider.validateApiKey()) {
       console.log(chalk.red('\n❌ Cannot start chat without valid API key'));
@@ -92,9 +91,9 @@ export class ChatInterface {
   }
 
   private showWelcome(): void {
-    const title = gradient.rainbow('🤖 AI Coder CLI');
+    const title = chalk.cyanBright('🤖 AI Coder CLI');
     const modelInfo = modelProvider.getCurrentModelInfo();
-    
+
     const welcomeText = `
 ${title}
 ${chalk.gray('─'.repeat(40))}
@@ -137,29 +136,29 @@ ${chalk.gray('Type your message or use slash commands...')}
 
     try {
       console.log(chalk.blue('\n🤖 '));
-      
+
       this.isStreaming = true;
       let responseText = '';
-      
+
       // Stream the response
       const messages = chatManager.getContextMessages();
       for await (const chunk of modelProvider.streamResponse({ messages })) {
         if (!this.isStreaming) break;
-        
+
         process.stdout.write(chunk);
         responseText += chunk;
       }
-      
+
       this.isStreaming = false;
       console.log('\n'); // New line after streaming
-      
+
       // Add assistant message to chat
       chatManager.addMessage(responseText, 'assistant');
 
     } catch (error: any) {
       this.isStreaming = false;
       console.log(chalk.red(`\n❌ Error: ${error.message}`));
-      
+
       if (error.message.includes('API key')) {
         console.log(chalk.gray('Use /set-key command to configure API keys'));
       }

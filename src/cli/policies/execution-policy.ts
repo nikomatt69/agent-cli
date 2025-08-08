@@ -1,4 +1,4 @@
-import { ConfigManager, CliConfig } from '../config/config-manager';
+import { ConfigManager, CliConfig } from '../core/config-manager';
 import { logger } from '../utils/logger';
 
 export type ApprovalPolicy = 'never' | 'untrusted' | 'on-failure' | 'always';
@@ -20,21 +20,21 @@ export interface CommandPolicy {
 }
 
 export class ExecutionPolicyManager {
-  private configManager: ConfigManager;
+  private configManager: InstanceType<typeof ConfigManager>;
   private trustedCommands = new Set(['ls', 'cat', 'pwd', 'echo', 'which', 'whoami']);
   private dangerousCommands = new Set(['rm -rf', 'sudo', 'su', 'chmod 777', 'dd', 'mkfs']);
   private commandPolicies = new Map<string, CommandPolicy>();
 
-  constructor(configManager: ConfigManager) {
+  constructor(configManager: InstanceType<typeof ConfigManager>) {
     this.configManager = configManager;
     this.initializeCommandPolicies();
   }
 
   async getPolicy(): Promise<ExecutionPolicy> {
-    const cfg: CliConfig = await this.configManager.load();
+    const cfg: CliConfig = this.configManager.getAll();
     return {
       approval: (cfg.approvalPolicy as ApprovalPolicy) || 'untrusted',
-      sandbox: (cfg.sandbox as SandboxPolicy) || 'workspace-write',
+      sandbox: (cfg.sandbox as unknown as SandboxPolicy) || 'workspace-write',
       timeoutMs: cfg.defaultAgentTimeout || 300000,
       maxRetries: 3
     };

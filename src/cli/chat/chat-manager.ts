@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { ChatMessage } from '../ai/model-provider';
-import { configManager } from '../config/config-manager';
+import { simpleConfigManager as configManager } from '../core/config-manager';
 
 export interface ChatSession {
   id: string;
@@ -22,7 +22,7 @@ export class ChatManager {
       messages: [],
       createdAt: new Date(),
       updatedAt: new Date(),
-      systemPrompt: systemPrompt || configManager.get('systemPrompts').default,
+      systemPrompt: systemPrompt
     };
 
     // Add system message if system prompt is provided

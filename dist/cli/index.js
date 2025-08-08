@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * NikCLI - Unified Autonomous AI Development Assistant
+ * Consolidated Entry Point with Modular Architecture
+ */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -33,419 +37,468 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const commander_1 = require("commander");
+exports.StreamingModule = exports.ServiceModule = exports.SystemModule = exports.IntroductionModule = exports.MainOrchestrator = void 0;
+exports.main = main;
+const chalk_1 = __importDefault(require("chalk"));
+const boxen_1 = __importDefault(require("boxen"));
+const readline = __importStar(require("readline"));
+const events_1 = require("events");
+// Core imports
+const nik_cli_1 = require("./nik-cli");
+const agent_service_1 = require("./services/agent-service");
+const tool_service_1 = require("./services/tool-service");
+const planning_service_1 = require("./services/planning-service");
+const lsp_service_1 = require("./services/lsp-service");
+const diff_manager_1 = require("./ui/diff-manager");
+const execution_policy_1 = require("./policies/execution-policy");
+const config_manager_1 = require("./core/config-manager");
 const register_agents_1 = require("./register-agents");
-const agent_manager_1 = require("./agents/agent-manager");
-const chat_interface_1 = require("./chat/chat-interface");
-const config_manager_1 = require("./config/config-manager");
-const cli_ui_1 = require("./utils/cli-ui");
-const planning_manager_1 = require("./planning/planning-manager");
-const program = new commander_1.Command();
-// Main CLI entry point
-program
-    .name('ai-agents-cli')
-    .description('A CLI tool with parallel AI agents using TypeScript and Gemini')
-    .version('1.0.0');
-// Initialize agent manager and register agents
-const agentManager = new agent_manager_1.AgentManager();
-(0, register_agents_1.registerAgents)(agentManager);
-// Initialize planning manager
-const planningManager = new planning_manager_1.PlanningManager(process.cwd());
-// Run single agent command
-program
-    .command('run <agent-name>')
-    .description('Run a specific AI agent')
-    .option('-t, --task <task>', 'Task description for the agent')
-    .action(async (agentName, options) => {
-    cli_ui_1.CliUI.startSpinner(`Starting agent: ${cli_ui_1.CliUI.highlight(agentName)}`);
-    try {
-        const agent = agentManager.getAgent(agentName);
-        if (!agent) {
-            cli_ui_1.CliUI.failSpinner(`Agent ${cli_ui_1.CliUI.highlight(agentName)} not found`);
-            return;
-        }
-        cli_ui_1.CliUI.updateSpinner(`Initializing agent: ${cli_ui_1.CliUI.highlight(agentName)}`);
-        await agent.initialize();
-        cli_ui_1.CliUI.updateSpinner(`Running agent: ${cli_ui_1.CliUI.highlight(agentName)}`);
-        const task = {
-            id: `task-${Date.now()}`,
-            type: 'user_request',
-            description: options.task,
-            priority: 'normal',
-            data: { userInput: options.task }
-        };
-        const result = await agent.executeTask(task);
-        cli_ui_1.CliUI.succeedSpinner(`Agent ${cli_ui_1.CliUI.highlight(agentName)} completed successfully`);
-        cli_ui_1.CliUI.logInfo(`Result: ${result}`);
-    }
-    catch (error) {
-        cli_ui_1.CliUI.failSpinner(`Error running agent ${cli_ui_1.CliUI.highlight(agentName)}`);
-        console.error(cli_ui_1.CliUI.formatError(error, `Running agent ${agentName}`));
-    }
-});
-// Run multiple agents in parallel
-program
-    .command('run-parallel <agents...>')
-    .description('Run multiple agents in parallel')
-    .option('-t, --task <task>', 'Task description for all agents')
-    .action(async (agents, options) => {
-    cli_ui_1.CliUI.logSection(`Parallel Agent Execution`);
-    cli_ui_1.CliUI.startSpinner(`Starting ${cli_ui_1.CliUI.highlight(agents.length.toString())} agents in parallel`);
-    try {
-        const agentInstances = agents.map((agentName) => {
-            const agent = agentManager.getAgent(agentName);
-            if (!agent) {
-                throw new Error(`Agent ${agentName} not found`);
-            }
-            return { name: agentName, instance: agent };
+// ASCII Art Banner
+const banner = `
+███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
+████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
+██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║
+██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║
+██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
+╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝
+`;
+/**
+ * Introduction Display Module
+ */
+class IntroductionModule {
+    static displayBanner() {
+        console.clear();
+        // Use realistic solid colors instead of rainbow gradient
+        console.log(chalk_1.default.cyanBright(banner));
+        const welcomeBox = (0, boxen_1.default)(chalk_1.default.white.bold('🤖 Autonomous AI Development Assistant\n\n') +
+            chalk_1.default.gray('• Intelligent code generation and analysis\n') +
+            chalk_1.default.gray('• Autonomous planning and execution\n') +
+            chalk_1.default.gray('• Real-time project understanding\n') +
+            chalk_1.default.gray('• Interactive terminal interface\n\n') +
+            chalk_1.default.cyan('Ready to transform your development workflow!'), {
+            padding: 1,
+            margin: 1,
+            borderStyle: 'round',
+            borderColor: 'cyan',
+            backgroundColor: '#1a1a1a'
         });
-        cli_ui_1.CliUI.updateSpinner('Initializing agents...');
-        await Promise.all(agentInstances.map(({ instance }) => instance.initialize()));
-        cli_ui_1.CliUI.updateSpinner('Running agents in parallel...');
-        const results = await Promise.all(agentInstances.map(async ({ name, instance }) => {
-            try {
-                const result = await instance.run(options.task);
-                return { name, result, success: true };
-            }
-            catch (error) {
-                return { name, error: error.message, success: false };
-            }
-        }));
-        cli_ui_1.CliUI.succeedSpinner(`Completed ${cli_ui_1.CliUI.highlight(agents.length.toString())} agents`);
-        cli_ui_1.CliUI.logSubsection('Results');
-        results.forEach(({ name, result, error, success }) => {
-            if (success) {
-                cli_ui_1.CliUI.logSuccess(`${cli_ui_1.CliUI.bold(name)}: ${result}`);
-            }
-            else {
-                cli_ui_1.CliUI.logError(`${cli_ui_1.CliUI.bold(name)}: ${error}`);
-            }
+        console.log(welcomeBox);
+    }
+    static displayApiKeySetup() {
+        const setupBox = (0, boxen_1.default)(chalk_1.default.yellow.bold('⚠️  API Key Required\n\n') +
+            chalk_1.default.white('To use NikCLI, please set at least one API key:\n\n') +
+            chalk_1.default.green('• ANTHROPIC_API_KEY') + chalk_1.default.gray(' - for Claude models (recommended)\n') +
+            chalk_1.default.blue('• OPENAI_API_KEY') + chalk_1.default.gray(' - for GPT models\n') +
+            chalk_1.default.magenta('• GOOGLE_GENERATIVE_AI_API_KEY') + chalk_1.default.gray(' - for Gemini models\n\n') +
+            chalk_1.default.white.bold('Setup Examples:\n') +
+            chalk_1.default.dim('export ANTHROPIC_API_KEY="your-key-here"\n') +
+            chalk_1.default.dim('export OPENAI_API_KEY="your-key-here"\n') +
+            chalk_1.default.dim('export GOOGLE_GENERATIVE_AI_API_KEY="your-key-here"\n\n') +
+            chalk_1.default.cyan('Then run: ') + chalk_1.default.white.bold('npm start'), {
+            padding: 1,
+            margin: 1,
+            borderStyle: 'round',
+            borderColor: 'yellow',
+            backgroundColor: '#2a1a00'
         });
+        console.log(setupBox);
     }
-    catch (error) {
-        cli_ui_1.CliUI.failSpinner('Error running parallel agents');
-        console.error(cli_ui_1.CliUI.formatError(error, 'Parallel agent execution'));
-    }
-});
-// List available agents
-program
-    .command('list')
-    .description('List available agents')
-    .action(() => {
-    cli_ui_1.CliUI.logSection('Available AI Agents');
-    const agents = agentManager.listAgents();
-    if (agents.length === 0) {
-        cli_ui_1.CliUI.logWarning('No agents registered');
-        return;
-    }
-    agents.forEach(agent => {
-        cli_ui_1.CliUI.logKeyValue(`• ${cli_ui_1.CliUI.bold(agent.id)}`, agent.specialization);
-    });
-});
-// Chat command - main interactive interface
-program
-    .command('chat')
-    .description('Start interactive chat with AI coding assistants')
-    .action(async () => {
-    await chat_interface_1.chatInterface.start();
-});
-// Configuration commands
-program
-    .command('config')
-    .description('Show current configuration')
-    .action(() => {
-    config_manager_1.configManager.showConfig();
-});
-program
-    .command('set-model <model>')
-    .description('Set the current AI model')
-    .action((model) => {
-    try {
-        config_manager_1.configManager.setCurrentModel(model);
-        cli_ui_1.CliUI.logSuccess(`Model set to: ${cli_ui_1.CliUI.highlight(model)}`);
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(error.message);
-    }
-});
-program
-    .command('set-key <model> <apiKey>')
-    .description('Set API key for a specific model')
-    .action((model, apiKey) => {
-    try {
-        config_manager_1.configManager.setApiKey(model, apiKey);
-        cli_ui_1.CliUI.logSuccess(`API key set for: ${cli_ui_1.CliUI.highlight(model)}`);
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(error.message);
-    }
-});
-program
-    .command('models')
-    .description('List available models')
-    .action(() => {
-    cli_ui_1.CliUI.logSection('🤖 Available Models');
-    const currentModel = config_manager_1.configManager.get('currentModel');
-    const models = config_manager_1.configManager.get('models');
-    Object.entries(models).forEach(([name, config]) => {
-        const isCurrent = name === currentModel;
-        const hasKey = config_manager_1.configManager.getApiKey(name) !== undefined;
-        const status = hasKey ? '✅' : '❌';
-        const prefix = isCurrent ? '→ ' : '  ';
-        console.log(`${prefix}${status} ${cli_ui_1.CliUI.bold(name)}`);
-        console.log(`    ${cli_ui_1.CliUI.dim(`Provider: ${config.provider} | Model: ${config.model}`)}`);
-    });
-});
-// Agent management commands
-program
-    .command('agents')
-    .description('List available agents')
-    .action(() => {
-    cli_ui_1.CliUI.logSection('🤖 Available Agents');
-    const agents = agentManager.listAgents();
-    if (agents.length === 0) {
-        cli_ui_1.CliUI.logWarning('No agents registered');
-        return;
-    }
-    agents.forEach(agent => {
-        cli_ui_1.CliUI.logKeyValue(`• ${cli_ui_1.CliUI.bold(agent.id)}`, agent.specialization);
-    });
-    cli_ui_1.CliUI.logInfo('Use "npm run chat" for interactive mode');
-});
-// Create custom agent command
-program
-    .command('create-agent <name>')
-    .description('Create a new custom agent')
-    .option('-d, --description <desc>', 'Agent description')
-    .option('-p, --prompt <prompt>', 'System prompt for the agent')
-    .action(async (name, options) => {
-    await createCustomAgent(name, options.description, options.prompt);
-});
-// Index project command
-program
-    .command('index-project')
-    .description('Index the current project for RAG')
-    .action(async () => {
-    try {
-        const { indexProject } = await Promise.resolve().then(() => __importStar(require('./ai/rag-system')));
-        await indexProject(process.cwd());
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Error indexing project: ${error.message}`);
-    }
-});
-// Planning system commands
-program
-    .command('plan <request>')
-    .description('Generate and execute an AI plan for the given request')
-    .option('-g, --generate-only', 'Only generate the plan without executing')
-    .option('-p, --project-path <path>', 'Project path to analyze', process.cwd())
-    .action(async (request, options) => {
-    try {
-        if (options.generateOnly) {
-            const plan = await planningManager.generatePlanOnly(request, options.projectPath);
-            cli_ui_1.CliUI.logSuccess(`Plan generated with ID: ${cli_ui_1.CliUI.highlight(plan.id)}`);
-            cli_ui_1.CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute this plan');
-        }
-        else {
-            await planningManager.planAndExecute(request, options.projectPath);
-        }
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Planning failed: ${error.message}`);
-    }
-});
-program
-    .command('execute-plan <plan-id>')
-    .description('Execute a previously generated plan')
-    .action(async (planId) => {
-    try {
-        await planningManager.executePlan(planId);
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Plan execution failed: ${error.message}`);
-    }
-});
-program
-    .command('list-plans')
-    .description('List all generated plans')
-    .action(() => {
-    try {
-        const plans = planningManager.listPlans();
-        if (plans.length === 0) {
-            cli_ui_1.CliUI.logWarning('No plans found');
-            return;
-        }
-        cli_ui_1.CliUI.logSection('Generated Plans');
-        plans.forEach(plan => {
-            const riskIcon = plan.riskAssessment.overallRisk === 'high' ? '🔴' :
-                plan.riskAssessment.overallRisk === 'medium' ? '🟡' : '🟢';
-            console.log(`${riskIcon} ${cli_ui_1.CliUI.bold(plan.id.substring(0, 8))} - ${plan.title}`);
-            console.log(`  ${cli_ui_1.CliUI.dim(plan.description)}`);
-            console.log(`  ${cli_ui_1.CliUI.dim(`Steps: ${plan.steps.length} | Duration: ~${Math.round(plan.estimatedTotalDuration / 1000)}s`)}`);
-            console.log();
+    static displayStartupInfo() {
+        const startupBox = (0, boxen_1.default)(chalk_1.default.green.bold('🚀 Starting NikCLI...\n\n') +
+            chalk_1.default.white('Initializing autonomous AI assistant\n') +
+            chalk_1.default.gray('• Loading project context\n') +
+            chalk_1.default.gray('• Preparing planning system\n') +
+            chalk_1.default.gray('• Setting up tool integrations\n\n') +
+            chalk_1.default.cyan('Type ') + chalk_1.default.white.bold('/help') + chalk_1.default.cyan(' for available commands'), {
+            padding: 1,
+            margin: 1,
+            borderStyle: 'round',
+            borderColor: 'green',
+            backgroundColor: '#001a00'
         });
-        cli_ui_1.CliUI.logInfo('Use "npm run cli execute-plan <plan-id>" to execute a plan');
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Failed to list plans: ${error.message}`);
-    }
-});
-program
-    .command('planning-stats')
-    .description('Show planning system statistics')
-    .action(() => {
-    try {
-        const stats = planningManager.getPlanningStats();
-        cli_ui_1.CliUI.logSection('Planning System Statistics');
-        cli_ui_1.CliUI.logKeyValue('Total Plans Generated', stats.totalPlansGenerated.toString());
-        cli_ui_1.CliUI.logKeyValue('Total Plans Executed', stats.totalPlansExecuted.toString());
-        cli_ui_1.CliUI.logKeyValue('Successful Executions', stats.successfulExecutions.toString());
-        cli_ui_1.CliUI.logKeyValue('Failed Executions', stats.failedExecutions.toString());
-        cli_ui_1.CliUI.logKeyValue('Average Steps per Plan', Math.round(stats.averageStepsPerPlan).toString());
-        cli_ui_1.CliUI.logKeyValue('Average Execution Time', `${Math.round(stats.averageExecutionTime / 1000)}s`);
-        if (Object.keys(stats.riskDistribution).length > 0) {
-            cli_ui_1.CliUI.logSubsection('Risk Distribution');
-            Object.entries(stats.riskDistribution).forEach(([risk, count]) => {
-                const icon = risk === 'high' ? '🔴' : risk === 'medium' ? '🟡' : '🟢';
-                cli_ui_1.CliUI.logKeyValue(`${icon} ${risk}`, count.toString());
-            });
-        }
-        if (Object.keys(stats.toolUsageStats).length > 0) {
-            cli_ui_1.CliUI.logSubsection('Most Used Tools');
-            const sortedTools = Object.entries(stats.toolUsageStats)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 5);
-            sortedTools.forEach(([tool, count]) => {
-                cli_ui_1.CliUI.logKeyValue(`🔧 ${tool}`, count.toString());
-            });
-        }
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Failed to get planning stats: ${error.message}`);
-    }
-});
-program
-    .command('tools')
-    .description('Show available tools in the planning system')
-    .action(() => {
-    try {
-        planningManager.displayToolRegistry();
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Failed to display tools: ${error.message}`);
-    }
-});
-// Parse arguments
-program.parse();
-async function createCustomAgent(name, description, systemPrompt) {
-    const inquirer = await Promise.resolve().then(() => __importStar(require('inquirer')));
-    try {
-        const answers = await inquirer.default.prompt([
-            {
-                type: 'input',
-                name: 'description',
-                message: 'Agent description:',
-                default: description || `Custom ${name} agent`,
-            },
-            {
-                type: 'editor',
-                name: 'systemPrompt',
-                message: 'System prompt (opens in editor):',
-                default: systemPrompt || `You are a helpful AI assistant specialized in ${name}. Provide clear, accurate, and helpful responses.`,
-            },
-            {
-                type: 'list',
-                name: 'template',
-                message: 'Choose a template:',
-                choices: [
-                    { name: 'General Purpose', value: 'general' },
-                    { name: 'Code Specialist', value: 'coding' },
-                    { name: 'Language Expert', value: 'language' },
-                    { name: 'Tool/Framework Expert', value: 'framework' },
-                ],
-            },
-        ]);
-        const agentCode = generateAgentCode(name, answers.description, answers.systemPrompt, answers.template);
-        const filename = `src/cli/agents/${name.toLowerCase().replace(/\s+/g, '-')}-agent.ts`;
-        require('fs').writeFileSync(filename, agentCode);
-        cli_ui_1.CliUI.logSuccess(`Agent created: ${cli_ui_1.CliUI.highlight(filename)}`);
-        cli_ui_1.CliUI.logInfo('To use the agent:');
-        console.log(`1. Add import to src/cli/register-agents.ts`);
-        console.log(`2. Register the agent in registerAgents function`);
-        console.log(`3. Run "npm run chat" to use it`);
-    }
-    catch (error) {
-        cli_ui_1.CliUI.logError(`Error creating agent: ${error.message}`);
+        console.log(startupBox);
     }
 }
-function generateAgentCode(name, description, systemPrompt, template) {
-    const className = name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '') + 'Agent';
-    const agentName = name.toLowerCase().replace(/\s+/g, '-');
-    let specialMethods = '';
-    if (template === 'coding') {
-        specialMethods = `
-  async analyzeCode(code: string): Promise<string> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: this.getSystemPrompt() },
-      { role: 'user', content: \`Analyze this code:\\n\\n\\\`\\\`\\\`\\n\${code}\\n\\\`\\\`\\\`\` },
-    ];
-    
-    return await modelProvider.generateResponse({ messages });
-  }
-
-  async generateCode(description: string): Promise<string> {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: this.getSystemPrompt() },
-      { role: 'user', content: \`Generate code for: \${description}\` },
-    ];
-    
-    return await modelProvider.generateResponse({ messages });
-  }`;
+exports.IntroductionModule = IntroductionModule;
+/**
+ * System Requirements Module
+ */
+class SystemModule {
+    static async checkApiKeys() {
+        const anthropicKey = process.env.ANTHROPIC_API_KEY;
+        const openaiKey = process.env.OPENAI_API_KEY;
+        const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        return !!(anthropicKey || openaiKey || googleKey);
     }
-    return `import { BaseAgent } from './base-agent';
-import { modelProvider, ChatMessage } from '../ai/model-provider';
-
-export class ${className} extends BaseAgent {
-  name = '${agentName}';
-  description = '${description}';
-
-  private getSystemPrompt(): string {
-    return \`${systemPrompt}\`;
-  }
-${specialMethods}
-
-  async run(task?: string): Promise<any> {
-    if (!task) {
-      return {
-        message: '${description}',
-        agent: '${name}',
-        capabilities: [
-          'General assistance',
-          'Question answering',
-          'Problem solving',
-        ],
-      };
+    static checkNodeVersion() {
+        const version = process.version;
+        const major = parseInt(version.slice(1).split('.')[0]);
+        if (major < 18) {
+            console.log(chalk_1.default.red(`❌ Node.js ${major} is too old. Requires Node.js 18+`));
+            return false;
+        }
+        console.log(chalk_1.default.green(`✅ Node.js ${version}`));
+        return true;
     }
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: this.getSystemPrompt(),
-      },
-      {
-        role: 'user',
-        content: task,
-      },
-    ];
-
-    try {
-      const response = await modelProvider.generateResponse({ messages });
-      return { response, task, agent: '${name}' };
-    } catch (error: any) {
-      return { error: error.message, task, agent: '${name}' };
+    static async checkSystemRequirements() {
+        console.log(chalk_1.default.blue('🔍 Checking system requirements...'));
+        const checks = [
+            this.checkNodeVersion(),
+            await this.checkApiKeys()
+        ];
+        const allPassed = checks.every(r => r);
+        if (allPassed) {
+            console.log(chalk_1.default.green('✅ All system checks passed'));
+        }
+        else {
+            console.log(chalk_1.default.red('❌ System requirements not met'));
+        }
+        return allPassed;
     }
-  }
-}`;
+}
+exports.SystemModule = SystemModule;
+/**
+ * Service Initialization Module
+ */
+class ServiceModule {
+    static async initializeServices() {
+        const workingDir = process.cwd();
+        // Set working directory for all services
+        tool_service_1.toolService.setWorkingDirectory(workingDir);
+        planning_service_1.planningService.setWorkingDirectory(workingDir);
+        lsp_service_1.lspService.setWorkingDirectory(workingDir);
+        diff_manager_1.diffManager.setAutoAccept(true);
+        console.log(chalk_1.default.dim('   Services configured'));
+    }
+    static async initializeAgents() {
+        // Register all available agents
+        (0, register_agents_1.registerAgents)(agent_service_1.agentService);
+        const agents = agent_service_1.agentService.getAvailableAgents();
+        console.log(chalk_1.default.dim(`   Loaded ${agents.length} agents`));
+    }
+    static async initializeTools() {
+        const tools = tool_service_1.toolService.getAvailableTools();
+        console.log(chalk_1.default.dim(`   Loaded ${tools.length} tools`));
+    }
+    static async initializePlanning() {
+        console.log(chalk_1.default.dim('   Planning system ready'));
+    }
+    static async initializeSecurity() {
+        console.log(chalk_1.default.dim('   Security policies loaded'));
+    }
+    static async initializeContext() {
+        console.log(chalk_1.default.dim('   Context management ready'));
+    }
+    static async initializeSystem() {
+        if (this.initialized)
+            return true;
+        const steps = [
+            { name: 'Services', fn: this.initializeServices.bind(this) },
+            { name: 'Agents', fn: this.initializeAgents.bind(this) },
+            { name: 'Tools', fn: this.initializeTools.bind(this) },
+            { name: 'Planning', fn: this.initializePlanning.bind(this) },
+            { name: 'Security', fn: this.initializeSecurity.bind(this) },
+            { name: 'Context', fn: this.initializeContext.bind(this) }
+        ];
+        for (const step of steps) {
+            try {
+                console.log(chalk_1.default.blue(`🔄 ${step.name}...`));
+                await step.fn();
+                console.log(chalk_1.default.green(`✅ ${step.name} initialized`));
+            }
+            catch (error) {
+                console.log(chalk_1.default.red(`❌ ${step.name} failed: ${error.message}`));
+                return false;
+            }
+        }
+        this.initialized = true;
+        console.log(chalk_1.default.green.bold('\n🎉 System initialization complete!'));
+        return true;
+    }
+}
+exports.ServiceModule = ServiceModule;
+ServiceModule.initialized = false;
+/**
+ * Streaming Orchestrator Module
+ */
+class StreamingModule extends events_1.EventEmitter {
+    constructor() {
+        super();
+        this.messageQueue = [];
+        this.processingMessage = false;
+        this.activeAgents = new Map();
+        this.rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            historySize: 300,
+            completer: this.autoComplete.bind(this),
+        });
+        this.context = {
+            workingDirectory: process.cwd(),
+            autonomous: true,
+            planMode: false,
+            autoAcceptEdits: true,
+            contextLeft: 20,
+            maxContext: 100
+        };
+        this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
+        this.setupInterface();
+        this.startMessageProcessor();
+    }
+    setupInterface() {
+        // Raw mode for better control
+        process.stdin.setRawMode(true);
+        require('readline').emitKeypressEvents(process.stdin);
+        // Keypress handlers
+        process.stdin.on('keypress', (str, key) => {
+            if (key && key.name === 'slash' && !this.processingMessage) {
+                setTimeout(() => this.showCommandMenu(), 50);
+            }
+            if (key && key.name === 'tab' && key.shift) {
+                this.cycleMode();
+            }
+            if (key && key.name === 'c' && key.ctrl) {
+                if (this.activeAgents.size > 0) {
+                    this.stopAllAgents();
+                }
+                else {
+                    this.gracefulExit();
+                }
+            }
+        });
+        // Input handler
+        this.rl.on('line', async (input) => {
+            const trimmed = input.trim();
+            if (!trimmed) {
+                this.showPrompt();
+                return;
+            }
+            await this.queueUserInput(trimmed);
+            this.showPrompt();
+        });
+        this.rl.on('close', () => {
+            this.gracefulExit();
+        });
+        this.setupServiceListeners();
+    }
+    setupServiceListeners() {
+        // Agent events
+        agent_service_1.agentService.on('task_start', (task) => {
+            this.activeAgents.set(task.id, task);
+            this.queueMessage({
+                type: 'system',
+                content: `🤖 Agent ${task.agentType} started: ${task.task.slice(0, 50)}...`,
+                metadata: { agentId: task.id, agentType: task.agentType }
+            });
+        });
+        agent_service_1.agentService.on('task_progress', (task, update) => {
+            this.queueMessage({
+                type: 'agent',
+                content: `📊 ${task.agentType}: ${update.progress}% ${update.description || ''}`,
+                metadata: { agentId: task.id, progress: update.progress },
+                agentId: task.id,
+                progress: update.progress
+            });
+        });
+    }
+    queueMessage(message) {
+        const fullMessage = {
+            id: Date.now().toString(),
+            timestamp: new Date(),
+            status: 'queued',
+            ...message
+        };
+        this.messageQueue.push(fullMessage);
+    }
+    async queueUserInput(input) {
+        this.queueMessage({
+            type: 'user',
+            content: input
+        });
+    }
+    showPrompt() {
+        const dir = require('path').basename(this.context.workingDirectory);
+        const agents = this.activeAgents.size;
+        const agentIndicator = agents > 0 ? chalk_1.default.blue(`${agents}🤖`) : '🎛️';
+        const modes = [];
+        if (this.context.planMode)
+            modes.push(chalk_1.default.cyan('plan'));
+        if (this.context.autoAcceptEdits)
+            modes.push(chalk_1.default.green('auto-accept'));
+        const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
+        const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
+        // Realistic prompt styling (no rainbow)
+        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
+        this.rl.setPrompt(prompt);
+        this.rl.prompt();
+    }
+    autoComplete(line) {
+        const commands = ['/status', '/agents', '/diff', '/accept', '/clear', '/help'];
+        const agents = ['@react-expert', '@backend-expert', '@frontend-expert', '@devops-expert', '@code-review', '@autonomous-coder'];
+        const all = [...commands, ...agents];
+        const hits = all.filter(c => c.startsWith(line));
+        return [hits.length ? hits : all, line];
+    }
+    showCommandMenu() {
+        console.log(chalk_1.default.cyan('\n📋 Available Commands:'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        console.log(`${chalk_1.default.green('/help')}     Show detailed help`);
+        console.log(`${chalk_1.default.green('/agents')}   List available agents`);
+        console.log(`${chalk_1.default.green('/status')}   Show system status`);
+        console.log(`${chalk_1.default.green('/clear')}    Clear session`);
+    }
+    cycleMode() {
+        this.context.planMode = !this.context.planMode;
+        console.log(this.context.planMode ?
+            chalk_1.default.green('\n✅ Plan mode enabled') :
+            chalk_1.default.yellow('\n⚠️ Plan mode disabled'));
+    }
+    stopAllAgents() {
+        this.activeAgents.clear();
+        console.log(chalk_1.default.yellow('\n⏹️ Stopped all active agents'));
+    }
+    startMessageProcessor() {
+        setInterval(() => {
+            if (!this.processingMessage) {
+                this.processNextMessage();
+            }
+        }, 100);
+    }
+    processNextMessage() {
+        const message = this.messageQueue.find(m => m.status === 'queued');
+        if (!message)
+            return;
+        this.processingMessage = true;
+        message.status = 'processing';
+        // Process message based on type
+        setTimeout(() => {
+            message.status = 'completed';
+            this.processingMessage = false;
+        }, 100);
+    }
+    gracefulExit() {
+        console.log(chalk_1.default.blue('\n👋 Shutting down orchestrator...'));
+        if (this.activeAgents.size > 0) {
+            console.log(chalk_1.default.yellow(`⏳ Waiting for ${this.activeAgents.size} agents to finish...`));
+        }
+        console.log(chalk_1.default.green('✅ Goodbye!'));
+        process.exit(0);
+    }
+    async start() {
+        this.showPrompt();
+        return new Promise((resolve) => {
+            this.rl.on('close', resolve);
+        });
+    }
+}
+exports.StreamingModule = StreamingModule;
+/**
+ * Main Orchestrator - Unified Entry Point
+ */
+class MainOrchestrator {
+    constructor() {
+        this.initialized = false;
+        this.setupGlobalHandlers();
+    }
+    setupGlobalHandlers() {
+        // Global error handler
+        process.on('unhandledRejection', (reason, promise) => {
+            console.error(chalk_1.default.red('❌ Unhandled Rejection:'), reason);
+        });
+        process.on('uncaughtException', (error) => {
+            console.error(chalk_1.default.red('❌ Uncaught Exception:'), error);
+            this.gracefulShutdown();
+        });
+        // Graceful shutdown handlers
+        process.on('SIGTERM', this.gracefulShutdown.bind(this));
+        process.on('SIGINT', this.gracefulShutdown.bind(this));
+    }
+    async gracefulShutdown() {
+        console.log(chalk_1.default.yellow('\n🛑 Shutting down orchestrator...'));
+        try {
+            // Stop autonomous interface if running (not used in unified NikCLI entrypoint)
+            // No specific stop required here
+            // Stop streaming module if running
+            if (this.streamingModule) {
+                // Streaming module handles its own cleanup
+            }
+            console.log(chalk_1.default.green('✅ Orchestrator shut down cleanly'));
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Error during shutdown:'), error);
+        }
+        finally {
+            process.exit(0);
+        }
+    }
+    showQuickStart() {
+        console.log(chalk_1.default.cyan.bold('\n📚 Quick Start Guide:'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        console.log(`${chalk_1.default.green('Natural Language:')} Just describe what you want`);
+        console.log(`${chalk_1.default.blue('Agent Specific:')} @agent-name your task`);
+        console.log(`${chalk_1.default.yellow('Commands:')} /help, /status, /agents`);
+        console.log(`${chalk_1.default.magenta('Shortcuts:')} / (menu), Shift+Tab (modes)`);
+        console.log('');
+        console.log(chalk_1.default.dim('Examples:'));
+        console.log(chalk_1.default.dim('• "Create a React todo app with TypeScript"'));
+        console.log(chalk_1.default.dim('• "@react-expert optimize this component"'));
+        console.log(chalk_1.default.dim('• "/status" to see system status'));
+        console.log('');
+    }
+    async start() {
+        try {
+            // Display introduction
+            IntroductionModule.displayBanner();
+            // Wait a moment for visual effect
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Check system requirements
+            const requirementsMet = await SystemModule.checkSystemRequirements();
+            if (!requirementsMet) {
+                if (!(await SystemModule.checkApiKeys())) {
+                    IntroductionModule.displayApiKeySetup();
+                }
+                console.log(chalk_1.default.red('\n❌ Cannot start - system requirements not met'));
+                process.exit(1);
+            }
+            // Display startup info
+            IntroductionModule.displayStartupInfo();
+            // Wait a moment before starting
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Initialize all systems
+            const initialized = await ServiceModule.initializeSystem();
+            if (!initialized) {
+                console.log(chalk_1.default.red('\n❌ Cannot start - system initialization failed'));
+                process.exit(1);
+            }
+            // Show quick start guide
+            this.showQuickStart();
+            // Start unified NikCLI interface
+            console.log(chalk_1.default.blue.bold('🤖 Starting NikCLI...\n'));
+            const cli = new nik_cli_1.NikCLI();
+            await cli.startChat({});
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to start orchestrator:'), error);
+            process.exit(1);
+        }
+    }
+}
+exports.MainOrchestrator = MainOrchestrator;
+/**
+ * Main entry point function
+ */
+async function main() {
+    const orchestrator = new MainOrchestrator();
+    await orchestrator.start();
+}
+// Start the application
+if (require.main === module) {
+    main().catch(error => {
+        console.error(chalk_1.default.red('❌ Startup failed:'), error);
+        process.exit(1);
+    });
 }

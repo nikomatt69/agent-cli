@@ -1,5 +1,5 @@
 import { AgentManager } from './core/agent-manager';
-import { UniversalAgent } from './agents/universal-agent';
+import { UniversalAgent } from './automation/agents/universal-agent';
 
 export function registerAgents(agentManager: AgentManager): void {
   // Register the unified UniversalAgent for enterprise production use

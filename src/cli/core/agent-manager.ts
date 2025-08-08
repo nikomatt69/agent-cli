@@ -15,11 +15,12 @@ import {
   AgentRegistryEntry,
   AgentMetadata,
   AgentEvent
-} from './types';
+} from '../types/types';
 
 import { logger } from '../utils/logger';
 import { GuidanceManager } from '../guidance/guidance-manager';
-import { ConfigManager, CliConfig } from '../config/config-manager';
+import { ConfigManager, CliConfig } from './config-manager';
+import { SimpleConfigManager } from '../core/config-manager';
 
 /**
  * Enterprise Agent Manager
@@ -30,19 +31,19 @@ export class AgentManager extends EventEmitter {
   private taskQueues = new Map<string, AgentTask[]>();
   private agentRegistry = new Map<string, AgentRegistryEntry>();
   private guidanceManager: GuidanceManager;
-  private configManager: ConfigManager;
+  private configManager: SimpleConfigManager;
   private config: CliConfig;
   private activeTaskCount = 0;
   private taskHistory = new Map<string, AgentTaskResult>();
 
   constructor(
-    guidanceManager?: GuidanceManager,
-    configManager?: ConfigManager
+    configManager: SimpleConfigManager,
+    guidanceManager?: GuidanceManager
   ) {
     super();
+    this.configManager = configManager;
     this.guidanceManager = guidanceManager || new GuidanceManager(process.cwd());
-    this.configManager = configManager || new ConfigManager();
-    this.config = this.configManager.getConfig();
+    this.config = this.configManager.getConfig() as any;
 
     this.setupEventHandlers();
   }
@@ -215,7 +216,7 @@ export class AgentManager extends EventEmitter {
 
       // Check required capabilities
       if (task.requiredCapabilities) {
-        const matchingCapabilities = task.requiredCapabilities.filter(cap =>
+        const matchingCapabilities = task.requiredCapabilities.filter((cap: any) =>
           agent.capabilities.includes(cap)
         );
         score += matchingCapabilities.length * 10;
@@ -460,28 +461,28 @@ export class AgentManager extends EventEmitter {
         logLevel: (this.config.logLevel as any) || 'info',
         permissions: {
           canReadFiles: true,
-          canWriteFiles: this.config.sandbox !== 'read-only',
-          canDeleteFiles: this.config.sandbox === 'danger-full-access',
+          canWriteFiles: this.config.sandbox.allowFileSystem,
+          canDeleteFiles: this.config.sandbox.allowFileSystem,
           allowedPaths: [process.cwd()],
           forbiddenPaths: ['/etc', '/usr', '/var'],
-          canExecuteCommands: true,
+          canExecuteCommands: this.config.sandbox.allowCommands,
           allowedCommands: ['npm', 'git', 'ls', 'cat'],
           forbiddenCommands: ['rm -rf', 'sudo', 'su'],
-          canAccessNetwork: !this.config.requireApprovalForNetwork,
+          canAccessNetwork: this.config.sandbox.allowNetwork,
           allowedDomains: [],
-          canInstallPackages: this.config.sandbox !== 'read-only',
+          canInstallPackages: this.config.sandbox.allowFileSystem,
           canModifyConfig: false,
           canAccessSecrets: false
         },
         sandboxRestrictions: this.getSandboxRestrictions()
       },
       executionPolicy: {
-        approval: (this.config.approvalPolicy as any) || 'untrusted',
-        sandbox: (this.config.sandbox as any) || 'workspace-write',
+        approval: 'moderate' as any,
+        sandbox: 'workspace-write' as any,
         timeoutMs: this.config.defaultAgentTimeout || 300000,
         maxRetries: 3
       },
-      approvalRequired: this.config.approvalPolicy !== 'never'
+      approvalRequired: this.config.approvalPolicy === 'strict'
     };
   }
 
@@ -491,19 +492,20 @@ export class AgentManager extends EventEmitter {
   private getSandboxRestrictions(): string[] {
     const restrictions: string[] = [];
 
-    switch (this.config.sandbox) {
-      case 'read-only':
-        restrictions.push('no-write', 'no-execute', 'no-network');
-        break;
-      case 'workspace-write':
-        restrictions.push('workspace-only', 'no-system-commands');
-        break;
-      case 'system-write':
-        restrictions.push('no-dangerous-commands');
-        break;
-      case 'danger-full-access':
-        // No restrictions
-        break;
+    if (!this.config.sandbox.enabled) {
+      return restrictions; // No restrictions if sandbox disabled
+    }
+
+    if (!this.config.sandbox.allowFileSystem) {
+      restrictions.push('no-file-write', 'no-file-delete');
+    }
+
+    if (!this.config.sandbox.allowNetwork) {
+      restrictions.push('no-network-access');
+    }
+
+    if (!this.config.sandbox.allowCommands) {
+      restrictions.push('no-command-execution');
     }
 
     return restrictions;

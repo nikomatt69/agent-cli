@@ -2,11 +2,11 @@ import { nanoid } from 'nanoid';
 import chalk from 'chalk';
 
 import { AgentManager } from '../core/agent-manager';
-import { Agent, AgentStatus } from '../core/types';
-import { AgentTodo } from '../agents/agent-todo-manager';
+import { Agent, AgentStatus } from '../types/types';
+
 import { AgentTodoManager } from '../core/agent-todo-manager';
 import { SessionManager, SessionData, ChatMessage } from '../persistence/session-manager';
-import { ConfigManager } from '../config/config-manager';
+import { SimpleConfigManager } from '../core/config-manager';
 import { GuidanceManager } from '../guidance/guidance-manager';
 
 /**
@@ -16,14 +16,14 @@ export class ChatOrchestrator {
   private agentManager: AgentManager;
   private todoManager: AgentTodoManager;
   private sessionManager: SessionManager;
-  private configManager: ConfigManager;
+  private configManager: SimpleConfigManager;
   private guidanceManager: GuidanceManager;
 
   constructor(
     agentManager: AgentManager,
     todoManager: AgentTodoManager,
     sessionManager: SessionManager,
-    configManager: ConfigManager,
+    configManager: SimpleConfigManager,
     guidanceManager?: GuidanceManager,
   ) {
     this.agentManager = agentManager;
@@ -207,7 +207,7 @@ export class ChatOrchestrator {
         session.messages.push({ role: 'assistant', content: list.length ? list.map(s => s.id).join(',') : 'None', timestamp: new Date().toISOString() });
         break;
       case '/config':
-        this.configManager.showConfig();
+        this.configManager.getConfig();
         session.messages.push({ role: 'assistant', content: 'Configuration displayed in console', timestamp: new Date().toISOString() });
         break;
       case '/guidance':

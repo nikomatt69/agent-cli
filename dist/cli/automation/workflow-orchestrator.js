@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkflowOrchestrator = void 0;
-const event_bus_1 = require("../agents/event-bus");
+const event_bus_1 = require("./agents/event-bus");
 const tool_registry_1 = require("../tools/tool-registry");
 const cli_ui_1 = require("../utils/cli-ui");
 class WorkflowOrchestrator {

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.McpClient = void 0;
-const config_manager_1 = require("../config/config-manager");
+const config_manager_1 = require("./config-manager");
 const child_process_1 = require("child_process");
 /**
  * McpClient delegates LLM requests to external MCP servers defined
@@ -13,18 +13,12 @@ class McpClient {
     }
     /** Call the specified MCP server with given payload. */
     async call(serverName, payload) {
-        const cfg = await this.configManager.load();
-        const server = cfg.mcpServers?.[serverName];
-        if (!server)
-            throw new Error(`MCP server not found: ${serverName}`);
-        if (server.command) {
-            // Executable mode
-            return await this.execCommand(server.command, server.args, payload);
-        }
-        else {
-            // HTTP mode (placeholder)
-            return this.httpPost(server);
-        }
+        // TODO: Add mcpServers to config schema
+        const cfg = await this.configManager.getAll();
+        // const server = cfg.mcpServers?.[serverName];
+        // For now, return a placeholder response
+        console.warn(`MCP server ${serverName} not configured`);
+        return { status: 'not_configured', message: 'MCP servers not yet implemented' };
     }
     execCommand(cmd, args, payload) {
         return new Promise((resolve, reject) => {

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.chatManager = exports.ChatManager = void 0;
 const nanoid_1 = require("nanoid");
-const config_manager_1 = require("../config/config-manager");
+const config_manager_1 = require("../core/config-manager");
 class ChatManager {
     constructor() {
         this.currentSession = null;
@@ -15,7 +15,7 @@ class ChatManager {
             messages: [],
             createdAt: new Date(),
             updatedAt: new Date(),
-            systemPrompt: systemPrompt || config_manager_1.configManager.get('systemPrompts').default,
+            systemPrompt: systemPrompt
         };
         // Add system message if system prompt is provided
         if (session.systemPrompt) {
@@ -59,7 +59,7 @@ class ChatManager {
     }
     getContextMessages() {
         const messages = this.getMessages();
-        if (!config_manager_1.configManager.get('chatHistory')) {
+        if (!config_manager_1.simpleConfigManager.get('chatHistory')) {
             // Return only system message and last user message if history is disabled
             const systemMessage = messages.find(m => m.role === 'system');
             const lastUserMessage = messages.filter(m => m.role === 'user').pop();
@@ -73,7 +73,7 @@ class ChatManager {
     trimHistory() {
         if (!this.currentSession)
             return;
-        const maxLength = config_manager_1.configManager.get('maxHistoryLength');
+        const maxLength = config_manager_1.simpleConfigManager.get('maxHistoryLength');
         const messages = this.currentSession.messages;
         if (messages.length <= maxLength)
             return;

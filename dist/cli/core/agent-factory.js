@@ -4,12 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.agentFactory = exports.AgentFactory = exports.DynamicAgent = void 0;
-const base_agent_1 = require("../agents/base-agent");
+const base_agent_1 = require("../automation/agents/base-agent");
 const model_provider_1 = require("../ai/model-provider");
 const migration_to_secure_tools_1 = require("../tools/migration-to-secure-tools"); // deprecated, for backward compatibility
 const agent_todo_manager_1 = require("./agent-todo-manager");
 const agent_stream_1 = require("./agent-stream");
-const workspace_context_1 = require("./workspace-context");
+const workspace_context_1 = require("../context/workspace-context");
 const chalk_1 = __importDefault(require("chalk"));
 const nanoid_1 = require("nanoid");
 // Helper function to extract JSON from markdown code blocks
