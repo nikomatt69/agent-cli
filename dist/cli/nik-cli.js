@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function () { return m[k]; } };
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function (o, m, k, k2) {
+}) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function (o, v) {
+}) : function(o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function (o) {
+    var ownKeys = function(o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -60,6 +60,10 @@ const config_manager_2 = require("./core/config-manager");
 const enhanced_planning_1 = require("./planning/enhanced-planning");
 const approval_system_1 = require("./ui/approval-system");
 const advanced_cli_ui_1 = require("./ui/advanced-cli-ui");
+const token_cache_1 = require("./core/token-cache");
+const completion_protocol_cache_1 = require("./core/completion-protocol-cache");
+const mcp_client_1 = require("./core/mcp-client");
+const text_wrapper_1 = require("./utils/text-wrapper");
 const nik_cli_commands_1 = require("./chat/nik-cli-commands");
 const chat_manager_1 = require("./chat/chat-manager");
 const agent_service_1 = require("./services/agent-service");
@@ -82,6 +86,8 @@ class NikCLI {
         this.spinners = new Map();
         this.progressBars = new Map();
         this.isInteractiveMode = false;
+        this.fileWatcher = null;
+        this.progressTracker = null;
         this.assistantProcessing = false;
         // Bridge StreamingOrchestrator agent lifecycle events into NikCLI output
         this.orchestratorEventsInitialized = false;
@@ -98,14 +104,34 @@ class NikCLI {
         // Bridge orchestrator events into NikCLI output
         this.setupOrchestratorEventBridge();
         this.setupAdvancedUIFeatures();
+        // Initialize token cache system
+        this.initializeTokenCache();
+    }
+    async initializeTokenCache() {
+        // Clean up expired cache entries on startup
+        setTimeout(async () => {
+            try {
+                const removed = await token_cache_1.tokenCache.cleanupExpired();
+                if (removed > 0) {
+                    console.log(chalk_1.default.dim(`🧹 Cleaned ${removed} expired cache entries`));
+                }
+                const stats = token_cache_1.tokenCache.getStats();
+                if (stats.totalEntries > 0) {
+                    console.log(chalk_1.default.dim(`💾 Loaded ${stats.totalEntries} cached responses (${stats.totalHits} hits, ~${stats.totalTokensSaved.toLocaleString()} tokens saved)`));
+                }
+            }
+            catch (error) {
+                console.log(chalk_1.default.dim(`Cache initialization warning: ${error.message}`));
+            }
+        }, 1000); // Delay to avoid interfering with startup
     }
     setupEventHandlers() {
         // Handle Ctrl+C gracefully
-        process.on('SIGINT', () => {
-            this.shutdown();
+        process.on('SIGINT', async () => {
+            await this.shutdown();
         });
-        process.on('SIGTERM', () => {
-            this.shutdown();
+        process.on('SIGTERM', async () => {
+            await this.shutdown();
         });
     }
     setupOrchestratorEventBridge() {
@@ -115,7 +141,7 @@ class NikCLI {
         agent_service_1.agentService.on('task_start', (task) => {
             const indicator = this.createStatusIndicator(`task-${task.id}`, `Agent ${task.agentType}`, task.task);
             this.updateStatusIndicator(indicator.id, { status: 'running' });
-            console.log(chalk_1.default.blue(`🤖 Agent ${task.agentType} started: ${task.task.slice(0, 60)}...`));
+            console.log((0, text_wrapper_1.formatAgent)(task.agentType, 'started', task.task));
         });
         agent_service_1.agentService.on('task_progress', (_task, update) => {
             const progress = typeof update.progress === 'number' ? `${update.progress}% ` : '';
@@ -144,19 +170,172 @@ class NikCLI {
     // Advanced UI Features Setup
     setupAdvancedUIFeatures() {
         // Initialize advanced UI theme and features
-        this.isInteractiveMode = false; // Start in normal mode
+        this.isInteractiveMode = true; // Start in normal mode
         // Setup file watching capabilities
         this.setupFileWatching();
         // Setup progress tracking
         this.setupProgressTracking();
     }
     setupFileWatching() {
-        // File watching setup for live updates
-        // This would integrate with chokidar for real file watching
+        // File watching setup for live updates using chokidar
+        try {
+            // Only watch if chokidar is available
+            const chokidar = require('chokidar');
+            // Watch important file patterns
+            const patterns = [
+                '**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx',
+                '**/*.json', '**/*.md', '**/*.yml', '**/*.yaml',
+                'package.json', 'tsconfig.json', 'CLAUDE.md', 'todo.md'
+            ];
+            const watcher = chokidar.watch(patterns, {
+                ignored: /(^|[\/\\])\../, // ignore dotfiles
+                persistent: true,
+                ignoreInitial: true,
+                cwd: this.workingDirectory
+            });
+            // File change handlers
+            watcher.on('add', (path) => {
+                this.addLiveUpdate({
+                    type: 'info',
+                    content: `📄 File created: ${path}`,
+                    source: 'file-watcher'
+                });
+            });
+            watcher.on('change', (path) => {
+                this.addLiveUpdate({
+                    type: 'info',
+                    content: `✏️ File modified: ${path}`,
+                    source: 'file-watcher'
+                });
+                // Special handling for important files
+                if (path === 'todo.md') {
+                    console.log(chalk_1.default.cyan('🔄 Todo list updated'));
+                }
+                else if (path === 'package.json') {
+                    console.log(chalk_1.default.blue('📦 Package configuration changed'));
+                }
+                else if (path === 'CLAUDE.md') {
+                    console.log(chalk_1.default.magenta('🤖 Project context updated'));
+                }
+            });
+            watcher.on('unlink', (path) => {
+                this.addLiveUpdate({
+                    type: 'warning',
+                    content: `🗑️ File deleted: ${path}`,
+                    source: 'file-watcher'
+                });
+            });
+            watcher.on('error', (error) => {
+                this.addLiveUpdate({
+                    type: 'error',
+                    content: `File watcher error: ${error.message}`,
+                    source: 'file-watcher'
+                });
+            });
+            // Store watcher for cleanup
+            this.fileWatcher = watcher;
+            console.log(chalk_1.default.dim('👀 File watching enabled'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.gray('⚠️ File watching not available (chokidar not installed)'));
+        }
     }
     setupProgressTracking() {
         // Progress tracking for long-running operations
         // This provides visual feedback for complex tasks
+        // Track active operations and their progress
+        this.progressTracker = {
+            operations: new Map(),
+            // Start tracking an operation
+            start: (id, title, totalSteps) => {
+                const operation = {
+                    id,
+                    title,
+                    startTime: Date.now(),
+                    currentStep: 0,
+                    totalSteps: totalSteps || 0,
+                    status: 'running',
+                    details: []
+                };
+                this.progressTracker.operations.set(id, operation);
+                if (totalSteps) {
+                    this.createAdvancedProgressBar(id, title, totalSteps);
+                }
+                else {
+                    this.createStatusIndicator(id, title, 'Starting...');
+                    this.startAdvancedSpinner(id, 'Processing...');
+                }
+                this.addLiveUpdate({
+                    type: 'info',
+                    content: `🚀 Started: ${title}`,
+                    source: 'progress-tracker'
+                });
+            },
+            // Update progress
+            update: (id, step, detail) => {
+                const operation = this.progressTracker.operations.get(id);
+                if (!operation)
+                    return;
+                if (step !== undefined) {
+                    operation.currentStep = step;
+                    if (operation.totalSteps > 0) {
+                        this.updateAdvancedProgress(id, step, operation.totalSteps);
+                    }
+                }
+                if (detail) {
+                    operation.details.push({
+                        timestamp: Date.now(),
+                        message: detail
+                    });
+                    this.updateStatusIndicator(id, { details: detail });
+                    this.addLiveUpdate({
+                        type: 'info',
+                        content: `📊 ${operation.title}: ${detail}`,
+                        source: 'progress-tracker'
+                    });
+                }
+            },
+            // Complete tracking
+            complete: (id, success = true, finalMessage) => {
+                const operation = this.progressTracker.operations.get(id);
+                if (!operation)
+                    return;
+                operation.status = success ? 'completed' : 'failed';
+                operation.endTime = Date.now();
+                const duration = operation.endTime - operation.startTime;
+                const durationText = duration > 1000 ?
+                    `${Math.round(duration / 1000)}s` :
+                    `${duration}ms`;
+                const message = finalMessage ||
+                    `${operation.title} ${success ? 'completed' : 'failed'} in ${durationText}`;
+                if (operation.totalSteps > 0) {
+                    this.completeAdvancedProgress(id, message);
+                }
+                else {
+                    this.stopAdvancedSpinner(id, success, message);
+                }
+                this.addLiveUpdate({
+                    type: success ? 'log' : 'error',
+                    content: `${success ? '✅' : '❌'} ${message}`,
+                    source: 'progress-tracker'
+                });
+                // Clean up after a delay
+                setTimeout(() => {
+                    this.progressTracker.operations.delete(id);
+                }, 5000);
+            },
+            // Get current operations summary
+            getSummary: () => {
+                const operations = Array.from(this.progressTracker.operations.values());
+                return {
+                    total: operations.length,
+                    running: operations.filter((op) => op.status === 'running').length,
+                    completed: operations.filter((op) => op.status === 'completed').length,
+                    failed: operations.filter((op) => op.status === 'failed').length
+                };
+            }
+        };
+        console.log(chalk_1.default.dim('📊 Progress tracking enabled'));
     }
     // Advanced UI Methods (from advanced-cli-ui.ts)
     createStatusIndicator(id, title, details) {
@@ -173,7 +352,7 @@ class NikCLI {
             this.refreshDisplay();
         }
         else {
-            console.log(chalk_1.default.blue(`📋 ${title}${details ? ` - ${details}` : ''}`));
+            console.log((0, text_wrapper_1.formatStatus)('📋', title, details));
         }
         return indicator;
     }
@@ -528,8 +707,8 @@ class NikCLI {
                 this.showPrompt();
             }
         });
-        this.rl.on('SIGINT', () => {
-            this.shutdown();
+        this.rl.on('SIGINT', async () => {
+            await this.shutdown();
         });
         // Show initial prompt immediately
         this.showPrompt();
@@ -663,12 +842,12 @@ class NikCLI {
                     break;
                 case 'exit':
                 case 'quit':
-                    this.shutdown();
+                    await this.shutdown();
                     return;
                 default: {
                     const result = await this.slashHandler.handle(command);
                     if (result.shouldExit) {
-                        this.shutdown();
+                        await this.shutdown();
                         return;
                     }
                 }
@@ -685,7 +864,7 @@ class NikCLI {
     async dispatchAt(input) {
         const result = await this.slashHandler.handle(input);
         if (result.shouldExit) {
-            this.shutdown();
+            await this.shutdown();
             return;
         }
         this.showPrompt();
@@ -747,6 +926,15 @@ class NikCLI {
                 case 'compact':
                     await this.compactSession();
                     break;
+                case 'tokens':
+                    await this.showTokenUsage();
+                    break;
+                case 'cache':
+                    await this.manageTokenCache(args[0]);
+                    break;
+                case 'mcp':
+                    await this.handleMcpCommands(args);
+                    break;
                 case 'cost':
                     await this.showCost();
                     break;
@@ -764,7 +952,7 @@ class NikCLI {
                     break;
                 case 'exit':
                 case 'quit':
-                    this.shutdown();
+                    await this.shutdown();
                     break;
                 default:
                     console.log(chalk_1.default.red(`Unknown command: /${cmd}`));
@@ -926,10 +1114,29 @@ class NikCLI {
                 // Record user message in session
                 chat_manager_1.chatManager.addMessage(input, 'user');
                 // Build model-ready messages from session history (respects history setting)
-                const messages = chat_manager_1.chatManager.getContextMessages().map(m => ({
+                let messages = chat_manager_1.chatManager.getContextMessages().map(m => ({
                     role: m.role,
                     content: m.content,
                 }));
+                // Auto-compact if approaching token limit with more aggressive thresholds
+                const totalChars = messages.reduce((sum, msg) => sum + msg.content.length, 0);
+                const estimatedTokens = Math.round(totalChars / 4);
+                if (estimatedTokens > 100000) { // More aggressive - compact at 100k instead of 150k
+                    console.log(chalk_1.default.yellow(`⚠️ Token usage: ${estimatedTokens.toLocaleString()}, auto-compacting...`));
+                    await this.compactSession();
+                    // Rebuild messages after compaction
+                    messages = chat_manager_1.chatManager.getContextMessages().map(m => ({
+                        role: m.role,
+                        content: m.content,
+                    }));
+                    // Re-check token count after compaction
+                    const newTotalChars = messages.reduce((sum, msg) => sum + msg.content.length, 0);
+                    const newEstimatedTokens = Math.round(newTotalChars / 4);
+                    console.log(chalk_1.default.green(`✅ Compacted to ${newEstimatedTokens.toLocaleString()} tokens`));
+                }
+                else if (estimatedTokens > 50000) {
+                    console.log((0, text_wrapper_1.wrapBlue)(`📊 Token usage: ${estimatedTokens.toLocaleString()}`));
+                }
                 // Stream assistant response
                 process.stdout.write(`${chalk_1.default.cyan('\nAssistant: ')}`);
                 let assistantText = '';
@@ -957,7 +1164,7 @@ class NikCLI {
      * Generate execution plan for a task
      */
     async generatePlan(task, options) {
-        console.log(chalk_1.default.blue(`🎯 Generating plan for: ${chalk_1.default.cyan(task)}`));
+        console.log((0, text_wrapper_1.wrapBlue)(`🎯 Generating plan for: ${task}`));
         try {
             const plan = await this.planningManager.generatePlanOnly(task, this.workingDirectory);
             if (options.save) {
@@ -978,11 +1185,11 @@ class NikCLI {
      * Execute task with specific agent
      */
     async executeAgent(name, task, options) {
-        console.log(chalk_1.default.blue(`🤖 Executing with ${chalk_1.default.cyan(name)} agent...`));
+        console.log((0, text_wrapper_1.formatAgent)(name, 'executing', task));
         try {
             // Launch real agent via AgentService; run asynchronously
             const taskId = await agent_service_1.agentService.executeTask(name, task);
-            console.log(chalk_1.default.blue(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
+            console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
         }
         catch (error) {
             console.log(chalk_1.default.red(`Agent execution failed: ${error.message}`));
@@ -992,7 +1199,7 @@ class NikCLI {
      * Autonomous execution with best agent selection
      */
     async autoExecute(task, options) {
-        console.log(chalk_1.default.blue(`🚀 Auto-executing: ${chalk_1.default.cyan(task)}`));
+        console.log((0, text_wrapper_1.wrapBlue)(`🚀 Auto-executing: ${task}`));
         try {
             if (options.planFirst) {
                 // Use real PlanningService to create and execute plan asynchronously
@@ -1021,7 +1228,7 @@ class NikCLI {
                 const selected = this.agentManager.findBestAgentForTask(task);
                 console.log(chalk_1.default.blue(`🤖 Selected agent: ${chalk_1.default.cyan(selected)}`));
                 const taskId = await agent_service_1.agentService.executeTask(selected, task);
-                console.log(chalk_1.default.blue(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
+                console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
             }
         }
         catch (error) {
@@ -1046,7 +1253,7 @@ class NikCLI {
             });
         }
         if (options.add) {
-            console.log(chalk_1.default.blue(`Adding todo: ${options.add}`));
+            console.log((0, text_wrapper_1.wrapBlue)(`Adding todo: ${options.add}`));
             await this.generatePlan(options.add, {});
         }
         if (options.complete) {
@@ -1193,7 +1400,7 @@ class NikCLI {
                     const total = lines.length;
                     const key = `read:${path.resolve(filePath)}`;
                     const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-                    console.log(chalk_1.default.blue(`📄 File: ${filePath} (${fileInfo.size} bytes, ${fileInfo.language || 'unknown'})`));
+                    console.log((0, text_wrapper_1.formatFileOp)('📄 File:', filePath, `${fileInfo.size} bytes, ${fileInfo.language || 'unknown'}`));
                     console.log(chalk_1.default.gray(`Lines: ${total}`));
                     console.log(chalk_1.default.gray('─'.repeat(50)));
                     const printSlice = (from, to) => {
@@ -1306,7 +1513,7 @@ class NikCLI {
                         return;
                     }
                     const filePath = args[0];
-                    console.log(chalk_1.default.blue(`📝 Opening ${filePath} in system editor...`));
+                    console.log((0, text_wrapper_1.formatFileOp)('📝 Opening', filePath, 'in system editor'));
                     try {
                         await tools_manager_1.toolsManager.runCommand('code', [filePath]);
                     }
@@ -1323,7 +1530,7 @@ class NikCLI {
                 case 'ls': {
                     const directory = args[0] || '.';
                     const files = await tools_manager_1.toolsManager.listFiles(directory);
-                    console.log(chalk_1.default.blue(`📁 Files in ${directory}:`));
+                    console.log((0, text_wrapper_1.formatFileOp)('📁 Files in', directory));
                     console.log(chalk_1.default.gray('─'.repeat(40)));
                     if (files.length === 0) {
                         console.log(chalk_1.default.yellow('No files found'));
@@ -1358,7 +1565,7 @@ class NikCLI {
                     const state = this.sessionContext.get(key) || { offset: 0, limit };
                     if (hasFlag('limit'))
                         state.limit = limit;
-                    console.log(chalk_1.default.blue(`🔍 Searching for "${query}" in ${directory}...`));
+                    console.log((0, text_wrapper_1.formatSearch)(query, directory));
                     const spinId = `search-${Date.now()}`;
                     this.createStatusIndicator(spinId, `Searching: ${query}`, `in ${directory}`);
                     this.startAdvancedSpinner(spinId, `Searching files...`);
@@ -1409,7 +1616,7 @@ class NikCLI {
                         console.log(chalk_1.default.yellow('❌ Command execution cancelled'));
                         return;
                     }
-                    console.log(chalk_1.default.blue(`⚡ Running: ${fullCommand}`));
+                    console.log((0, text_wrapper_1.formatCommand)(fullCommand));
                     const cmdId = 'cmd-' + Date.now();
                     this.createStatusIndicator(cmdId, `Executing: ${cmd}`);
                     this.startAdvancedSpinner(cmdId, `Running: ${fullCommand}`);
@@ -1440,7 +1647,7 @@ class NikCLI {
                         console.log(chalk_1.default.yellow('❌ Package installation cancelled'));
                         return;
                     }
-                    console.log(chalk_1.default.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
+                    console.log((0, text_wrapper_1.wrapBlue)(`📦 Installing ${packages.join(', ')} with ${manager}...`));
                     const installId = 'install-' + Date.now();
                     this.createAdvancedProgressBar(installId, 'Installing packages', packages.length);
                     for (let i = 0; i < packages.length; i++) {
@@ -1537,7 +1744,7 @@ class NikCLI {
                 }
                 case 'test': {
                     const pattern = args[0];
-                    console.log(chalk_1.default.blue(`🧪 Running tests${pattern ? ` (${pattern})` : ''}...`));
+                    console.log((0, text_wrapper_1.wrapBlue)(`🧪 Running tests${pattern ? ` (${pattern})` : ''}...`));
                     const result = await tools_manager_1.toolsManager.runTests(pattern);
                     if (result.success) {
                         console.log(chalk_1.default.green('✅ All tests passed'));
@@ -1577,7 +1784,7 @@ class NikCLI {
                         return;
                     }
                     const [type, name] = args;
-                    console.log(chalk_1.default.blue(`🚀 Creating ${type} project: ${name}`));
+                    console.log((0, text_wrapper_1.wrapBlue)(`🚀 Creating ${type} project: ${name}`));
                     const result = await tools_manager_1.toolsManager.setupProject(type, name);
                     if (result.success) {
                         console.log(chalk_1.default.green(`✅ Project ${name} created successfully!`));
@@ -1799,9 +2006,9 @@ class NikCLI {
                     }
                     const agentName = args[0];
                     const task = args.slice(1).join(' ');
-                    console.log(chalk_1.default.blue(`🤖 Executing with ${chalk_1.default.cyan(agentName)} agent...`));
+                    console.log((0, text_wrapper_1.formatAgent)(agentName, 'executing', task));
                     const taskId = await agent_service_1.agentService.executeTask(agentName, task);
-                    console.log(chalk_1.default.blue(`🚀 Launched ${agentName} (Task ID: ${taskId.slice(-6)})`));
+                    console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${agentName} (Task ID: ${taskId.slice(-6)})`));
                     break;
                 }
                 case 'parallel': {
@@ -1811,7 +2018,7 @@ class NikCLI {
                     }
                     const agentNames = args[0].split(',').map(name => name.trim());
                     const task = args.slice(1).join(' ');
-                    console.log(chalk_1.default.blue(`⚡ Running ${agentNames.length} agents in parallel...`));
+                    console.log((0, text_wrapper_1.wrapBlue)(`⚡ Running ${agentNames.length} agents in parallel...`));
                     // Implementation would execute agents in parallel
                     break;
                 }
@@ -1843,7 +2050,7 @@ class NikCLI {
                     const task = args.slice(1).join(' ');
                     const agent = await agent_factory_1.agentFactory.launchAgent(blueprintId);
                     if (task) {
-                        console.log(chalk_1.default.blue(`🚀 Running agent with task: ${task}`));
+                        console.log((0, text_wrapper_1.formatAgent)('agent', 'running', task));
                         const result = await agent.run(task);
                         console.log(chalk_1.default.green('✅ Agent execution completed'));
                     }
@@ -1946,34 +2153,33 @@ class NikCLI {
     }
     async generateTodosWithAI(goal, context, maxTodos) {
         try {
-            // Build context-aware message for AI planning
+            // Check cache first to save massive tokens
+            const truncatedContext = context.length > 1000 ? context.substring(0, 1000) + '...' : context;
+            const planningPrompt = `Plan: ${goal} (max ${maxTodos} todos)`;
+            const cachedResponse = await token_cache_1.tokenCache.getCachedResponse(planningPrompt, truncatedContext, ['planning', 'todos', 'ai-generation']);
+            if (cachedResponse) {
+                console.log(chalk_1.default.green('🎯 Using cached planning response'));
+                try {
+                    const planData = JSON.parse(cachedResponse.response);
+                    if (planData.todos && Array.isArray(planData.todos)) {
+                        return planData.todos.slice(0, maxTodos);
+                    }
+                }
+                catch (e) {
+                    console.log(chalk_1.default.yellow('⚠️ Cached response format invalid, generating new plan'));
+                }
+            }
+            // Build optimized context-aware message for AI planning - reduced token usage
             const messages = [{
-                role: 'system',
-                content: `You are an expert project planner. Create a detailed, actionable plan to accomplish the given goal.
+                    role: 'system',
+                    content: `Expert project planner. Generate JSON todo array:
+{"todos":[{"title":"Task title","description":"Task desc","priority":"low/medium/high/critical","category":"planning/setup/implementation/testing/docs/deployment","estimatedDuration":30,"dependencies":[],"tags":["tag"],"commands":["cmd"],"files":["file.ts"],"reasoning":"Brief reason"}]}
 
-Generate a JSON array of todo items with the following structure:
-{
-  "todos": [
-    {
-      "title": "Clear, actionable title",
-      "description": "Detailed description of what needs to be done",
-      "priority": "low|medium|high|critical",
-      "category": "planning|setup|implementation|testing|documentation|deployment",
-      "estimatedDuration": 30,
-      "dependencies": [],
-      "tags": ["tag1", "tag2"],
-      "commands": ["command1", "command2"],
-      "files": ["file1.ts", "file2.js"],
-      "reasoning": "Why this todo is necessary and how it fits in the overall plan"
-    }
-  ]
-}
-
-Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical and executable.`
-            }, {
-                role: 'user',
-                content: `Create a detailed plan to: ${goal}`
-            }];
+Max ${maxTodos} todos. Context: ${truncatedContext}`
+                }, {
+                    role: 'user',
+                    content: planningPrompt
+                }];
             // Stream AI response for real-time feedback
             let assistantText = '';
             for await (const ev of advanced_ai_provider_1.advancedAIProvider.streamChatWithFullAutonomy(messages)) {
@@ -2005,25 +2211,28 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
                 reasoning: todoData.reasoning || '',
                 createdAt: new Date(),
             }));
-            console.log(chalk_1.default.green(`✅ Generated ${todos.length} todos`));
+            // Cache the successful response for future use
+            const tokensEstimated = Math.round((planningPrompt.length + assistantText.length) / 4);
+            await token_cache_1.tokenCache.setCachedResponse(planningPrompt, JSON.stringify({ todos: planData.todos }), truncatedContext, tokensEstimated, ['planning', 'todos', 'ai-generation']);
+            console.log(chalk_1.default.green(`✅ Generated ${todos.length} todos (cached for future use)`));
             return todos;
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Failed to generate AI plan: ${error.message}`));
             // Fallback: create a simple todo
             return [{
-                id: `todo-${Date.now()}`,
-                title: 'Execute Task',
-                description: goal,
-                status: 'pending',
-                priority: 'medium',
-                category: 'implementation',
-                estimatedDuration: 60,
-                dependencies: [],
-                tags: ['manual'],
-                reasoning: 'Fallback todo when AI planning fails',
-                createdAt: new Date(),
-            }];
+                    id: `todo-${Date.now()}`,
+                    title: 'Execute Task',
+                    description: goal,
+                    status: 'pending',
+                    priority: 'medium',
+                    category: 'implementation',
+                    estimatedDuration: 60,
+                    dependencies: [],
+                    tags: ['manual'],
+                    reasoning: 'Fallback todo when AI planning fails',
+                    createdAt: new Date(),
+                }];
         }
     }
     displayAdvancedPlan(plan) {
@@ -2050,7 +2259,7 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
                 console.log(`   ${chalk_1.default.yellow('Dependencies:')} ${todo.dependencies.join(', ')}`);
             }
             if (todo.files && todo.files.length > 0) {
-                console.log(`   ${chalk_1.default.blue('Files:')} ${todo.files.join(', ')}`);
+                console.log(`   ${(0, text_wrapper_1.wrapBlue)('Files:')} ${todo.files.join(', ')}`);
             }
             console.log();
         });
@@ -2112,7 +2321,7 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
                 }
                 // Show progress
                 const progress = Math.round((completedCount / plan.todos.length) * 100);
-                console.log(chalk_1.default.blue(`   📊 Progress: ${progress}% (${completedCount}/${plan.todos.length})`));
+                console.log(`   ${(0, text_wrapper_1.formatProgress)(completedCount, plan.todos.length)}`);
                 // Brief pause between todos for readability
                 if (completedCount < plan.todos.length) {
                     await new Promise(resolve => setTimeout(resolve, 500));
@@ -2184,7 +2393,7 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
         // Optional: still honor any concrete commands/files declared by the todo
         if (todo.commands && todo.commands.length > 0) {
             for (const command of todo.commands) {
-                console.log(chalk_1.default.blue(`   ⚡ Running: ${command}`));
+                console.log(`   ${(0, text_wrapper_1.formatCommand)(command)}`);
                 try {
                     const [cmd, ...args] = command.split(' ');
                     await tools_manager_1.toolsManager.runCommand(cmd, args);
@@ -2470,37 +2679,154 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
     async compactSession() {
         console.log(chalk_1.default.blue('📊 Compacting session to save tokens...'));
         const session = chat_manager_1.chatManager.getCurrentSession();
-        if (!session || session.messages.length <= 5) {
+        if (!session || session.messages.length <= 3) {
             console.log(chalk_1.default.yellow('Session too short to compact'));
             return;
         }
         try {
             const originalCount = session.messages.length;
-            // Keep system message, last 2 user messages, and last 2 assistant messages
+            // Ultra-aggressive compaction: keep only system message and last user+assistant pair
             const systemMessages = session.messages.filter(m => m.role === 'system');
-            const recentMessages = session.messages.slice(-4);
-            // Create summary of older messages
-            const olderMessages = session.messages.slice(0, -4).filter(m => m.role !== 'system');
+            const recentMessages = session.messages.slice(-2); // Only last 2 messages
+            // Create ultra-short summary
+            const olderMessages = session.messages.slice(0, -2).filter(m => m.role !== 'system');
             if (olderMessages.length > 0) {
                 const summaryMessage = {
                     role: 'system',
-                    content: `[Session Summary: ${olderMessages.length} messages compacted to save tokens]`,
+                    content: `[Compacted ${olderMessages.length} msgs]`,
                     timestamp: new Date()
                 };
                 session.messages = [...systemMessages, summaryMessage, ...recentMessages];
                 console.log(chalk_1.default.green(`✅ Session compacted: ${originalCount} → ${session.messages.length} messages`));
                 this.addLiveUpdate({
                     type: 'info',
-                    content: `Session compacted: saved ${originalCount - session.messages.length} messages`,
+                    content: `Saved ${originalCount - session.messages.length} messages`,
                     source: 'session'
                 });
             }
             else {
                 console.log(chalk_1.default.green('✓ Session compacted'));
             }
+            // Additional token optimization: truncate long messages
+            session.messages.forEach(msg => {
+                if (msg.content.length > 2000) {
+                    msg.content = msg.content.substring(0, 2000) + '...[truncated]';
+                }
+            });
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Error compacting session: ${error.message}`));
+        }
+    }
+    async manageTokenCache(action) {
+        switch (action) {
+            case 'clear':
+                await Promise.all([
+                    token_cache_1.tokenCache.clearCache(),
+                    completion_protocol_cache_1.completionCache.clearCache()
+                ]);
+                console.log(chalk_1.default.green('✅ All caches cleared'));
+                break;
+            case 'cleanup':
+                const removed = await token_cache_1.tokenCache.cleanupExpired();
+                console.log(chalk_1.default.green(`✅ Removed ${removed} expired cache entries`));
+                break;
+            case 'settings':
+                console.log(chalk_1.default.blue('⚙️ Current Cache Settings:'));
+                console.log(`  Max cache size: 1000 entries`);
+                console.log(`  Similarity threshold: 0.85`);
+                console.log(`  Max age: 7 days`);
+                console.log(`  Cache file: ./.nikcli/token-cache.json`);
+                break;
+            case 'export':
+                const exportPath = `./cache-export-${Date.now()}.json`;
+                await token_cache_1.tokenCache.exportCache(exportPath);
+                break;
+            default: // 'stats' or no argument
+                const stats = token_cache_1.tokenCache.getStats();
+                const completionStats = completion_protocol_cache_1.completionCache.getStats();
+                const totalTokensSaved = stats.totalTokensSaved + (completionStats.totalHits * 50); // Estimate 50 tokens saved per completion hit
+                console.log((0, boxen_1.default)(`${chalk_1.default.cyan.bold('🔮 Advanced Cache System Statistics')}\n\n` +
+                    `${chalk_1.default.magenta('📦 Full Response Cache:')}\n` +
+                    `  Entries: ${chalk_1.default.white(stats.totalEntries.toLocaleString())}\n` +
+                    `  Hits: ${chalk_1.default.green(stats.totalHits.toLocaleString())}\n` +
+                    `  Tokens Saved: ${chalk_1.default.yellow(stats.totalTokensSaved.toLocaleString())}\n\n` +
+                    `${chalk_1.default.cyan('🔮 Completion Protocol Cache:')} ${chalk_1.default.red('NEW!')}\n` +
+                    `  Patterns: ${chalk_1.default.white(completionStats.totalPatterns.toLocaleString())}\n` +
+                    `  Hits: ${chalk_1.default.green(completionStats.totalHits.toLocaleString())}\n` +
+                    `  Avg Confidence: ${chalk_1.default.blue(Math.round(completionStats.averageConfidence * 100))}%\n\n` +
+                    `${chalk_1.default.green.bold('💰 Total Savings:')}\n` +
+                    `Combined Tokens: ${chalk_1.default.yellow(totalTokensSaved.toLocaleString())}\n` +
+                    `Estimated Cost: ~$${(totalTokensSaved * 0.003 / 1000).toFixed(2)}`, {
+                    padding: 1,
+                    margin: 1,
+                    borderStyle: 'round',
+                    borderColor: 'magenta'
+                }));
+                if (stats.totalEntries > 0) {
+                    console.log(chalk_1.default.cyan('\n🔧 Available Actions:'));
+                    console.log('  /cache clear    - Clear all cache entries');
+                    console.log('  /cache cleanup  - Remove expired entries');
+                    console.log('  /cache settings - Show cache configuration');
+                    console.log('  /cache export   - Export cache to file');
+                }
+                break;
+        }
+    }
+    async showTokenUsage() {
+        console.log(chalk_1.default.blue('📊 Token Usage Analysis & Optimization'));
+        try {
+            const session = chat_manager_1.chatManager.getCurrentSession();
+            if (session) {
+                const totalChars = session.messages.reduce((sum, msg) => sum + msg.content.length, 0);
+                const estimatedTokens = Math.round(totalChars / 4);
+                const tokenLimit = 200000;
+                const usagePercent = Math.round((estimatedTokens / tokenLimit) * 100);
+                console.log((0, boxen_1.default)(`${chalk_1.default.cyan('Current Session Token Usage')}\n\n` +
+                    `Messages: ${chalk_1.default.white(session.messages.length.toLocaleString())}\n` +
+                    `Characters: ${chalk_1.default.white(totalChars.toLocaleString())}\n` +
+                    `Est. Tokens: ${chalk_1.default.white(estimatedTokens.toLocaleString())}\n` +
+                    `Usage: ${usagePercent > 75 ? chalk_1.default.red(`${usagePercent}%`) : usagePercent > 50 ? chalk_1.default.yellow(`${usagePercent}%`) : chalk_1.default.green(`${usagePercent}%`)}\n` +
+                    `Limit: ${chalk_1.default.gray(tokenLimit.toLocaleString())}`, {
+                    padding: 1,
+                    margin: 1,
+                    borderStyle: 'round',
+                    borderColor: usagePercent > 75 ? 'red' : usagePercent > 50 ? 'yellow' : 'green'
+                }));
+                // Message breakdown
+                console.log(chalk_1.default.cyan('\n📋 Message Breakdown:'));
+                const systemMsgs = session.messages.filter(m => m.role === 'system');
+                const userMsgs = session.messages.filter(m => m.role === 'user');
+                const assistantMsgs = session.messages.filter(m => m.role === 'assistant');
+                console.log(`  System: ${systemMsgs.length} (${Math.round(systemMsgs.reduce((sum, m) => sum + m.content.length, 0) / 4).toLocaleString()} tokens)`);
+                console.log(`  User: ${userMsgs.length} (${Math.round(userMsgs.reduce((sum, m) => sum + m.content.length, 0) / 4).toLocaleString()} tokens)`);
+                console.log(`  Assistant: ${assistantMsgs.length} (${Math.round(assistantMsgs.reduce((sum, m) => sum + m.content.length, 0) / 4).toLocaleString()} tokens)`);
+                // Recommendations
+                if (estimatedTokens > 150000) {
+                    console.log(chalk_1.default.red('\n⚠️ CRITICAL: Very high token usage!'));
+                    console.log(chalk_1.default.yellow('Recommendations:'));
+                    console.log('  • Use /compact to compress session immediately');
+                    console.log('  • Start a new session with /new');
+                    console.log('  • Enable auto-compaction (already active)');
+                }
+                else if (estimatedTokens > 100000) {
+                    console.log(chalk_1.default.yellow('\n⚠️ WARNING: High token usage'));
+                    console.log('Recommendations:');
+                    console.log('  • Consider using /compact soon');
+                    console.log('  • Auto-compaction will trigger at 100k tokens');
+                }
+                else if (estimatedTokens > 50000) {
+                    console.log(chalk_1.default.blue('\n💡 INFO: Moderate token usage'));
+                    console.log('  • Session is healthy');
+                    console.log('  • Auto-monitoring active');
+                }
+            }
+            else {
+                console.log(chalk_1.default.gray('No active session'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`Token analysis error: ${error.message}`));
         }
     }
     async showCost() {
@@ -2586,7 +2912,7 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
                 case 'open':
                 case 'edit': {
                     const todoPath = 'todo.md';
-                    console.log(chalk_1.default.blue(`Opening ${todoPath} in your default editor...`));
+                    console.log((0, text_wrapper_1.formatFileOp)('Opening', todoPath, 'in your default editor'));
                     try {
                         await tools_manager_1.toolsManager.runCommand('code', [todoPath]);
                     }
@@ -2609,6 +2935,239 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
             this.addLiveUpdate({ type: 'error', content: `Todo operation failed: ${error.message}`, source: 'todo' });
             console.log(chalk_1.default.red(`❌ Error: ${error.message}`));
         }
+    }
+    /**
+     * Handle MCP (Model Context Protocol) commands
+     */
+    async handleMcpCommands(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.blue('🔮 MCP (Model Context Protocol) Commands'));
+            console.log(chalk_1.default.gray('─'.repeat(50)));
+            console.log(chalk_1.default.cyan('Available commands:'));
+            console.log('  /mcp servers           - List configured servers');
+            console.log('  /mcp add <name> <type> <endpoint> - Add new server');
+            console.log('  /mcp test <server>     - Test server connection');
+            console.log('  /mcp call <server> <method> [params] - Make MCP call');
+            console.log('  /mcp health            - Check all server health');
+            console.log('  /mcp remove <name>     - Remove server');
+            console.log(chalk_1.default.gray('\nExample: /mcp add myapi http https://api.example.com/mcp'));
+            return;
+        }
+        const command = args[0].toLowerCase();
+        const restArgs = args.slice(1);
+        try {
+            switch (command) {
+                case 'servers':
+                    await this.listMcpServers();
+                    break;
+                case 'add':
+                    await this.addMcpServer(restArgs);
+                    break;
+                case 'test':
+                    if (restArgs.length === 0) {
+                        console.log(chalk_1.default.red('Usage: /mcp test <server-name>'));
+                        return;
+                    }
+                    await this.testMcpServer(restArgs[0]);
+                    break;
+                case 'call':
+                    if (restArgs.length < 2) {
+                        console.log(chalk_1.default.red('Usage: /mcp call <server-name> <method> [params-json]'));
+                        return;
+                    }
+                    await this.callMcpServer(restArgs[0], restArgs[1], restArgs[2]);
+                    break;
+                case 'health':
+                    await this.checkMcpHealth();
+                    break;
+                case 'remove':
+                    if (restArgs.length === 0) {
+                        console.log(chalk_1.default.red('Usage: /mcp remove <server-name>'));
+                        return;
+                    }
+                    await this.removeMcpServer(restArgs[0]);
+                    break;
+                default:
+                    console.log(chalk_1.default.red(`Unknown MCP command: ${command}`));
+                    console.log(chalk_1.default.gray('Use /mcp for available commands'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`MCP command failed: ${error.message}`));
+            this.addLiveUpdate({
+                type: 'error',
+                content: `MCP ${command} failed: ${error.message}`,
+                source: 'mcp'
+            });
+        }
+    }
+    /**
+     * List configured MCP servers
+     */
+    async listMcpServers() {
+        console.log((0, text_wrapper_1.wrapBlue)('📡 MCP Servers'));
+        const servers = await mcp_client_1.mcpClient.listServers();
+        if (servers.length === 0) {
+            console.log(chalk_1.default.gray('No MCP servers configured'));
+            console.log(chalk_1.default.gray('Use "/mcp add <name> <type> <endpoint>" to add a server'));
+            return;
+        }
+        for (const server of servers) {
+            const healthIcon = server.healthy ? chalk_1.default.green('🟢') : chalk_1.default.red('🔴');
+            const typeColor = server.type === 'http' ? chalk_1.default.blue : server.type === 'websocket' ? chalk_1.default.cyan : chalk_1.default.yellow;
+            console.log(`${healthIcon} ${chalk_1.default.bold(server.name)} ${typeColor(`[${server.type}]`)}`);
+            if (server.endpoint) {
+                console.log(`   ${chalk_1.default.gray('Endpoint:')} ${server.endpoint}`);
+            }
+            if (server.command) {
+                console.log(`   ${chalk_1.default.gray('Command:')} ${server.command} ${(server.args || []).join(' ')}`);
+            }
+            if (server.capabilities && server.capabilities.length > 0) {
+                console.log(`   ${chalk_1.default.gray('Capabilities:')} ${server.capabilities.join(', ')}`);
+            }
+            console.log(`   ${chalk_1.default.gray('Priority:')} ${server.priority || 1} | ${chalk_1.default.gray('Enabled:')} ${server.enabled ? 'Yes' : 'No'}`);
+            console.log();
+        }
+    }
+    /**
+     * Add new MCP server (Claude Code style configuration)
+     */
+    async addMcpServer(args) {
+        if (args.length < 3) {
+            console.log(chalk_1.default.red('Usage: /mcp add <name> <type> <endpoint/command>'));
+            console.log(chalk_1.default.gray('Types: http, websocket, command, stdio'));
+            console.log(chalk_1.default.gray('Examples:'));
+            console.log(chalk_1.default.gray('  /mcp add myapi http https://api.example.com/mcp'));
+            console.log(chalk_1.default.gray('  /mcp add local command "/usr/local/bin/mcp-server"'));
+            console.log(chalk_1.default.gray('  /mcp add ws websocket wss://example.com/mcp'));
+            return;
+        }
+        const [name, type, endpointOrCommand] = args;
+        if (!['http', 'websocket', 'command', 'stdio'].includes(type)) {
+            console.log(chalk_1.default.red(`Invalid server type: ${type}`));
+            console.log(chalk_1.default.gray('Valid types: http, websocket, command, stdio'));
+            return;
+        }
+        // Build server config based on Claude Code patterns
+        const serverConfig = {
+            name,
+            type: type,
+            enabled: true,
+            priority: 1,
+            timeout: 30000,
+            retries: 3,
+        };
+        if (type === 'http' || type === 'websocket') {
+            serverConfig.endpoint = endpointOrCommand;
+            serverConfig.headers = {
+                'User-Agent': 'NikCLI-MCP/1.0',
+                'Content-Type': 'application/json'
+            };
+        }
+        else if (type === 'command' || type === 'stdio') {
+            const commandParts = endpointOrCommand.split(' ');
+            serverConfig.command = commandParts[0];
+            serverConfig.args = commandParts.slice(1);
+        }
+        // Save to config manager
+        const mcpServers = this.configManager.get('mcpServers') || {};
+        mcpServers[name] = serverConfig;
+        this.configManager.set('mcpServers', mcpServers);
+        console.log(chalk_1.default.green(`✅ MCP server '${name}' added successfully`));
+        console.log(chalk_1.default.gray(`Type: ${type} | Endpoint: ${endpointOrCommand}`));
+        // Test the connection
+        console.log(chalk_1.default.gray('Testing connection...'));
+        await this.testMcpServer(name);
+    }
+    /**
+     * Test MCP server connection
+     */
+    async testMcpServer(serverName) {
+        console.log((0, text_wrapper_1.wrapBlue)(`🧪 Testing MCP server: ${serverName}`));
+        const result = await mcp_client_1.mcpClient.testServer(serverName);
+        if (result.success) {
+            console.log(chalk_1.default.green(`✅ Server '${serverName}' is healthy`));
+            if (result.latency !== undefined) {
+                console.log(chalk_1.default.gray(`   Response time: ${result.latency}ms`));
+            }
+        }
+        else {
+            console.log(chalk_1.default.red(`❌ Server '${serverName}' is not responding`));
+            if (result.error) {
+                console.log(chalk_1.default.gray(`   Error: ${result.error}`));
+            }
+        }
+    }
+    /**
+     * Make MCP call to server
+     */
+    async callMcpServer(serverName, method, paramsJson) {
+        console.log((0, text_wrapper_1.wrapBlue)(`📡 Calling MCP server '${serverName}' method '${method}'`));
+        let params = {};
+        if (paramsJson) {
+            try {
+                params = JSON.parse(paramsJson);
+            }
+            catch (error) {
+                console.log(chalk_1.default.red('Invalid JSON parameters'));
+                return;
+            }
+        }
+        const request = {
+            method,
+            params,
+            id: `call-${Date.now()}`
+        };
+        try {
+            const response = await mcp_client_1.mcpClient.call(serverName, request);
+            if (response.result) {
+                console.log(chalk_1.default.green('✅ MCP Call Successful'));
+                console.log(chalk_1.default.gray('Response:'));
+                console.log(JSON.stringify(response.result, null, 2));
+            }
+            else if (response.error) {
+                console.log(chalk_1.default.red('❌ MCP Call Failed'));
+                console.log(chalk_1.default.gray('Error:'), response.error.message);
+            }
+            if (response.fromCache) {
+                console.log(chalk_1.default.cyan('📦 Result from cache'));
+            }
+            if (response.executionTime) {
+                console.log(chalk_1.default.gray(`⏱️ Execution time: ${response.executionTime}ms`));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ MCP call failed: ${error.message}`));
+        }
+    }
+    /**
+     * Check health of all MCP servers
+     */
+    async checkMcpHealth() {
+        console.log((0, text_wrapper_1.wrapBlue)('🏥 Checking MCP server health'));
+        const servers = mcp_client_1.mcpClient.getConfiguredServers();
+        if (servers.length === 0) {
+            console.log(chalk_1.default.gray('No MCP servers configured'));
+            return;
+        }
+        for (const server of servers) {
+            const healthy = await mcp_client_1.mcpClient.checkServerHealth(server.name);
+            const icon = healthy ? chalk_1.default.green('🟢') : chalk_1.default.red('🔴');
+            console.log(`${icon} ${server.name} (${server.type})`);
+        }
+    }
+    /**
+     * Remove MCP server
+     */
+    async removeMcpServer(serverName) {
+        const mcpServers = this.configManager.get('mcpServers') || {};
+        if (!mcpServers[serverName]) {
+            console.log(chalk_1.default.red(`Server '${serverName}' not found`));
+            return;
+        }
+        delete mcpServers[serverName];
+        this.configManager.set('mcpServers', mcpServers);
+        console.log(chalk_1.default.green(`✅ MCP server '${serverName}' removed`));
     }
     showSlashHelp() {
         console.log(chalk_1.default.cyan.bold('📚 Available Slash Commands'));
@@ -2654,11 +3213,21 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
             ['/debug', 'Show debug information'],
             ['/temp <0.0-2.0>', 'Set temperature'],
             ['/system <prompt>', 'Set system prompt'],
+            ['/tokens', 'Show token usage and optimize'],
+            ['/compact', 'Force session compaction'],
+            ['/cache [stats|clear|settings]', 'Manage token cache system'],
             // Model & Config
             ['/models', 'List available models'],
             ['/model <name>', 'Switch to model'],
             ['/set-key <model> <key>', 'Set API key'],
             ['/config', 'Show configuration'],
+            // MCP (Model Context Protocol)
+            ['/mcp servers', 'List configured MCP servers'],
+            ['/mcp test <server>', 'Test MCP server connection'],
+            ['/mcp call <server> <method>', 'Make MCP call'],
+            ['/mcp add <name> <type> <endpoint>', 'Add new MCP server'],
+            ['/mcp remove <name>', 'Remove MCP server'],
+            ['/mcp health', 'Check all server health'],
             // Advanced Features
             ['/context [paths]', 'Manage workspace context'],
             ['/stream [clear]', 'Show/clear agent streams'],
@@ -2701,12 +3270,16 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
         commands.slice(34, 38).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
+        console.log(chalk_1.default.blue.bold('\n🔮 MCP (Model Context Protocol):'));
+        commands.slice(38, 44).forEach(([cmd, desc]) => {
+            console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
+        });
         console.log(chalk_1.default.blue.bold('\n🔧 Advanced Features:'));
-        commands.slice(38, 43).forEach(([cmd, desc]) => {
+        commands.slice(44, 49).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n📋 Basic Commands:'));
-        commands.slice(43).forEach(([cmd, desc]) => {
+        commands.slice(49).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.gray('\n💡 Tip: Use Ctrl+C to stop any running operation'));
@@ -2715,9 +3288,9 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
         const title = chalk_1.default.cyanBright('🤖 NikCLI');
         const subtitle = chalk_1.default.gray('Autonomous AI Developer Assistant');
         console.log((0, boxen_1.default)(`${title}\n${subtitle}\n\n` +
-            `${chalk_1.default.blue('Mode:')} ${chalk_1.default.yellow(this.currentMode)}\n` +
-            `${chalk_1.default.blue('Model:')} ${chalk_1.default.green(advanced_ai_provider_1.advancedAIProvider.getCurrentModelInfo().name)}\n` +
-            `${chalk_1.default.blue('Directory:')} ${chalk_1.default.cyan(path.basename(this.workingDirectory))}\n\n` +
+            `${(0, text_wrapper_1.wrapBlue)('Mode:')} ${chalk_1.default.yellow(this.currentMode)}\n` +
+            `${(0, text_wrapper_1.wrapBlue)('Model:')} ${chalk_1.default.green(advanced_ai_provider_1.advancedAIProvider.getCurrentModelInfo().name)}\n` +
+            `${(0, text_wrapper_1.wrapBlue)('Directory:')} ${chalk_1.default.cyan(path.basename(this.workingDirectory))}\n\n` +
             `${chalk_1.default.dim('Type /help for commands or start chatting!')}\n` +
             `${chalk_1.default.dim('Use Shift+Tab to cycle modes: default → auto → plan')}`, {
             padding: 1,
@@ -2790,13 +3363,72 @@ Generated by NikCLI on ${new Date().toISOString()}
         await fs.writeFile(filename, content, 'utf8');
         console.log(chalk_1.default.green(`✓ Plan saved to ${filename}`));
     }
-    shutdown() {
+    async shutdown() {
         console.log(chalk_1.default.blue('\n👋 Shutting down NikCLI...'));
+        // Stop file watcher
+        if (this.fileWatcher) {
+            try {
+                this.fileWatcher.close();
+                console.log(chalk_1.default.dim('👀 File watcher stopped'));
+            }
+            catch (error) {
+                console.log(chalk_1.default.gray(`File watcher cleanup warning: ${error.message}`));
+            }
+        }
+        // Complete any running progress operations
+        if (this.progressTracker) {
+            try {
+                const running = Array.from(this.progressTracker.operations.values())
+                    .filter((op) => op.status === 'running');
+                running.forEach((op) => {
+                    this.progressTracker.complete(op.id, false, 'Interrupted by shutdown');
+                });
+                if (running.length > 0) {
+                    console.log(chalk_1.default.dim(`📊 Stopped ${running.length} running operations`));
+                }
+            }
+            catch (error) {
+                console.log(chalk_1.default.gray(`Progress tracker cleanup warning: ${error.message}`));
+            }
+        }
+        // Save both caches before shutdown
+        try {
+            await Promise.all([
+                token_cache_1.tokenCache.saveCache(),
+                completion_protocol_cache_1.completionCache.saveCache()
+            ]);
+            console.log(chalk_1.default.dim('💾 All caches saved'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.gray(`Cache save warning: ${error.message}`));
+        }
+        // Clean up UI resources
+        this.indicators.clear();
+        this.liveUpdates.length = 0;
+        this.spinners.forEach(spinner => {
+            try {
+                spinner.stop();
+            }
+            catch (error) {
+                // Ignore spinner cleanup errors
+            }
+        });
+        this.spinners.clear();
+        this.progressBars.forEach(bar => {
+            try {
+                bar.stop();
+            }
+            catch (error) {
+                // Ignore progress bar cleanup errors
+            }
+        });
+        this.progressBars.clear();
         if (this.rl) {
             this.rl.close();
         }
         // Cleanup systems
         this.agentManager.cleanup();
+        console.log(chalk_1.default.green('✅ All systems cleaned up successfully!'));
         console.log(chalk_1.default.green('✓ Goodbye!'));
         process.exit(0);
     }

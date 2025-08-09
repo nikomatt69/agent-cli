@@ -20,6 +20,8 @@ import { exec, execSync } from 'child_process';
 import chalk from 'chalk';
 import { promisify } from 'util';
 import { compactAnalysis, safeStringifyContext, truncateForPrompt } from '../utils/analysis-utils';
+import { tokenCache } from '../core/token-cache';
+import { completionCache } from '../core/completion-protocol-cache';
 
 const execAsync = promisify(exec);
 
@@ -402,6 +404,49 @@ export class AdvancedAIProvider implements AutonomousProvider {
     const tools = this.getAdvancedTools();
 
     try {
+      // ADVANCED: Check completion protocol cache first (ultra-efficient)
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      const systemContext = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+
+      if (lastUserMessage) {
+        // Try completion protocol cache first (most efficient)
+        const userContent = typeof lastUserMessage.content === 'string'
+          ? lastUserMessage.content
+          : Array.isArray(lastUserMessage.content)
+            ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+            : String(lastUserMessage.content);
+
+        const completionRequest = {
+          prefix: userContent,
+          context: systemContext.substring(0, 300),
+          maxTokens: 1000,
+          temperature: 0.7,
+          model: this.currentModel
+        };
+
+        const protocolCompletion = await completionCache.getCompletion(completionRequest);
+        if (protocolCompletion) {
+          yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
+          yield { type: 'text_delta', content: protocolCompletion.completion };
+          yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
+          return;
+        }
+
+        // Fallback to full response cache
+        const cachedResponse = await tokenCache.getCachedResponse(
+          userContent,
+          systemContext.substring(0, 500),
+          ['chat', 'autonomous']
+        );
+
+        if (cachedResponse) {
+          yield { type: 'start', content: '🎯 Using cached response...' };
+          yield { type: 'text_delta', content: cachedResponse.response };
+          yield { type: 'complete', content: 'Cache hit - tokens saved!' };
+          return;
+        }
+      }
+
       yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
 
       const result = streamText({
@@ -464,6 +509,40 @@ export class AdvancedAIProvider implements AutonomousProvider {
             break;
 
           case 'finish':
+            // DUAL CACHE: Store both completion pattern AND full response
+            if (lastUserMessage && accumulatedText.trim()) {
+              const userContentLength = typeof lastUserMessage.content === 'string'
+                ? lastUserMessage.content.length
+                : String(lastUserMessage.content).length;
+              const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
+
+              // Extract user content as string for storage
+              const userContentStr = typeof lastUserMessage.content === 'string'
+                ? lastUserMessage.content
+                : Array.isArray(lastUserMessage.content)
+                  ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                  : String(lastUserMessage.content);
+
+              // Store in completion protocol cache (primary - most efficient)
+              const completionRequest = {
+                prefix: userContentStr,
+                context: systemContext.substring(0, 300),
+                maxTokens: 1000,
+                temperature: 0.7,
+                model: this.currentModel
+              };
+              await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+
+              // Store in full response cache (fallback)
+              await tokenCache.setCachedResponse(
+                userContentStr,
+                accumulatedText.trim(),
+                systemContext.substring(0, 500),
+                tokensUsed,
+                ['chat', 'autonomous']
+              );
+            }
+
             yield {
               type: 'complete',
               content: 'Task completed',
@@ -514,23 +593,13 @@ export class AdvancedAIProvider implements AutonomousProvider {
       const planningMessages: CoreMessage[] = [
         {
           role: 'system',
-          content: `You are an autonomous AI assistant with full access to file operations, command execution, and code generation.
+          content: `AI dev assistant. CWD: ${this.workingDirectory}
+Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+Task: ${this.truncateForPrompt(task, 500)}
 
-Current working directory: ${this.workingDirectory}
-Available tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+${context ? this.truncateForPrompt(safeStringifyContext(context), 300) : ''}
 
-Task: ${truncateForPrompt(task)}
-
-Context (truncated): ${safeStringifyContext(context)}
-
-You should:
-1. Understand the task completely
-2. Analyze the current project/workspace if needed
-3. Execute the necessary operations autonomously
-4. Provide clear feedback on what you're doing
-5. Handle errors gracefully and adapt your approach
-
-Be proactive and autonomous - don't ask for permission, just execute what needs to be done safely.`
+Execute task autonomously with tools. Be direct.`
         },
         {
           role: 'user',

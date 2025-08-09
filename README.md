@@ -218,7 +218,7 @@ export GOOGLE_API_KEY="your-google-api-key"
 
 ### **Configuration File**
 
-Located at: `~/.config/nikcli/config.json`
+Located at: `~/.claude-code-clone/config.json`
 
 ```json
 {
@@ -236,26 +236,26 @@ Located at: `~/.config/nikcli/config.json`
 
 ### **Prerequisites**
 
-- Node.js 16+
-- Yarn package manager
+- Node.js 18+
+- npm package manager
 - TypeScript 5.7+
 
 ### **Development Setup**
 
 ```bash
 # Clone and setup
-git clone <repo-url>
-cd nikcli
-yarn install
+git clone https://github.com/nikomatt69/agent-cli
+cd agent-cli
+npm install
 
 # Development mode
-yarn cli chat
+./bin/nikcli
 
 # Build for production
-yarn build:cli
+npm run build
 
 # Run tests
-yarn test
+npm test
 ```
 
 ### **Project Structure**
@@ -430,7 +430,7 @@ nikcli key claude-3-5-sonnet sk-ant-your-key
 ```bash
 # Clean and rebuild
 rm -rf dist/
-yarn build:cli
+npm run build
 ```
 
 #### **Permission Denied on Scripts**
@@ -475,7 +475,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 - **OpenAI, Anthropic, Google** - AI model providers
 - **Claude Code** - Original inspiration
 - **TypeScript** - Type safety and developer experience
-- **Yarn** - Package management
+- **npm** - Package management
 
 ## 🚀 Roadmap
 

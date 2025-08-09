@@ -4,3 +4,6 @@ node_modules
 CLAUDE.md
 tsconfig.cli.tsbuildinfo
 tsconfig.tsbuildinfo
+build/
+*.tgz
+.nikcli

@@ -8,7 +8,7 @@ import os from 'os';
  */
 export class GuidanceManager {
   private files = [
-    path.join(os.homedir(), '.ai-coder-cli', 'AGENTS.md'),
+    path.join(os.homedir(), '.ai-coder-cli', 'AGENTS.md', 'CLAUDE.md', 'NIKOCLI.md', 'CODEX.md'),
     'AGENTS.md',
     path.join(process.cwd(), 'AGENTS.md'),
   ];

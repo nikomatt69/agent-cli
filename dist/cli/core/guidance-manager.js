@@ -14,7 +14,7 @@ const os_1 = __importDefault(require("os"));
 class GuidanceManager {
     constructor() {
         this.files = [
-            path_1.default.join(os_1.default.homedir(), '.ai-coder-cli', 'AGENTS.md'),
+            path_1.default.join(os_1.default.homedir(), '.ai-coder-cli', 'AGENTS.md', 'CLAUDE.md', 'NIKOCLI.md', 'CODEX.md'),
             'AGENTS.md',
             path_1.default.join(process.cwd(), 'AGENTS.md'),
         ];

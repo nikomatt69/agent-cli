@@ -909,7 +909,7 @@ export class UniversalAgent implements Agent {
   }
 
   private async loadGuidanceFiles(): Promise<void> {
-    const guidanceFiles = ['CLAUDE.md', 'NIKOCLI.md', 'README.md', 'package.json', '.gitignore'];
+    const guidanceFiles = ['NIKOCLI.md', 'CLAUDE.md', 'README.md', 'package.json', '.gitignore'];
     let loadedGuidance = '';
 
     for (const file of guidanceFiles) {
