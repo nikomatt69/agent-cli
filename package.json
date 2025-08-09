@@ -1,5 +1,5 @@
 {
-  "name": "claude-code-clone",
+  "name": "niko-cli",
   "version": "3.0.0",
   "description": "Unified Claude Code Clone - Context-Aware AI Development Assistant",
   "main": "src/cli/main.ts",
