@@ -19,7 +19,7 @@ class TextWrapper {
      * Wrap long blue text with proper line breaks and indentation
      */
     static wrapBlueText(text, indent = '  ', maxWidth) {
-        const terminalWidth = maxWidth || this.defaultWidth;
+        const terminalWidth = maxWidth || 80;
         const availableWidth = terminalWidth - indent.length - 4; // Account for colors and padding
         if (text.length <= availableWidth) {
             return chalk_1.default.blue(text);

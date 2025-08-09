@@ -15,6 +15,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:run` - Run all tests once
 - `npm run test:watch` - Run tests in watch mode
 
+### Binary Build Commands
+- `npm run build:binary` - Create binaries for all iOS/macOS targets:
+  - `build/nikcli-aarch64-apple-darwin` - macOS ARM64
+  - `build/nikcli-aarch64-apple-ios` - iOS ARM64 
+  - `build/nikcli-aarch64-apple-ios-sim` - iOS Simulator ARM64
+  - `build/nikcli-x86_64-apple-ios` - iOS Simulator Intel
+
 ### Binary Execution
 - `./bin/cli.ts` - Direct execution via shebang (delegates to `src/cli/index.ts`)
 - `nikcli` - NPM binary command (when installed globally)
