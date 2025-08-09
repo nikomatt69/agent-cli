@@ -140,7 +140,7 @@ export class SimpleConfigManager {
 
   constructor() {
     // Create config directory in user's home directory
-    const configDir = path.join(os.homedir(), '.claude-code-clone');
+    const configDir = path.join(os.homedir(), '.nikcli');
     this.configPath = path.join(configDir, 'config.json');
 
     // Ensure config directory exists

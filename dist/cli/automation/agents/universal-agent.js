@@ -102,7 +102,7 @@ class UniversalAgent {
             'architecture-review',
             'documentation-generation'
         ];
-        this.version = '3.0.0';
+        this.version = '0.1.2-beta';
         this.status = 'initializing';
         this.currentTasks = 0;
         this.maxConcurrentTasks = 3;

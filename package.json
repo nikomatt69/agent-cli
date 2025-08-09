@@ -1,20 +1,32 @@
 {
-  "name": "niko-cli",
-  "version": "3.0.0",
+  "name": "@cadcamfun/niko-cli",
+  "version": "0.1.2-beta",
   "description": "Unified Claude Code Clone - Context-Aware AI Development Assistant",
-  "main": "src/cli/main.ts",
+  "main": "dist/cli/index.js",
   "bin": {
-    "nikcli": "./bin/cli.ts"
+    "nikcli": "dist/cli/index.js"
+  },
+  "files": [
+    "dist/**",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
   },
   "scripts": {
-    "start": "ts-node --project tsconfig.cli.json bin/cli.ts",
+    "start": "ts-node --project tsconfig.cli.json src/cli/index.ts",
     "dev": "npm start",
     "build": "tsc --project tsconfig.cli.json",
+    "prepublishOnly": "npm run build",
     "build:start": "npm run build && node dist/cli/index.js",
     "test": "vitest",
     "test:run": "vitest run",
     "test:watch": "vitest --watch",
     "lint": "eslint src --ext .ts,.tsx"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^0.0.50",

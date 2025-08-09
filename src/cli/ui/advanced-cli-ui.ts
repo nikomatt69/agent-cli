@@ -74,7 +74,7 @@ export class AdvancedCliUI {
    */
   showHeader(): void {
     const header = boxen(
-      `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v3.0.0')}\\n` +
+      `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.2-beta')}\\n` +
       `${chalk.gray('Autonomous AI Developer Assistant')}\\n\\n` +
       `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\\n` +
       `${chalk.blue('Mode:')} Interactive  ${chalk.blue('Live Updates:')} Enabled`,
@@ -104,7 +104,7 @@ export class AdvancedCliUI {
     };
 
     this.indicators.set(id, indicator);
-    
+
     if (this.isInteractiveMode) {
       this.refreshDisplay();
     } else {
@@ -118,7 +118,7 @@ export class AdvancedCliUI {
    * Update status indicator
    */
   updateIndicator(
-    id: string, 
+    id: string,
     updates: Partial<StatusIndicator>
   ): void {
     const indicator = this.indicators.get(id);
@@ -181,7 +181,7 @@ export class AdvancedCliUI {
       this.spinners.delete(id);
     }
 
-    this.updateIndicator(id, { 
+    this.updateIndicator(id, {
       status: success ? 'completed' : 'failed',
       details: finalText,
     });
@@ -230,8 +230,8 @@ export class AdvancedCliUI {
       this.progressBars.delete(id);
     }
 
-    this.updateIndicator(id, { 
-      status: 'completed', 
+    this.updateIndicator(id, {
+      status: 'completed',
       progress: 100,
       details: message,
     });
@@ -330,7 +330,7 @@ export class AdvancedCliUI {
     console.log(chalk.gray('═'.repeat(80)));
 
     const indicators = Array.from(this.indicators.values());
-    
+
     if (indicators.length === 0) {
       console.log(chalk.gray('No active tasks'));
       return;
@@ -345,13 +345,13 @@ export class AdvancedCliUI {
    * Ask user for confirmation with enhanced UI
    */
   async askConfirmation(
-    question: string, 
-    details?: string, 
+    question: string,
+    details?: string,
     defaultValue: boolean = false
   ): Promise<boolean> {
     const icon = defaultValue ? '✅' : '❓';
     const prompt = `${icon} ${chalk.cyan(question)}`;
-    
+
     if (details) {
       console.log(chalk.gray(`   ${details}`));
     }
@@ -364,7 +364,7 @@ export class AdvancedCliUI {
 
       rl.question(`${prompt} ${chalk.gray(defaultValue ? '(Y/n)' : '(y/N)')}: `, (answer) => {
         rl.close();
-        
+
         const normalized = answer.toLowerCase().trim();
         if (normalized === '') {
           resolve(defaultValue);
@@ -403,13 +403,13 @@ export class AdvancedCliUI {
       const prompt = `\\nSelect option (1-${choices.length}, default ${defaultIndex + 1}): `;
       rl.question(prompt, (answer) => {
         rl.close();
-        
+
         let selection = defaultIndex;
         const num = parseInt(answer.trim());
         if (!isNaN(num) && num >= 1 && num <= choices.length) {
           selection = num - 1;
         }
-        
+
         console.log(chalk.green(`✓ Selected: ${choices[selection].label}`));
         resolve(choices[selection].value);
       });
@@ -421,12 +421,12 @@ export class AdvancedCliUI {
    */
   startFileWatcher(pattern: string): string {
     const watcherId = `watch-${Date.now()}`;
-    
+
     this.createIndicator(watcherId, `Watching files: ${pattern}`);
     this.updateIndicator(watcherId, { status: 'running' });
-    
+
     this.logInfo(`👀 Started watching: ${pattern}`);
-    
+
     return watcherId;
   }
 
@@ -435,8 +435,8 @@ export class AdvancedCliUI {
    */
   reportFileChange(watcherId: string, filePath: string, changeType: 'created' | 'modified' | 'deleted'): void {
     const emoji = changeType === 'created' ? '📄' :
-                  changeType === 'modified' ? '✏️' : '🗑️';
-    
+      changeType === 'modified' ? '✏️' : '🗑️';
+
     this.addLiveUpdate({
       type: 'info',
       content: `${emoji} ${changeType}: ${filePath}`,
@@ -452,7 +452,7 @@ export class AdvancedCliUI {
 
     // Move cursor to top and clear
     process.stdout.write('\\x1B[2J\\x1B[H');
-    
+
     this.showHeader();
     this.showActiveIndicators();
     this.showRecentUpdates();
@@ -463,7 +463,7 @@ export class AdvancedCliUI {
    */
   private showActiveIndicators(): void {
     const indicators = Array.from(this.indicators.values());
-    
+
     if (indicators.length === 0) return;
 
     console.log(chalk.blue.bold('📊 Active Tasks:'));
@@ -481,7 +481,7 @@ export class AdvancedCliUI {
    */
   private showRecentUpdates(): void {
     const recentUpdates = this.liveUpdates.slice(-10);
-    
+
     if (recentUpdates.length === 0) return;
 
     console.log(chalk.blue.bold('📝 Recent Updates:'));
@@ -499,20 +499,20 @@ export class AdvancedCliUI {
     const statusIcon = this.getStatusIcon(indicator.status);
     const statusColor = this.getStatusColor(indicator.status);
     const duration = this.getDuration(indicator);
-    
+
     let line = `${statusIcon} ${chalk.bold(indicator.title)}`;
-    
+
     if (indicator.progress !== undefined) {
       const progressBar = this.createProgressBarString(indicator.progress);
       line += ` ${progressBar}`;
     }
-    
+
     if (duration) {
       line += ` ${chalk.gray(`(${duration})`)}`;
     }
-    
+
     console.log(line);
-    
+
     if (indicator.details) {
       console.log(`   ${chalk.gray(indicator.details)}`);
     }
@@ -528,19 +528,19 @@ export class AdvancedCliUI {
 
     console.log(`\\n${statusIcon} ${chalk.bold(indicator.title)}`);
     console.log(`   Status: ${statusColor(indicator.status.toUpperCase())}`);
-    
+
     if (indicator.details) {
       console.log(`   Details: ${indicator.details}`);
     }
-    
+
     if (indicator.progress !== undefined) {
       console.log(`   Progress: ${indicator.progress}%`);
     }
-    
+
     if (duration) {
       console.log(`   Duration: ${duration}`);
     }
-    
+
     if (indicator.subItems && indicator.subItems.length > 0) {
       console.log(`   Sub-tasks: ${indicator.subItems.length}`);
       indicator.subItems.forEach(subItem => {
@@ -557,7 +557,7 @@ export class AdvancedCliUI {
     const timeStr = update.timestamp.toLocaleTimeString();
     const typeColor = this.getUpdateTypeColor(update.type);
     const sourceStr = update.source ? chalk.gray(`[${update.source}]`) : '';
-    
+
     const line = `${chalk.gray(timeStr)} ${sourceStr} ${typeColor(update.content)}`;
     console.log(line);
   }
@@ -568,9 +568,9 @@ export class AdvancedCliUI {
   private logStatusUpdate(indicator: StatusIndicator): void {
     const statusIcon = this.getStatusIcon(indicator.status);
     const statusColor = this.getStatusColor(indicator.status);
-    
+
     console.log(`${statusIcon} ${statusColor(indicator.title)}`);
-    
+
     if (indicator.details) {
       console.log(`   ${chalk.gray(indicator.details)}`);
     }
@@ -614,17 +614,17 @@ export class AdvancedCliUI {
   private createProgressBarString(progress: number, width: number = 20): string {
     const filled = Math.round((progress / 100) * width);
     const empty = width - filled;
-    
+
     const bar = chalk.cyan('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
     return `[${bar}] ${progress}%`;
   }
 
   private getDuration(indicator: StatusIndicator): string | null {
     if (!indicator.startTime) return null;
-    
+
     const endTime = indicator.endTime || new Date();
     const duration = endTime.getTime() - indicator.startTime.getTime();
-    
+
     const seconds = Math.round(duration / 1000);
     if (seconds < 60) {
       return `${seconds}s`;
@@ -637,28 +637,28 @@ export class AdvancedCliUI {
 
   private getOverallStatus(): string {
     const indicators = Array.from(this.indicators.values());
-    
+
     if (indicators.length === 0) return chalk.gray('Idle');
-    
+
     const hasRunning = indicators.some(i => i.status === 'running');
     const hasFailed = indicators.some(i => i.status === 'failed');
     const hasWarning = indicators.some(i => i.status === 'warning');
-    
+
     if (hasRunning) return chalk.blue('Running');
     if (hasFailed) return chalk.red('Failed');
     if (hasWarning) return chalk.yellow('Warning');
-    
+
     return chalk.green('Ready');
   }
 
   private getOverallStatusText(): string {
     const indicators = Array.from(this.indicators.values());
-    
+
     if (indicators.length === 0) return chalk.gray('No tasks');
-    
+
     const completed = indicators.filter(i => i.status === 'completed').length;
     const failed = indicators.filter(i => i.status === 'failed').length;
-    
+
     if (failed > 0) {
       return chalk.red('Some tasks failed');
     } else if (completed === indicators.length) {
@@ -675,7 +675,7 @@ export class AdvancedCliUI {
     // Stop all spinners
     this.spinners.forEach(spinner => spinner.stop());
     this.spinners.clear();
-    
+
     // Stop all progress bars
     this.progressBars.forEach(bar => bar.stop());
     this.progressBars.clear();

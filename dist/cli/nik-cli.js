@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
+        desc = { enumerable: true, get: function () { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
+}) : (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
+}) : function (o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
+    var ownKeys = function (o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -338,7 +338,7 @@ class NikCLI {
         this.showRecentUpdates();
     }
     showAdvancedHeader() {
-        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v3.0.0')}\n` +
+        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.2-beta')}\n` +
             `${chalk_1.default.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk_1.default.blue('Status:')} ${this.getOverallStatus()}  ${chalk_1.default.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk_1.default.blue('Mode:')} ${this.currentMode}  ${chalk_1.default.blue('Live Updates:')} Enabled`, {
@@ -1948,8 +1948,8 @@ class NikCLI {
         try {
             // Build context-aware message for AI planning
             const messages = [{
-                    role: 'system',
-                    content: `You are an expert project planner. Create a detailed, actionable plan to accomplish the given goal.
+                role: 'system',
+                content: `You are an expert project planner. Create a detailed, actionable plan to accomplish the given goal.
 
 Generate a JSON array of todo items with the following structure:
 {
@@ -1970,10 +1970,10 @@ Generate a JSON array of todo items with the following structure:
 }
 
 Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical and executable.`
-                }, {
-                    role: 'user',
-                    content: `Create a detailed plan to: ${goal}`
-                }];
+            }, {
+                role: 'user',
+                content: `Create a detailed plan to: ${goal}`
+            }];
             // Stream AI response for real-time feedback
             let assistantText = '';
             for await (const ev of advanced_ai_provider_1.advancedAIProvider.streamChatWithFullAutonomy(messages)) {
@@ -2012,18 +2012,18 @@ Project Context:\n${context}\n\nGenerate a comprehensive plan that is practical 
             console.log(chalk_1.default.red(`❌ Failed to generate AI plan: ${error.message}`));
             // Fallback: create a simple todo
             return [{
-                    id: `todo-${Date.now()}`,
-                    title: 'Execute Task',
-                    description: goal,
-                    status: 'pending',
-                    priority: 'medium',
-                    category: 'implementation',
-                    estimatedDuration: 60,
-                    dependencies: [],
-                    tags: ['manual'],
-                    reasoning: 'Fallback todo when AI planning fails',
-                    createdAt: new Date(),
-                }];
+                id: `todo-${Date.now()}`,
+                title: 'Execute Task',
+                description: goal,
+                status: 'pending',
+                priority: 'medium',
+                category: 'implementation',
+                estimatedDuration: 60,
+                dependencies: [],
+                tags: ['manual'],
+                reasoning: 'Fallback todo when AI planning fails',
+                createdAt: new Date(),
+            }];
         }
     }
     displayAdvancedPlan(plan) {

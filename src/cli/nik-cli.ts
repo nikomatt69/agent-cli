@@ -427,7 +427,7 @@ export class NikCLI {
 
     private showAdvancedHeader(): void {
         const header = boxen(
-            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v3.0.0')}\n` +
+            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.2-beta')}\n` +
             `${chalk.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk.blue('Mode:')} ${this.currentMode}  ${chalk.blue('Live Updates:')} Enabled`,

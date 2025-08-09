@@ -8,17 +8,17 @@ export function registerAgents(agentManager: AgentManager): void {
     name: 'Universal Agent',
     description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
     specialization: 'universal',
-    version: '3.0.0',
+    version: '0.1.2-beta',
     capabilities: [
       // Core capabilities
       'code-generation',
-      'code-analysis', 
+      'code-analysis',
       'code-review',
       'optimization',
       'debugging',
       'refactoring',
       'testing',
-      
+
       // Frontend capabilities
       'react',
       'nextjs',
@@ -31,7 +31,7 @@ export function registerAgents(agentManager: AgentManager): void {
       'hooks',
       'jsx',
       'tsx',
-      
+
       // Backend capabilities
       'backend',
       'nodejs',
@@ -41,7 +41,7 @@ export function registerAgents(agentManager: AgentManager): void {
       'rest-api',
       'graphql',
       'microservices',
-      
+
       // DevOps capabilities
       'devops',
       'ci-cd',
@@ -51,14 +51,14 @@ export function registerAgents(agentManager: AgentManager): void {
       'infrastructure',
       'monitoring',
       'security',
-      
+
       // Autonomous capabilities
       'file-operations',
       'project-creation',
       'autonomous-coding',
       'system-administration',
       'full-stack-development',
-      
+
       // Analysis capabilities
       'performance-analysis',
       'security-analysis',
