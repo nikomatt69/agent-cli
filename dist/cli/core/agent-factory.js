@@ -12,6 +12,7 @@ const agent_stream_1 = require("./agent-stream");
 const workspace_context_1 = require("../context/workspace-context");
 const chalk_1 = __importDefault(require("chalk"));
 const nanoid_1 = require("nanoid");
+const config_manager_1 = require("./config-manager");
 // Helper function to extract JSON from markdown code blocks
 function extractJsonFromMarkdown(text) {
     // Try to find JSON wrapped in code blocks
@@ -391,9 +392,70 @@ class AgentFactory {
         this.blueprints = new Map();
         this.instances = new Map();
     }
+    // Create fallback blueprint when AI generation fails
+    createFallbackBlueprint(specialization) {
+        const lowerSpec = specialization.toLowerCase();
+        // Determine capabilities based on specialization keywords
+        const capabilities = [];
+        const requiredTools = ['Read', 'Write'];
+        if (lowerSpec.includes('react') || lowerSpec.includes('frontend') || lowerSpec.includes('ui') || lowerSpec.includes('component')) {
+            capabilities.push('react', 'frontend', 'jsx', 'tsx', 'components', 'hooks', 'css', 'html');
+            requiredTools.push('Bash', 'InstallPackage');
+        }
+        if (lowerSpec.includes('backend') || lowerSpec.includes('api') || lowerSpec.includes('server') || lowerSpec.includes('node')) {
+            capabilities.push('backend', 'nodejs', 'api-development', 'rest-api', 'database');
+            requiredTools.push('Bash', 'InstallPackage');
+        }
+        if (lowerSpec.includes('test') || lowerSpec.includes('testing')) {
+            capabilities.push('testing', 'jest', 'unit-testing', 'integration-testing');
+            requiredTools.push('Bash');
+        }
+        if (lowerSpec.includes('devops') || lowerSpec.includes('deploy') || lowerSpec.includes('docker')) {
+            capabilities.push('devops', 'docker', 'ci-cd', 'deployment');
+            requiredTools.push('Bash', 'Docker');
+        }
+        if (lowerSpec.includes('nextjs') || lowerSpec.includes('next.js')) {
+            capabilities.push('nextjs', 'react', 'ssr', 'routing', 'frontend');
+            requiredTools.push('Bash', 'InstallPackage');
+        }
+        // Default capabilities if none matched
+        if (capabilities.length === 0) {
+            capabilities.push('code-analysis', 'code-generation', 'planning', 'execution');
+            requiredTools.push('Bash');
+        }
+        const name = specialization.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        return {
+            name,
+            description: `Specialized agent for ${specialization}`,
+            systemPrompt: `You are a specialized AI agent focused on ${specialization}. You have expertise in the relevant technologies and can help with planning, analysis, and implementation tasks.`,
+            capabilities,
+            requiredTools,
+            workingStyle: 'adaptive',
+            personality: {
+                proactive: 75,
+                collaborative: 70,
+                analytical: 85,
+                creative: 60
+            }
+        };
+    }
     // Create a new agent blueprint
     async createAgentBlueprint(requirements) {
         console.log(chalk_1.default.blue(`🧬 Creating agent blueprint for: ${requirements.specialization}`));
+        // Verify model configuration and API key before proceeding
+        try {
+            const modelInfo = model_provider_1.modelProvider.getCurrentModelInfo();
+            const hasApiKey = model_provider_1.modelProvider.validateApiKey();
+            if (!hasApiKey) {
+                const currentModel = config_manager_1.configManager.getCurrentModel();
+                throw new Error(`API key not configured for model: ${currentModel}. Use /set-key ${currentModel} <your-api-key>`);
+            }
+            console.log(chalk_1.default.gray(`Using model: ${modelInfo.name} (${modelInfo.config.provider})`));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Model configuration error: ${error.message}`));
+            throw error;
+        }
         // Use AI to generate comprehensive blueprint
         const messages = [
             {
@@ -425,9 +487,19 @@ Context Scope: ${requirements.contextScope || 'project'}`,
             },
         ];
         try {
+            console.log(chalk_1.default.gray('Generating AI blueprint...'));
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
+            console.log(chalk_1.default.gray('Parsing AI response...'));
             const jsonText = extractJsonFromMarkdown(response);
-            const aiBlueprint = JSON.parse(jsonText);
+            let aiBlueprint;
+            try {
+                aiBlueprint = JSON.parse(jsonText);
+            }
+            catch (parseError) {
+                console.log(chalk_1.default.yellow('⚠️ Failed to parse AI response, using fallback blueprint'));
+                // Create fallback blueprint when AI response is not valid JSON
+                aiBlueprint = this.createFallbackBlueprint(requirements.specialization);
+            }
             const blueprint = {
                 id: (0, nanoid_1.nanoid)(),
                 name: aiBlueprint.name || requirements.specialization.toLowerCase().replace(/\s+/g, '-'),
@@ -456,7 +528,38 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Failed to create agent blueprint: ${error.message}`));
-            throw error;
+            // Try to create a fallback blueprint if the main process fails
+            console.log(chalk_1.default.yellow('🔄 Creating fallback blueprint...'));
+            try {
+                const fallbackBlueprint = this.createFallbackBlueprint(requirements.specialization);
+                const blueprint = {
+                    id: (0, nanoid_1.nanoid)(),
+                    name: fallbackBlueprint.name,
+                    description: fallbackBlueprint.description,
+                    specialization: requirements.specialization,
+                    systemPrompt: fallbackBlueprint.systemPrompt,
+                    capabilities: fallbackBlueprint.capabilities,
+                    requiredTools: fallbackBlueprint.requiredTools,
+                    personality: {
+                        proactive: requirements.personality?.proactive || 70,
+                        collaborative: requirements.personality?.collaborative || 60,
+                        analytical: requirements.personality?.analytical || 80,
+                        creative: requirements.personality?.creative || 50,
+                    },
+                    autonomyLevel: requirements.autonomyLevel || 'semi-autonomous',
+                    contextScope: requirements.contextScope || 'project',
+                    workingStyle: 'adaptive',
+                    createdAt: new Date(),
+                };
+                this.blueprints.set(blueprint.id, blueprint);
+                console.log(chalk_1.default.green(`✅ Fallback agent blueprint created: ${blueprint.name}`));
+                console.log(chalk_1.default.gray(`   Capabilities: ${blueprint.capabilities.join(', ')}`));
+                return blueprint;
+            }
+            catch (fallbackError) {
+                console.log(chalk_1.default.red(`❌ Fallback blueprint creation also failed: ${fallbackError}`));
+                throw error; // Throw the original error
+            }
         }
     }
     // Launch an agent from a blueprint

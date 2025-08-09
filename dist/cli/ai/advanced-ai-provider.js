@@ -7,6 +7,7 @@ exports.advancedAIProvider = exports.AdvancedAIProvider = void 0;
 const anthropic_1 = require("@ai-sdk/anthropic");
 const openai_1 = require("@ai-sdk/openai");
 const google_1 = require("@ai-sdk/google");
+const ollama_ai_provider_1 = require("ollama-ai-provider");
 const ai_1 = require("ai");
 const zod_1 = require("zod");
 const config_manager_1 = require("../core/config-manager");
@@ -15,10 +16,17 @@ const path_1 = require("path");
 const child_process_1 = require("child_process");
 const chalk_1 = __importDefault(require("chalk"));
 const util_1 = require("util");
+const analysis_utils_1 = require("../utils/analysis-utils");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
         throw new Error('Method not implemented.');
+    }
+    // Truncate long free-form strings to keep prompts safe
+    truncateForPrompt(s, maxChars = 2000) {
+        if (!s)
+            return '';
+        return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
     }
     constructor() {
         this.workingDirectory = process.cwd();
@@ -229,9 +237,15 @@ class AdvancedAIProvider {
                             analyzeDependencies,
                             securityScan
                         });
-                        // Store complete analysis in context
+                        // Store complete analysis in context (may be large)
                         this.executionContext.set('project:analysis', analysis);
-                        return analysis;
+                        // Return a compact, chunk-safe summary to avoid prompt overflow
+                        const compact = (0, analysis_utils_1.compactAnalysis)(analysis, {
+                            maxDirs: 40,
+                            maxFiles: 150,
+                            maxChars: 8000,
+                        });
+                        return compact;
                     }
                     catch (error) {
                         return { error: `Project analysis failed: ${error.message}` };
@@ -420,10 +434,18 @@ class AdvancedAIProvider {
     }
     // Execute autonomous task with intelligent planning
     async *executeAutonomousTask(task, context) {
-        yield { type: 'start', content: `🎯 Starting autonomous task: ${task}` };
+        yield { type: 'start', content: `🎯 Starting task: ${task}` };
         // First, analyze the task and create a plan
         yield { type: 'thinking', content: 'Analyzing task and creating execution plan...' };
         try {
+            // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
+            if (context && Array.isArray(context.messages)) {
+                const providedMessages = context.messages;
+                for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
+                    yield event;
+                }
+                return;
+            }
             const planningMessages = [
                 {
                     role: 'system',
@@ -432,9 +454,9 @@ class AdvancedAIProvider {
 Current working directory: ${this.workingDirectory}
 Available tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
 
-Your task: ${task}
+Task: ${(0, analysis_utils_1.truncateForPrompt)(task)}
 
-Context: ${JSON.stringify(context || {})}
+Context (truncated): ${(0, analysis_utils_1.safeStringifyContext)(context)}
 
 You should:
 1. Understand the task completely
@@ -461,6 +483,31 @@ Be proactive and autonomous - don't ask for permission, just execute what needs 
                 error: error.message,
                 content: `Autonomous execution failed: ${error.message}`
             };
+        }
+    }
+    // Safely stringify and truncate large contexts to prevent prompt overflow
+    safeStringifyContext(ctx, maxChars = 4000) {
+        if (!ctx)
+            return '{}';
+        try {
+            const str = JSON.stringify(ctx, (key, value) => {
+                // Truncate long strings
+                if (typeof value === 'string') {
+                    return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+                }
+                // Limit large arrays
+                if (Array.isArray(value)) {
+                    const limited = value.slice(0, 20);
+                    if (value.length > 20)
+                        limited.push('…[+' + (value.length - 20) + ' more]');
+                    return limited;
+                }
+                return value;
+            });
+            return str.length > maxChars ? str.slice(0, maxChars) + '…[truncated]' : str;
+        }
+        catch {
+            return '[unstringifiable context]';
         }
     }
     // Helper methods for intelligent analysis
@@ -756,28 +803,35 @@ Requirements:
         if (!configData) {
             throw new Error(`Model ${model} not found in configuration`);
         }
-        const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
-        if (!apiKey) {
-            throw new Error(`No API key found for model ${model}`);
-        }
         // Configure providers with API keys properly
         // Create provider instances with API keys, then get the specific model
         switch (configData.provider) {
-            case 'openai':
-                const openaiProvider = (0, openai_1.createOpenAI)({
-                    apiKey: apiKey
-                });
+            case 'openai': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (OpenAI)`);
+                const openaiProvider = (0, openai_1.createOpenAI)({ apiKey });
                 return openaiProvider(configData.model);
-            case 'anthropic':
-                const anthropicProvider = (0, anthropic_1.createAnthropic)({
-                    apiKey: apiKey
-                });
+            }
+            case 'anthropic': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (Anthropic)`);
+                const anthropicProvider = (0, anthropic_1.createAnthropic)({ apiKey });
                 return anthropicProvider(configData.model);
-            case 'google':
-                const googleProvider = (0, google_1.createGoogleGenerativeAI)({
-                    apiKey: apiKey
-                });
+            }
+            case 'google': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (Google)`);
+                const googleProvider = (0, google_1.createGoogleGenerativeAI)({ apiKey });
                 return googleProvider(configData.model);
+            }
+            case 'ollama': {
+                // Ollama runs locally and does not require API keys
+                const ollamaProvider = (0, ollama_ai_provider_1.createOllama)({});
+                return ollamaProvider(configData.model);
+            }
             default:
                 throw new Error(`Unsupported provider: ${configData.provider}`);
         }

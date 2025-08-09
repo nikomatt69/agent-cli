@@ -47,6 +47,7 @@ const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
 const readline = __importStar(require("readline"));
 const events_1 = require("events");
+const child_process_1 = require("child_process");
 // Core imports
 const nik_cli_1 = require("./nik-cli");
 const agent_service_1 = require("./services/agent-service");
@@ -130,6 +131,17 @@ exports.IntroductionModule = IntroductionModule;
  */
 class SystemModule {
     static async checkApiKeys() {
+        // Allow running without API keys when using an Ollama model
+        try {
+            const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+            const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
+            if (modelCfg && modelCfg.provider === 'ollama') {
+                return true;
+            }
+        }
+        catch (_) {
+            // ignore config read errors, fall back to env checks
+        }
         const anthropicKey = process.env.ANTHROPIC_API_KEY;
         const openaiKey = process.env.OPENAI_API_KEY;
         const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -145,11 +157,86 @@ class SystemModule {
         console.log(chalk_1.default.green(`✅ Node.js ${version}`));
         return true;
     }
+    static async checkOllamaAvailability() {
+        // Only enforce when current provider is Ollama
+        try {
+            const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+            const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
+            if (!modelCfg || modelCfg.provider !== 'ollama') {
+                // Not applicable – clear status indicator
+                SystemModule.lastOllamaStatus = undefined;
+                return true;
+            }
+        }
+        catch (_) {
+            return true; // don't block if config is unreadable
+        }
+        try {
+            const host = process.env.OLLAMA_HOST || '127.0.0.1:11434';
+            const base = host.startsWith('http') ? host : `http://${host}`;
+            const res = await fetch(`${base}/api/tags`, { method: 'GET' });
+            if (!res.ok) {
+                SystemModule.lastOllamaStatus = false;
+                console.log(chalk_1.default.red(`❌ Ollama reachable at ${base} but returned status ${res.status}`));
+                return false;
+            }
+            const data = await res.json().catch(() => null);
+            if (!data || !Array.isArray(data.models)) {
+                console.log(chalk_1.default.yellow('⚠️ Unexpected response from Ollama when listing models'));
+            }
+            else {
+                const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+                const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
+                const name = modelCfg?.model;
+                const present = data.models.some((m) => m?.name === name || m?.model === name);
+                if (!present && name) {
+                    console.log(chalk_1.default.yellow(`⚠️ Ollama is running but model "${name}" is not present.`));
+                    // Offer to pull the model now
+                    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+                    const answer = await new Promise(resolve => rl.question(`Pull model now with "ollama pull ${name}"? (Y/n): `, resolve));
+                    rl.close();
+                    if (!answer || answer.toLowerCase().startsWith('y')) {
+                        console.log(chalk_1.default.blue(`⏳ Pulling model ${name}...`));
+                        const code = await new Promise((resolve) => {
+                            const child = (0, child_process_1.spawn)('ollama', ['pull', name], { stdio: 'inherit' });
+                            child.on('close', (code) => resolve(code ?? 1));
+                            child.on('error', () => resolve(1));
+                        });
+                        if (code === 0) {
+                            console.log(chalk_1.default.green(`✅ Model ${name} pulled successfully`));
+                        }
+                        else {
+                            console.log(chalk_1.default.red(`❌ Failed to pull model ${name}. You can try manually: ollama pull ${name}`));
+                            SystemModule.lastOllamaStatus = false;
+                            return false;
+                        }
+                    }
+                    else {
+                        console.log(chalk_1.default.gray(`   You can pull it later with: ollama pull ${name}`));
+                        SystemModule.lastOllamaStatus = false;
+                        return false;
+                    }
+                }
+            }
+            console.log(chalk_1.default.green('✅ Ollama service detected'));
+            SystemModule.lastOllamaStatus = true;
+            return true;
+        }
+        catch (err) {
+            const host = process.env.OLLAMA_HOST || '127.0.0.1:11434';
+            const base = host.startsWith('http') ? host : `http://${host}`;
+            console.log(chalk_1.default.red(`❌ Ollama service not reachable at ${base}`));
+            console.log(chalk_1.default.gray('   Start it with "ollama serve" or open the Ollama app. Install: https://ollama.com'));
+            SystemModule.lastOllamaStatus = false;
+            return false;
+        }
+    }
     static async checkSystemRequirements() {
         console.log(chalk_1.default.blue('🔍 Checking system requirements...'));
         const checks = [
             this.checkNodeVersion(),
-            await this.checkApiKeys()
+            await this.checkApiKeys(),
+            await this.checkOllamaAvailability()
         ];
         const allPassed = checks.every(r => r);
         if (allPassed) {
@@ -345,8 +432,35 @@ class StreamingModule extends events_1.EventEmitter {
             modes.push(chalk_1.default.green('auto-accept'));
         const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
         const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
+        // Model/provider badge with Ollama status dot
+        let modelBadge = '';
+        try {
+            const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+            const models = config_manager_1.simpleConfigManager.get('models') || {};
+            const modelCfg = models[currentModel] || {};
+            const provider = modelCfg.provider || 'unknown';
+            // Status dot only meaningful for Ollama
+            let dot = chalk_1.default.dim('●');
+            if (provider === 'ollama') {
+                if (SystemModule.lastOllamaStatus === true)
+                    dot = chalk_1.default.green('●');
+                else if (SystemModule.lastOllamaStatus === false)
+                    dot = chalk_1.default.red('●');
+                else
+                    dot = chalk_1.default.yellow('●');
+            }
+            const prov = chalk_1.default.magenta(provider);
+            const name = chalk_1.default.white(currentModel || 'model');
+            modelBadge = `${prov}:${name}${provider === 'ollama' ? ` ${dot}` : ''}`;
+        }
+        catch (_) {
+            modelBadge = chalk_1.default.gray('model:unknown');
+        }
+        // Assistant status dot: green when active (with …), red when waiting for input
+        const statusDot = this.processingMessage ? chalk_1.default.green('●') + chalk_1.default.dim('…') : chalk_1.default.red('●');
+        const statusBadge = `asst:${statusDot}`;
         // Realistic prompt styling (no rainbow)
-        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
+        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]─[${statusBadge}]─[${modelBadge}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
@@ -358,12 +472,22 @@ class StreamingModule extends events_1.EventEmitter {
         return [hits.length ? hits : all, line];
     }
     showCommandMenu() {
-        console.log(chalk_1.default.cyan('\n📋 Available Commands:'));
-        console.log(chalk_1.default.gray('─'.repeat(40)));
-        console.log(`${chalk_1.default.green('/help')}     Show detailed help`);
-        console.log(`${chalk_1.default.green('/agents')}   List available agents`);
-        console.log(`${chalk_1.default.green('/status')}   Show system status`);
-        console.log(`${chalk_1.default.green('/clear')}    Clear session`);
+        const lines = [];
+        lines.push(`${chalk_1.default.bold('📋 Available Commands')}`);
+        lines.push('');
+        lines.push(`${chalk_1.default.green('/help')}     Show detailed help`);
+        lines.push(`${chalk_1.default.green('/agents')}   List available agents`);
+        lines.push(`${chalk_1.default.green('/status')}   Show system status`);
+        lines.push(`${chalk_1.default.green('/clear')}    Clear session`);
+        const content = lines.join('\n');
+        console.log((0, boxen_1.default)(content, {
+            padding: { top: 0, right: 2, bottom: 0, left: 2 },
+            margin: { top: 1, right: 0, bottom: 0, left: 0 },
+            borderStyle: 'round',
+            borderColor: 'cyan',
+            title: chalk_1.default.cyan('Command Menu'),
+            titleAlignment: 'center'
+        }));
     }
     cycleMode() {
         this.context.planMode = !this.context.planMode;
@@ -388,10 +512,14 @@ class StreamingModule extends events_1.EventEmitter {
             return;
         this.processingMessage = true;
         message.status = 'processing';
+        // Update prompt to reflect active status
+        this.showPrompt();
         // Process message based on type
         setTimeout(() => {
             message.status = 'completed';
             this.processingMessage = false;
+            // Update prompt to reflect idle status
+            this.showPrompt();
         }, 100);
     }
     gracefulExit() {
@@ -470,13 +598,69 @@ class MainOrchestrator {
             // Wait a moment for visual effect
             await new Promise(resolve => setTimeout(resolve, 1500));
             // Check system requirements
-            const requirementsMet = await SystemModule.checkSystemRequirements();
+            let requirementsMet = await SystemModule.checkSystemRequirements();
             if (!requirementsMet) {
-                if (!(await SystemModule.checkApiKeys())) {
-                    IntroductionModule.displayApiKeySetup();
+                const hasKeysOrOllama = await SystemModule.checkApiKeys();
+                if (!hasKeysOrOllama) {
+                    // Interactive fallback to switch to an Ollama model
+                    try {
+                        const models = config_manager_1.simpleConfigManager.get('models');
+                        let ollamaEntries = Object.entries(models).filter(([, cfg]) => cfg.provider === 'ollama');
+                        if (ollamaEntries.length > 0) {
+                            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+                            const answer = await new Promise(resolve => rl.question('No API keys found. Use a local Ollama model instead? (Y/n): ', resolve));
+                            rl.close();
+                            if (!answer || answer.toLowerCase().startsWith('y')) {
+                                // Choose Ollama model
+                                let chosenName = ollamaEntries[0][0];
+                                if (ollamaEntries.length > 1) {
+                                    console.log(chalk_1.default.cyan('\nAvailable Ollama models:'));
+                                    ollamaEntries.forEach(([name, cfg], idx) => {
+                                        console.log(`  [${idx + 1}] ${name} (${cfg.model})`);
+                                    });
+                                    const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+                                    const pick = await new Promise(resolve => rl2.question('Select model number (default 1): ', resolve));
+                                    rl2.close();
+                                    const i = parseInt((pick || '1').trim(), 10);
+                                    if (!isNaN(i) && i >= 1 && i <= ollamaEntries.length) {
+                                        chosenName = ollamaEntries[i - 1][0];
+                                    }
+                                }
+                                config_manager_1.simpleConfigManager.setCurrentModel(chosenName);
+                                console.log(chalk_1.default.green(`\n✅ Switched to Ollama model: ${chosenName}`));
+                            }
+                            else {
+                                IntroductionModule.displayApiKeySetup();
+                            }
+                        }
+                        else {
+                            // Offer to add a default Ollama model if none configured
+                            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+                            const answer = await new Promise(resolve => rl.question('No API keys and no Ollama models configured. Add default Ollama model (llama3.1:8b)? (Y/n): ', resolve));
+                            rl.close();
+                            if (!answer || answer.toLowerCase().startsWith('y')) {
+                                const defaultName = 'llama3.1:8b';
+                                config_manager_1.simpleConfigManager.addModel(defaultName, { provider: 'ollama', model: 'llama3.1:8b' });
+                                config_manager_1.simpleConfigManager.setCurrentModel(defaultName);
+                                // refresh entries so re-check passes
+                                const refreshed = config_manager_1.simpleConfigManager.get('models');
+                                ollamaEntries = Object.entries(refreshed).filter(([, cfg]) => cfg.provider === 'ollama');
+                                console.log(chalk_1.default.green(`\n✅ Added and switched to Ollama model: ${defaultName}`));
+                            }
+                            else {
+                                IntroductionModule.displayApiKeySetup();
+                            }
+                        }
+                    }
+                    catch (_) {
+                        IntroductionModule.displayApiKeySetup();
+                    }
                 }
-                console.log(chalk_1.default.red('\n❌ Cannot start - system requirements not met'));
-                process.exit(1);
+                // Re-check after potential switch; do not exit if still not met
+                requirementsMet = await SystemModule.checkSystemRequirements();
+                if (!requirementsMet) {
+                    console.log(chalk_1.default.yellow('\n⚠️ Continuing without API keys. You can set them later with /set-key or switch models.'));
+                }
             }
             // Display startup info
             IntroductionModule.displayStartupInfo();

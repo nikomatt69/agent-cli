@@ -92,7 +92,7 @@ class GuidanceManager {
         await this.scanProjectGuidance(this.workingDirectory);
     }
     async scanProjectGuidance(dir) {
-        const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md'];
+        const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md', 'NIKOCLI.md'];
         try {
             const items = fs.readdirSync(dir, { withFileTypes: true });
             // Check for guidance files in current directory
@@ -234,6 +234,7 @@ class GuidanceManager {
         const watchPaths = [
             path.join(this.globalGuidanceDir, '*.md'),
             path.join(this.workingDirectory, '**/CLAUDE.md'),
+            path.join(this.workingDirectory, '**/NIKOCLI.md'),
             path.join(this.workingDirectory, '**/CODEX.md'),
             path.join(this.workingDirectory, '**/AGENTS.md')
         ];
@@ -413,6 +414,28 @@ Instructions for Codex AI assistant.
 - Never modify .git directory directly
 - Back up important files before major changes
 `,
+            nikocli: `# NIKOCLI.md
+
+Codebase and user instructions are shown below. Be sure to adhere to these instructions.
+
+## Development Commands
+
+### Next.js Web Application
+- \`npm run dev\` - Start Next.js development server on http://localhost:3000
+- \`npm run build\` - Build the Next.js application for production
+- \`npm run start\` - Start the production Next.js server
+- \`npm run lint\` - Run ESLint for code linting
+
+## Architecture Overview
+
+This is an autonomous AI-powered CLI coding assistant.
+
+## Important Instructions
+
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files`,
             agents: `---
 name: "Project Agent Configuration"
 version: "1.0"

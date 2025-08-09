@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOllama } from 'ollama-ai-provider';
 import {
   generateText,
   streamText,
@@ -18,6 +19,7 @@ import { join, relative, resolve, dirname, extname } from 'path';
 import { exec, execSync } from 'child_process';
 import chalk from 'chalk';
 import { promisify } from 'util';
+import { compactAnalysis, safeStringifyContext, truncateForPrompt } from '../utils/analysis-utils';
 
 const execAsync = promisify(exec);
 
@@ -39,6 +41,12 @@ export interface AutonomousProvider {
 export class AdvancedAIProvider implements AutonomousProvider {
   generateWithTools(planningMessages: CoreMessage[]) {
     throw new Error('Method not implemented.');
+  }
+
+  // Truncate long free-form strings to keep prompts safe
+  private truncateForPrompt(s: string, maxChars: number = 2000): string {
+    if (!s) return '';
+    return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
   }
   private currentModel: string;
   private workingDirectory: string = process.cwd();
@@ -274,10 +282,17 @@ export class AdvancedAIProvider implements AutonomousProvider {
               securityScan
             });
 
-            // Store complete analysis in context
+            // Store complete analysis in context (may be large)
             this.executionContext.set('project:analysis', analysis);
 
-            return analysis;
+            // Return a compact, chunk-safe summary to avoid prompt overflow
+            const compact = compactAnalysis(analysis, {
+              maxDirs: 40,
+              maxFiles: 150,
+              maxChars: 8000,
+            });
+
+            return compact;
           } catch (error: any) {
             return { error: `Project analysis failed: ${error.message}` };
           }
@@ -383,7 +398,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Claude Code style streaming with full autonomy
   async *streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent> {
-    const model = this.getModel();
+    const model = this.getModel() as any;
     const tools = this.getAdvancedTools();
 
     try {
@@ -481,12 +496,21 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Execute autonomous task with intelligent planning
   async *executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent> {
-    yield { type: 'start', content: `🎯 Starting autonomous task: ${task}` };
+    yield { type: 'start', content: `🎯 Starting task: ${task}` };
 
     // First, analyze the task and create a plan
     yield { type: 'thinking', content: 'Analyzing task and creating execution plan...' };
 
     try {
+      // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
+      if (context && Array.isArray(context.messages)) {
+        const providedMessages: CoreMessage[] = context.messages;
+        for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
+          yield event;
+        }
+        return;
+      }
+
       const planningMessages: CoreMessage[] = [
         {
           role: 'system',
@@ -495,9 +519,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
 Current working directory: ${this.workingDirectory}
 Available tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
 
-Your task: ${task}
+Task: ${truncateForPrompt(task)}
 
-Context: ${JSON.stringify(context || {})}
+Context (truncated): ${safeStringifyContext(context)}
 
 You should:
 1. Understand the task completely
@@ -525,6 +549,29 @@ Be proactive and autonomous - don't ask for permission, just execute what needs 
         error: error.message,
         content: `Autonomous execution failed: ${error.message}`
       };
+    }
+  }
+
+  // Safely stringify and truncate large contexts to prevent prompt overflow
+  private safeStringifyContext(ctx: any, maxChars: number = 4000): string {
+    if (!ctx) return '{}';
+    try {
+      const str = JSON.stringify(ctx, (key, value) => {
+        // Truncate long strings
+        if (typeof value === 'string') {
+          return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+        }
+        // Limit large arrays
+        if (Array.isArray(value)) {
+          const limited = value.slice(0, 20);
+          if (value.length > 20) limited.push('…[+' + (value.length - 20) + ' more]');
+          return limited;
+        }
+        return value;
+      });
+      return str.length > maxChars ? str.slice(0, maxChars) + '…[truncated]' : str;
+    } catch {
+      return '[unstringifiable context]';
     }
   }
 
@@ -822,7 +869,7 @@ Requirements:
 - Ensure code is production-ready`;
 
     try {
-      const model = this.getModel();
+      const model = this.getModel() as any;
       const result = await generateText({
         model,
         prompt: codeGenPrompt,
@@ -843,7 +890,7 @@ Requirements:
   }
 
   // Model management
-  private getModel(modelName?: string) {
+  private getModel(modelName?: string): any {
     const model = modelName || this.currentModel || configManager.get('currentModel');
     const allModels = configManager.get('models');
     const configData = allModels[model];
@@ -852,29 +899,32 @@ Requirements:
       throw new Error(`Model ${model} not found in configuration`);
     }
 
-    const apiKey = configManager.getApiKey(model);
-    if (!apiKey) {
-      throw new Error(`No API key found for model ${model}`);
-    }
-
     // Configure providers with API keys properly
     // Create provider instances with API keys, then get the specific model
     switch (configData.provider) {
-      case 'openai':
-        const openaiProvider = createOpenAI({
-          apiKey: apiKey
-        });
+      case 'openai': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (OpenAI)`);
+        const openaiProvider = createOpenAI({ apiKey });
         return openaiProvider(configData.model);
-      case 'anthropic':
-        const anthropicProvider = createAnthropic({
-          apiKey: apiKey
-        });
+      }
+      case 'anthropic': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (Anthropic)`);
+        const anthropicProvider = createAnthropic({ apiKey });
         return anthropicProvider(configData.model);
-      case 'google':
-        const googleProvider = createGoogleGenerativeAI({
-          apiKey: apiKey
-        });
+      }
+      case 'google': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (Google)`);
+        const googleProvider = createGoogleGenerativeAI({ apiKey });
         return googleProvider(configData.model);
+      }
+      case 'ollama': {
+        // Ollama runs locally and does not require API keys
+        const ollamaProvider = createOllama({});
+        return ollamaProvider(configData.model);
+      }
       default:
         throw new Error(`Unsupported provider: ${configData.provider}`);
     }

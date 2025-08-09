@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // Validation schemas
 const ModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google', 'ollama']),
+  provider: z.enum(['openai', 'anthropic', 'google']),
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().min(1).max(8000).optional(),
@@ -67,10 +67,6 @@ export class SimpleConfigManager {
       provider: 'openai',
       model: 'gpt-4o-mini',
     },
-    'gpt-5': {
-      provider: 'openai',
-      model: 'gpt-5',
-    },
     'gpt-4o': {
       provider: 'openai',
       model: 'gpt-4o',
@@ -98,18 +94,6 @@ export class SimpleConfigManager {
     'gemini-1.5-pro': {
       provider: 'google',
       model: 'gemini-1.5-pro',
-    },
-    'llama3.1:8b': {
-      provider: 'ollama',
-      model: 'llama3.1:8b',
-    },
-    'codellama:7b': {
-      provider: 'ollama',
-      model: 'codellama:7b',
-    },
-    'mistral:7b': {
-      provider: 'ollama',
-      model: 'mistral:7b',
     },
   };
 
@@ -214,8 +198,6 @@ export class SimpleConfigManager {
           return process.env.ANTHROPIC_API_KEY;
         case 'google':
           return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-        case 'ollama':
-          return undefined; // Ollama doesn't need API keys
       }
     }
 

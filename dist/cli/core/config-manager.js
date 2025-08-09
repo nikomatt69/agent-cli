@@ -44,7 +44,7 @@ const chalk_1 = __importDefault(require("chalk"));
 const zod_1 = require("zod");
 // Validation schemas
 const ModelConfigSchema = zod_1.z.object({
-    provider: zod_1.z.enum(['openai', 'anthropic', 'google']),
+    provider: zod_1.z.enum(['openai', 'anthropic', 'google', 'ollama']),
     model: zod_1.z.string(),
     temperature: zod_1.z.number().min(0).max(2).optional(),
     maxTokens: zod_1.z.number().min(1).max(8000).optional(),
@@ -55,6 +55,8 @@ const ConfigSchema = zod_1.z.object({
     maxTokens: zod_1.z.number().min(1).max(8000).default(4000),
     chatHistory: zod_1.z.boolean().default(true),
     maxHistoryLength: zod_1.z.number().min(1).max(1000).default(100),
+    // Optional system prompt for general chat mode
+    systemPrompt: zod_1.z.string().optional(),
     autoAnalyzeWorkspace: zod_1.z.boolean().default(true),
     enableAutoApprove: zod_1.z.boolean().default(false),
     preferredAgent: zod_1.z.string().optional(),
@@ -95,6 +97,10 @@ class SimpleConfigManager {
                 provider: 'openai',
                 model: 'gpt-4o-mini',
             },
+            'gpt-5': {
+                provider: 'openai',
+                model: 'gpt-5',
+            },
             'gpt-4o': {
                 provider: 'openai',
                 model: 'gpt-4o',
@@ -123,6 +129,18 @@ class SimpleConfigManager {
                 provider: 'google',
                 model: 'gemini-1.5-pro',
             },
+            'llama3.1:8b': {
+                provider: 'ollama',
+                model: 'llama3.1:8b',
+            },
+            'codellama:7b': {
+                provider: 'ollama',
+                model: 'codellama:7b',
+            },
+            'mistral:7b': {
+                provider: 'ollama',
+                model: 'mistral:7b',
+            },
         };
         this.defaultConfig = {
             currentModel: 'claude-sonnet-4-20250514',
@@ -130,6 +148,7 @@ class SimpleConfigManager {
             maxTokens: 4000,
             chatHistory: true,
             maxHistoryLength: 100,
+            systemPrompt: undefined,
             autoAnalyzeWorkspace: true,
             enableAutoApprove: false,
             models: this.defaultModels,
@@ -215,6 +234,8 @@ class SimpleConfigManager {
                     return process.env.ANTHROPIC_API_KEY;
                 case 'google':
                     return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+                case 'ollama':
+                    return undefined; // Ollama doesn't need API keys
             }
         }
         return undefined;

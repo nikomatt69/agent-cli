@@ -14,6 +14,10 @@ const tools_manager_1 = require("../tools/tools-manager");
 const agent_factory_1 = require("../core/agent-factory");
 const agent_stream_1 = require("../core/agent-stream");
 const workspace_context_1 = require("../context/workspace-context");
+const enhanced_planning_1 = require("../planning/enhanced-planning");
+const approval_system_1 = require("../ui/approval-system");
+const diff_viewer_1 = require("../ui/diff-viewer");
+const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 class SlashCommandHandler {
     constructor() {
         this.commands = new Map();
@@ -37,6 +41,7 @@ class SlashCommandHandler {
         this.commands.set('stats', this.statsCommand.bind(this));
         this.commands.set('temp', this.temperatureCommand.bind(this));
         this.commands.set('history', this.historyCommand.bind(this));
+        this.commands.set('debug', this.debugCommand.bind(this));
         this.commands.set('agent', this.agentCommand.bind(this));
         this.commands.set('agents', this.listAgentsCommand.bind(this));
         this.commands.set('auto', this.autonomousCommand.bind(this));
@@ -46,6 +51,11 @@ class SlashCommandHandler {
         this.commands.set('launch-agent', this.launchAgentCommand.bind(this));
         this.commands.set('context', this.contextCommand.bind(this));
         this.commands.set('stream', this.streamCommand.bind(this));
+        // Planning and Todo Commands
+        this.commands.set('plan', this.planCommand.bind(this));
+        this.commands.set('todo', this.todoCommand.bind(this));
+        this.commands.set('todos', this.todosCommand.bind(this));
+        this.commands.set('approval', this.approvalCommand.bind(this));
         // File operations
         this.commands.set('read', this.readFileCommand.bind(this));
         this.commands.set('write', this.writeFileCommand.bind(this));
@@ -322,6 +332,68 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         console.log(chalk_1.default.green(`✅ Chat history ${setting === 'on' ? 'enabled' : 'disabled'}`));
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
+    async debugCommand() {
+        console.log(chalk_1.default.blue.bold('\n🔍 Debug Information:'));
+        console.log(chalk_1.default.gray('═'.repeat(40)));
+        try {
+            // Test model configuration
+            const currentModel = config_manager_1.configManager.getCurrentModel();
+            console.log(chalk_1.default.green(`Current Model: ${currentModel}`));
+            const models = config_manager_1.configManager.get('models');
+            const currentModelConfig = models[currentModel];
+            if (!currentModelConfig) {
+                console.log(chalk_1.default.red(`❌ Model configuration missing for: ${currentModel}`));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            console.log(chalk_1.default.green(`Provider: ${currentModelConfig.provider}`));
+            console.log(chalk_1.default.green(`Model: ${currentModelConfig.model}`));
+            // Test API key
+            const apiKey = config_manager_1.configManager.getApiKey(currentModel);
+            if (apiKey) {
+                console.log(chalk_1.default.green(`✅ API Key: ${apiKey.slice(0, 10)}...${apiKey.slice(-4)} (${apiKey.length} chars)`));
+            }
+            else {
+                console.log(chalk_1.default.red(`❌ API Key: Not configured`));
+                console.log(chalk_1.default.yellow(`   Set with: /set-key ${currentModel} <your-api-key>`));
+            }
+            // Test model provider validation
+            try {
+                const isValid = model_provider_1.modelProvider.validateApiKey();
+                console.log(chalk_1.default.green(`✅ Model Provider Validation: ${isValid ? 'Valid' : 'Invalid'}`));
+            }
+            catch (error) {
+                console.log(chalk_1.default.red(`❌ Model Provider Validation Failed: ${error.message}`));
+            }
+            // Test a simple generation
+            try {
+                console.log(chalk_1.default.blue('\n🧪 Testing AI Generation...'));
+                const testResponse = await model_provider_1.modelProvider.generateResponse({
+                    messages: [{ role: 'user', content: 'Say "test successful"' }],
+                    maxTokens: 20
+                });
+                console.log(chalk_1.default.green(`✅ Test Generation: ${testResponse.trim()}`));
+            }
+            catch (error) {
+                console.log(chalk_1.default.red(`❌ Test Generation Failed: ${error.message}`));
+            }
+            // Environment variables
+            console.log(chalk_1.default.blue('\n🌍 Environment Variables:'));
+            const envVars = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'];
+            envVars.forEach(envVar => {
+                const value = process.env[envVar];
+                if (value) {
+                    console.log(chalk_1.default.green(`✅ ${envVar}: ${value.slice(0, 10)}...${value.slice(-4)}`));
+                }
+                else {
+                    console.log(chalk_1.default.gray(`❌ ${envVar}: Not set`));
+                }
+            });
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Debug error: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
     async listAgentsCommand() {
         console.log(chalk_1.default.blue.bold('\n🤖 Available Agents:'));
         console.log(chalk_1.default.gray('─'.repeat(40)));
@@ -489,10 +561,24 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         try {
             const filePath = args[0];
             const content = args.slice(1).join(' ');
+            // Create FileDiff for approval
+            const fileDiff = await diff_viewer_1.DiffViewer.createFileDiff(filePath);
+            fileDiff.newContent = content;
+            // Request approval before writing
+            const approved = await approval_system_1.approvalSystem.requestFileApproval(`Write file: ${filePath}`, [fileDiff], 'medium');
+            if (!approved) {
+                console.log(chalk_1.default.yellow('❌ File write operation cancelled'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            // Create progress indicator
+            const writeId = advanced_cli_ui_1.advancedUI.createIndicator('file-write', `Writing ${filePath}`).id;
+            advanced_cli_ui_1.advancedUI.startSpinner(writeId, 'Writing file...');
             await tools_manager_1.toolsManager.writeFile(filePath, content);
+            advanced_cli_ui_1.advancedUI.stopSpinner(writeId, true, `File written: ${filePath}`);
             console.log(chalk_1.default.green(`✅ File written: ${filePath}`));
         }
         catch (error) {
+            advanced_cli_ui_1.advancedUI.logError(`Error writing file: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error writing file: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -574,16 +660,29 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         try {
             const [command, ...commandArgs] = args;
-            console.log(chalk_1.default.blue(`⚡ Running: ${command} ${commandArgs.join(' ')}`));
+            const fullCommand = `${command} ${commandArgs.join(' ')}`;
+            // Request approval for command execution
+            const approved = await approval_system_1.approvalSystem.requestCommandApproval(command, commandArgs, process.cwd());
+            if (!approved) {
+                console.log(chalk_1.default.yellow('❌ Command execution cancelled'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            console.log(chalk_1.default.blue(`⚡ Running: ${fullCommand}`));
+            // Create progress indicator
+            const cmdId = advanced_cli_ui_1.advancedUI.createIndicator('command', `Executing: ${command}`).id;
+            advanced_cli_ui_1.advancedUI.startSpinner(cmdId, `Running: ${fullCommand}`);
             const result = await tools_manager_1.toolsManager.runCommand(command, commandArgs, { stream: true });
             if (result.code === 0) {
+                advanced_cli_ui_1.advancedUI.stopSpinner(cmdId, true, 'Command completed successfully');
                 console.log(chalk_1.default.green('✅ Command completed successfully'));
             }
             else {
+                advanced_cli_ui_1.advancedUI.stopSpinner(cmdId, false, `Command failed with exit code ${result.code}`);
                 console.log(chalk_1.default.red(`❌ Command failed with exit code ${result.code}`));
             }
         }
         catch (error) {
+            advanced_cli_ui_1.advancedUI.logError(`Error running command: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error running command: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -600,15 +699,38 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             const isDev = args.includes('--dev') || args.includes('-D');
             const manager = args.includes('--yarn') ? 'yarn' :
                 args.includes('--pnpm') ? 'pnpm' : 'npm';
+            // Request approval for package installation
+            const approved = await approval_system_1.approvalSystem.requestPackageApproval(packages, manager, isGlobal);
+            if (!approved) {
+                console.log(chalk_1.default.yellow('❌ Package installation cancelled'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
             console.log(chalk_1.default.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
-            for (const pkg of packages) {
-                const success = await tools_manager_1.toolsManager.installPackage(pkg, { global: isGlobal, dev: isDev, manager: manager });
+            // Create progress indicator
+            const installId = advanced_cli_ui_1.advancedUI.createIndicator('install', `Installing packages`).id;
+            advanced_cli_ui_1.advancedUI.createProgressBar(installId, 'Installing packages', packages.length);
+            for (let i = 0; i < packages.length; i++) {
+                const pkg = packages[i];
+                advanced_cli_ui_1.advancedUI.updateSpinner(installId, `Installing ${pkg}...`);
+                const success = await tools_manager_1.toolsManager.installPackage(pkg, {
+                    global: isGlobal,
+                    dev: isDev,
+                    manager: manager
+                });
                 if (!success) {
+                    advanced_cli_ui_1.advancedUI.logWarning(`Failed to install ${pkg}`);
                     console.log(chalk_1.default.yellow(`⚠️ Failed to install ${pkg}`));
                 }
+                else {
+                    advanced_cli_ui_1.advancedUI.logSuccess(`Installed ${pkg}`);
+                }
+                advanced_cli_ui_1.advancedUI.updateProgress(installId, i + 1, packages.length);
             }
+            advanced_cli_ui_1.advancedUI.completeProgress(installId, `Completed installation of ${packages.length} packages`);
+            console.log(chalk_1.default.green(`✅ Package installation completed`));
         }
         catch (error) {
+            advanced_cli_ui_1.advancedUI.logError(`Error installing packages: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error installing packages: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -830,6 +952,240 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Error updating context: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    // Planning and Todo Commands
+    async planCommand(args) {
+        if (args.length === 0) {
+            // Show plan status
+            enhanced_planning_1.enhancedPlanning.showPlanStatus();
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const subcommand = args[0].toLowerCase();
+        const restArgs = args.slice(1);
+        try {
+            switch (subcommand) {
+                case 'create':
+                case 'generate': {
+                    if (restArgs.length === 0) {
+                        console.log(chalk_1.default.red('Usage: /plan create <goal>'));
+                        console.log(chalk_1.default.gray('Example: /plan create "Create a React todo app with backend"'));
+                        return { shouldExit: false, shouldUpdatePrompt: false };
+                    }
+                    const goal = restArgs.join(' ');
+                    console.log(chalk_1.default.blue(`🎯 Creating plan for: ${goal}`));
+                    const plan = await enhanced_planning_1.enhancedPlanning.generatePlan(goal, {
+                        maxTodos: 15,
+                        includeContext: true,
+                        showDetails: true,
+                        saveTodoFile: true,
+                    });
+                    console.log(chalk_1.default.green(`✅ Plan created with ${plan.todos.length} todos`));
+                    console.log(chalk_1.default.cyan(`📝 Plan ID: ${plan.id}`));
+                    console.log(chalk_1.default.gray('Use /plan execute to run the plan or /plan approve to review it'));
+                    break;
+                }
+                case 'execute':
+                case 'run': {
+                    const planId = restArgs[0];
+                    if (!planId) {
+                        // Get the most recent plan
+                        const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
+                        const latestPlan = plans[plans.length - 1];
+                        if (!latestPlan) {
+                            console.log(chalk_1.default.yellow('No active plans found. Create one with /plan create <goal>'));
+                            return { shouldExit: false, shouldUpdatePrompt: false };
+                        }
+                        console.log(chalk_1.default.blue(`Executing latest plan: ${latestPlan.title}`));
+                        await enhanced_planning_1.enhancedPlanning.executePlan(latestPlan.id);
+                    }
+                    else {
+                        await enhanced_planning_1.enhancedPlanning.executePlan(planId);
+                    }
+                    break;
+                }
+                case 'approve': {
+                    const planId = restArgs[0];
+                    if (!planId) {
+                        const plans = enhanced_planning_1.enhancedPlanning.getActivePlans().filter(p => p.status === 'draft');
+                        if (plans.length === 0) {
+                            console.log(chalk_1.default.yellow('No plans pending approval'));
+                            return { shouldExit: false, shouldUpdatePrompt: false };
+                        }
+                        const latestPlan = plans[plans.length - 1];
+                        console.log(chalk_1.default.blue(`Reviewing latest plan: ${latestPlan.title}`));
+                        await enhanced_planning_1.enhancedPlanning.requestPlanApproval(latestPlan.id);
+                    }
+                    else {
+                        await enhanced_planning_1.enhancedPlanning.requestPlanApproval(planId);
+                    }
+                    break;
+                }
+                case 'show':
+                case 'status': {
+                    const planId = restArgs[0];
+                    enhanced_planning_1.enhancedPlanning.showPlanStatus(planId);
+                    break;
+                }
+                case 'list': {
+                    const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
+                    if (plans.length === 0) {
+                        console.log(chalk_1.default.gray('No active plans'));
+                    }
+                    else {
+                        console.log(chalk_1.default.blue.bold('Active Plans:'));
+                        plans.forEach((plan, index) => {
+                            const statusIcon = plan.status === 'completed' ? '✅' :
+                                plan.status === 'executing' ? '🔄' :
+                                    plan.status === 'approved' ? '🟢' :
+                                        plan.status === 'failed' ? '❌' : '⏳';
+                            console.log(`  ${index + 1}. ${statusIcon} ${plan.title} (${plan.todos.length} todos)`);
+                            console.log(`     Status: ${plan.status} | Created: ${plan.createdAt.toLocaleDateString()}`);
+                        });
+                    }
+                    break;
+                }
+                default:
+                    console.log(chalk_1.default.red(`Unknown plan command: ${subcommand}`));
+                    console.log(chalk_1.default.gray('Available commands: create, execute, approve, show, list'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Plan command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async todoCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.blue('Usage: /todo <command>'));
+            console.log(chalk_1.default.gray('Commands: list, show, open, edit'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const subcommand = args[0].toLowerCase();
+        try {
+            switch (subcommand) {
+                case 'list':
+                case 'ls': {
+                    const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
+                    if (plans.length === 0) {
+                        console.log(chalk_1.default.gray('No todo lists found'));
+                        return { shouldExit: false, shouldUpdatePrompt: false };
+                    }
+                    console.log(chalk_1.default.blue.bold('Todo Lists:'));
+                    plans.forEach((plan, index) => {
+                        console.log(`\n${index + 1}. ${chalk_1.default.bold(plan.title)}`);
+                        console.log(`   Status: ${plan.status} | Todos: ${plan.todos.length}`);
+                        const completed = plan.todos.filter(t => t.status === 'completed').length;
+                        const inProgress = plan.todos.filter(t => t.status === 'in_progress').length;
+                        const pending = plan.todos.filter(t => t.status === 'pending').length;
+                        const failed = plan.todos.filter(t => t.status === 'failed').length;
+                        console.log(`   ✅ ${completed} | 🔄 ${inProgress} | ⏳ ${pending} | ❌ ${failed}`);
+                    });
+                    break;
+                }
+                case 'show': {
+                    const planId = args[1];
+                    if (!planId) {
+                        const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
+                        const latestPlan = plans[plans.length - 1];
+                        if (latestPlan) {
+                            enhanced_planning_1.enhancedPlanning.showPlanStatus(latestPlan.id);
+                        }
+                        else {
+                            console.log(chalk_1.default.yellow('No todo lists found'));
+                        }
+                    }
+                    else {
+                        enhanced_planning_1.enhancedPlanning.showPlanStatus(planId);
+                    }
+                    break;
+                }
+                case 'open':
+                case 'edit': {
+                    const todoPath = 'todo.md';
+                    console.log(chalk_1.default.blue(`Opening ${todoPath} in your default editor...`));
+                    try {
+                        await tools_manager_1.toolsManager.runCommand('code', [todoPath]);
+                    }
+                    catch {
+                        try {
+                            await tools_manager_1.toolsManager.runCommand('open', [todoPath]);
+                        }
+                        catch {
+                            console.log(chalk_1.default.yellow(`Could not open ${todoPath}. Please open it manually.`));
+                        }
+                    }
+                    break;
+                }
+                default:
+                    console.log(chalk_1.default.red(`Unknown todo command: ${subcommand}`));
+                    console.log(chalk_1.default.gray('Available commands: list, show, open, edit'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Todo command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async todosCommand(args) {
+        // Alias for /todo list
+        return await this.todoCommand(['list', ...args]);
+    }
+    async approvalCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.blue('Approval System Configuration:'));
+            const config = approval_system_1.approvalSystem.getConfig();
+            console.log(JSON.stringify(config, null, 2));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const subcommand = args[0].toLowerCase();
+        try {
+            switch (subcommand) {
+                case 'auto-approve': {
+                    const type = args[1];
+                    const enabled = args[2] === 'true' || args[2] === 'on';
+                    if (!type) {
+                        console.log(chalk_1.default.red('Usage: /approval auto-approve <type> <on|off>'));
+                        console.log(chalk_1.default.gray('Types: low-risk, medium-risk, file-operations, package-installs'));
+                        return { shouldExit: false, shouldUpdatePrompt: false };
+                    }
+                    const currentConfig = approval_system_1.approvalSystem.getConfig();
+                    const newConfig = { ...currentConfig };
+                    switch (type) {
+                        case 'low-risk':
+                            newConfig.autoApprove.lowRisk = enabled;
+                            break;
+                        case 'medium-risk':
+                            newConfig.autoApprove.mediumRisk = enabled;
+                            break;
+                        case 'file-operations':
+                            newConfig.autoApprove.fileOperations = enabled;
+                            break;
+                        case 'package-installs':
+                            newConfig.autoApprove.packageInstalls = enabled;
+                            break;
+                        default:
+                            console.log(chalk_1.default.red(`Unknown approval type: ${type}`));
+                            return { shouldExit: false, shouldUpdatePrompt: false };
+                    }
+                    approval_system_1.approvalSystem.updateConfig(newConfig);
+                    console.log(chalk_1.default.green(`✅ Auto-approval for ${type} ${enabled ? 'enabled' : 'disabled'}`));
+                    break;
+                }
+                case 'test': {
+                    console.log(chalk_1.default.blue('Testing approval system...'));
+                    const approved = await approval_system_1.approvalSystem.quickApproval('Test Approval', 'This is a test of the approval system', 'low');
+                    console.log(approved ? chalk_1.default.green('Approved') : chalk_1.default.yellow('Cancelled'));
+                    break;
+                }
+                default:
+                    console.log(chalk_1.default.red(`Unknown approval command: ${subcommand}`));
+                    console.log(chalk_1.default.gray('Available commands: auto-approve, test'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Approval command failed: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
