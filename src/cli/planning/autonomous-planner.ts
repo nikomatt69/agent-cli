@@ -182,9 +182,9 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
       }
     ];
 
-    // Execute planning task and collect response
+    // Execute planning task and collect response (pass messages to avoid huge prompt)
     let fullResponse = '';
-    for await (const event of advancedAIProvider.executeAutonomousTask(planningMessages.join('\n'))) {
+    for await (const event of advancedAIProvider.executeAutonomousTask('Planning', { messages: planningMessages })) {
       if (event.type === 'text_delta' && event.content) {
         fullResponse += event.content;
       }
@@ -374,12 +374,12 @@ Execute the task now using the available tools.`
       }
     ];
 
-    // Execute using the advanced AI provider with full tool access
+    // Execute using the advanced AI provider with full tool access (pass messages to avoid huge prompt)
     let responseText = '';
     const toolCalls: any[] = [];
     const toolResults: any[] = [];
 
-    for await (const event of advancedAIProvider.executeAutonomousTask(executionMessages.join('\n'))) {
+    for await (const event of advancedAIProvider.executeAutonomousTask('Execute task', { messages: executionMessages })) {
       if (event.type === 'text_delta' && event.content) {
         responseText += event.content;
       } else if (event.type === 'tool_call') {

@@ -4,189 +4,194 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Next.js Web Application
-- `npm run dev` - Start Next.js development server on http://localhost:3000
-- `npm run build` - Build the Next.js application for production
-- `npm run start` - Start the production Next.js server
-- `npm run lint` - Run ESLint for code linting
+### Core CLI Commands
+- `npm start` or `npm run dev` - Start the NikCLI autonomous development assistant
+- `npm run build` - Compile TypeScript to JavaScript in `dist/`
+- `npm run build:start` - Build and run the compiled application
+- `npm run lint` - Run ESLint for TypeScript linting
 
-### CLI Tool Development
-- `npm run cli` - Run the CLI tool directly with ts-node
-- `npm run cli:list` - List all available AI agents
-- `npm run cli:run` - Shortcut to run single agents (use with agent name)
-- `npm run cli:parallel` - Shortcut to run multiple agents in parallel
+### Testing Commands  
+- `npm test` - Run Vitest tests interactively
+- `npm run test:run` - Run all tests once
+- `npm run test:watch` - Run tests in watch mode
 
-### CLI Usage Examples
-```bash
-# Start interactive chat (main interface)
-npm run chat
-
-# Run single agent
-npm run cli run ai-analysis -- --task "function add(a, b) { return a + b; }"
-
-# Run multiple agents in parallel
-npm run cli run-parallel ai-analysis code-review optimization -- --task "your code here"
-
-# List available agents and models
-npm run cli agents
-npm run cli models
-
-# Configuration
-npm run cli set-model claude-3-5-sonnet
-npm run cli set-key claude-3-5-sonnet your-api-key-here
-```
+### Binary Execution
+- `./bin/cli.ts` - Direct execution via shebang (delegates to `src/cli/index.ts`)
+- `nikcli` - NPM binary command (when installed globally)
 
 ## Architecture Overview
 
-This is an autonomous AI-powered CLI coding assistant (like Claude Code) that can interact with multiple AI models, read/write files, debug code, and program autonomously. It combines:
+This is a production-ready autonomous AI development assistant (NikCLI) that provides an intelligent command-line interface for software development. The system combines conversational AI with autonomous code generation, file manipulation, and project management capabilities.
 
-- **Interactive Chat Interface**: Conversational CLI with multi-model support
-- **Autonomous Coding Agents**: AI agents that can independently analyze, create, and modify code
-- **File System Integration**: Direct file reading, writing, and project analysis
-- **Multi-Model Support**: Claude, GPT, Gemini with easy switching
-- **Parallel Agent Execution**: Multiple AI agents working together on complex tasks
+### Key Architectural Principles
 
-### Core Components
+**Unified Entry Point**: All functionality flows through `src/cli/index.ts` which orchestrates the entire system startup, initialization, and user interface.
 
-**Agent System (`src/cli/agents/`)**
-- `BaseAgent` - Abstract base class that all agents extend
-- `AgentManager` - Registry and factory for managing agent instances  
-- **Specialized Coding Agents**:
-  - `CodingAgent` - General coding tasks with structured analysis
-  - `ReactAgent` - React/Next.js specialist
-  - `BackendAgent` - Node.js/API development expert  
-  - `DevOpsAgent` - CI/CD, Docker, Kubernetes specialist
-  - `AutonomousCoder` - **Full autonomous coding** (reads/writes files, debugs, creates features)
-  - `AutonomousOrchestrator` - **Multi-agent task coordination**
-- **Legacy Agents** (backward compatibility):
-  - `AIAnalysisAgent`, `CodeGeneratorAgent`, `CodeReviewAgent`, `OptimizationAgent`
+**Service-Oriented Architecture**: Core functionality is organized into modular services:
+- Agent Service - Manages AI agent lifecycle and execution
+- Tool Service - Handles file operations, command execution, and project analysis  
+- Planning Service - Autonomous task planning and decomposition
+- LSP Service - Language Server Protocol integration for enhanced code intelligence
+- Orchestrator Service - Coordinates multi-agent collaboration
 
-**Interactive Chat System**
-- `ChatInterface` - Main conversational interface with readline
-- `SlashCommandHandler` - Extensive slash commands for agent management
-- `ChatManager` - Session management and conversation history
-- **Multi-Model Support** - Switch between Claude, GPT, Gemini seamlessly
+**Stream-Based Processing**: Real-time message processing with queued execution and progress tracking for responsive user experience.
 
-**Tools System (`src/cli/tools/`)**
-- `ToolsManager` - **File system operations** (read, write, edit, search)
-- **Build & Test Integration** - npm scripts, linting, type checking
-- **Error Analysis** - Automatic error detection and parsing
-- **Git Operations** - Status, add, commit automation
-- **Project Analysis** - Technology detection and structure analysis
+### Core System Components
 
-**Configuration System**
-- `ConfigManager` - Model settings, API keys, preferences  
-- `ModelProvider` - AI SDK integration for multiple providers
-- Persistent settings with encrypted key storage
+**Main Orchestrator (`src/cli/index.ts`)**
+- Unified entry point that handles system initialization, requirements checking, and startup flow
+- Modular design with separate classes for Introduction, System checks, Service initialization, and Streaming interface
+- Comprehensive error handling and graceful shutdown procedures
 
-**Web Dashboard (`app/` and `src/`)** [Optional]
-- Next.js 14 App Router application for web interface
-- Can be used alongside CLI or independently
+**Agent Architecture (`src/cli/automation/agents/`)**
+- `UniversalAgent` - Single comprehensive agent with full-stack development capabilities
+- `BaseAgent` - Abstract base class defining the agent interface and lifecycle
+- `AgentManager` - Central registry for agent classes and instance management
+- **Specialized Agents**: React, Backend, DevOps, Frontend, Autonomous Coder agents for domain-specific tasks
 
-### Agent Registration System
+**Service Layer (`src/cli/services/`)**
+- `agent-service.ts` - Agent lifecycle, task distribution, and progress tracking
+- `tool-service.ts` - File system operations, command execution, project analysis
+- `planning-service.ts` - Autonomous task planning and breakdown
+- `lsp-service.ts` - Language server integration for code intelligence
+- `orchestrator-service.ts` - Multi-agent coordination and workflow management
 
-All agents are registered in `src/cli/register-agents.ts`. To add a new agent:
-1. Create a class extending `BaseAgent`
-2. Implement required methods: `initialize()`, `run()`, `cleanup()`
-3. Add to the registration function
+**Tool System (`src/cli/tools/`)**
+- Secure tool registry with permission-based execution
+- File operations: read, write, edit, search, multi-edit capabilities
+- Command execution: bash, npm, git operations with security policies
+- Project analysis: dependency detection, structure analysis, technology identification
 
-### API Integration
+**Chat Interface (`src/cli/chat/`)**
+- `NikCLI` - Main conversational interface with readline integration
+- Stream-based message processing with real-time feedback
+- Command completion, history, and interactive help system
+- Support for natural language commands and agent-specific targeting
 
-The project uses Google's Gemini AI API through the `@ai-sdk/google` package. API key must be set in environment variable `GOOGLE_GENERATIVE_AI_API_KEY`.
+**Context & Memory Management (`src/cli/context/`)**
+- Workspace-aware context management with automatic project understanding
+- RAG (Retrieval-Augmented Generation) system for intelligent code recommendations
+- Dynamic context optimization to manage token limits effectively
 
-### State Management
+**UI Components (`src/cli/ui/`)**
+- Diff viewer for code change visualization
+- Approval system for reviewing automated changes
+- Progress indicators and status displays
+- Terminal-optimized display formatting
 
-- CLI: Stateless, each command creates fresh agent instances
-- Web: Zustand store manages analysis history and agent states
-- Agent lifecycle: initialize → run → cleanup pattern
+### Agent Registration & Configuration
 
-### File Structure Notes
+**Agent Registration**: All agents are registered in `src/cli/register-agents.ts`. Currently uses a unified `UniversalAgent` approach:
+- Single agent class with comprehensive capabilities covering frontend, backend, DevOps, and autonomous coding
+- Full permission system with configurable security policies
+- Retry logic, timeout handling, and error recovery mechanisms
 
-- `bin/` contains the CLI executable entry point
-- `app/` follows Next.js App Router structure
-- `src/cli/` contains all CLI-related code
-- `src/stores/` and `src/types/` support the web application
-- TypeScript configuration supports both ES modules and CommonJS
+**Configuration Management**: 
+- `ConfigManager` handles persistent settings and API key management
+- Support for multiple AI providers (Anthropic Claude, OpenAI GPT, Google Gemini)
+- Environment-based configuration with secure key storage
 
-## Chat Interface Commands
+### Technology Stack Integration
 
-### Slash Commands
-- `/help` - Show all available commands
-- `/models` - List available AI models  
-- `/model <name>` - Switch to different AI model
-- `/set-key <model> <key>` - Set API key for model
-- `/agents` - List all available agents
-- `/agent <name> <task>` - Run specific agent with task
-- `/auto <description>` - **Autonomous multi-agent execution**
-- `/parallel <agents> <task>` - Run multiple agents in parallel
-- `/new [title]` - Start new chat session
-- `/clear` - Clear current session
-- `/quit` - Exit chat
+**AI Model Support**:
+- Primary: Anthropic Claude via `@ai-sdk/anthropic`
+- Secondary: OpenAI GPT via `@ai-sdk/openai`  
+- Tertiary: Google Gemini via `@ai-sdk/google`
+- Unified AI SDK abstraction for consistent model switching
 
-### Advanced Usage Examples
+**Development Tools**:
+- TypeScript with strict compilation settings
+- Vitest for comprehensive testing (80% coverage thresholds)
+- ESLint for code quality enforcement
+- Path aliases for clean import structure (`@cli/*`, `@agents/*`, etc.)
 
-**Autonomous Feature Development:**
+**Terminal Interface**:
+- Chalk for colored output and visual hierarchy
+- Boxen for structured information display
+- Readline for interactive input with completion and history
+- Raw keyboard mode for advanced shortcuts and controls
+
+### Security & Execution Policies
+
+**Execution Policies**: Configurable security framework in `src/cli/policies/`:
+- Command execution restrictions with allowlist/blocklist support
+- File system access controls with path-based permissions
+- Network access policies for external tool integrations
+- Sandbox restrictions for safe autonomous operation
+
+**Tool Security**: All tools implement secure execution patterns:
+- Input validation and sanitization
+- Permission checking before execution
+- Error handling with detailed logging
+- Resource limit enforcement
+
+### File Structure & Organization
+
 ```
-/auto "Create a React todo app with CRUD operations, local storage, and TypeScript"
-```
-
-**Multi-Agent Analysis:**
-```
-/parallel "coding-agent,react-expert,backend-expert" "Review this API endpoint and suggest improvements"
-```
-
-**Direct Terminal Commands:**
-```
-/run npm install lodash
-/git status
-/docker ps
-/npm run build
-/yarn test
-```
-
-**File Operations:**
-```
-/read src/components/Header.tsx
-/write src/utils/helper.ts "export const formatDate = (date: Date) => date.toISOString();"
-/search "useState" src/
-/ls components/
-```
-
-**System Administration:**
-```
-/install lodash react-query --dev
-/ps
-/kill 1234
-/build
-/test
-/create next my-awesome-app
-```
-
-**Specific Agent Tasks:**
-```
-/agent autonomous-coder "analyze the current project and fix all TypeScript errors"
-/agent system-admin "install docker and setup a development environment"
-/agent react-expert "create a responsive navigation component with mobile menu"
-/agent devops-expert "setup Docker configuration for this Next.js app"
+src/cli/
+├── index.ts              # Main entry point and orchestrator
+├── nik-cli.ts           # Core CLI interface implementation
+├── automation/          # Agent system and workflow orchestration
+│   └── agents/         # All agent classes and management
+├── services/           # Core service implementations
+├── tools/              # File and command execution tools
+├── chat/               # Interactive chat interface components
+├── context/            # Memory and workspace management
+├── ui/                 # Terminal UI components
+├── core/               # Configuration and type definitions
+├── planning/           # Autonomous planning system
+├── lsp/                # Language server integration
+└── utils/              # Shared utilities and helpers
 ```
 
-## Environment Requirements
+### Environment Requirements
 
-**Required API Keys** (set via environment variables or `/set-key` command):
-- `ANTHROPIC_API_KEY` - For Claude models
-- `OPENAI_API_KEY` - For GPT models  
+**System Requirements**:
+- Node.js 18+ (enforced at startup)
+- Git (for autonomous development features)
+- npm/yarn for package management
+
+**API Keys** (at least one required):
+- `ANTHROPIC_API_KEY` - For Claude models (recommended)
+- `OPENAI_API_KEY` - For GPT models
 - `GOOGLE_GENERATIVE_AI_API_KEY` - For Gemini models
 
-**System Requirements:**
-- Node.js 18+ with TypeScript support
-- Git (for autonomous coding features)
-- Access to npm/yarn for dependency management
+**Development Environment**:
+- TypeScript 5.3+ for modern language features
+- Terminal with color support and UTF-8 encoding
+- Sufficient disk space for autonomous file operations
 
-## Key Dependencies
+### Usage Patterns & Interface
 
-- **AI SDK** - `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`
-- **CLI Framework** - Commander.js, Chalk, Boxen, Gradient-string
-- **Configuration** - Conf for persistent settings
-- **File Operations** - Node.js fs module with enhanced error handling
-- **Chat Interface** - Readline with markdown terminal rendering
-```
+**Interactive Chat**: Primary interface with natural language processing
+- Direct commands: "Create a React component for user authentication"
+- Agent targeting: "@react-expert optimize this component for performance"  
+- System commands: "/status", "/help", "/agents"
+- Keyboard shortcuts: "/" (command menu), "Shift+Tab" (mode switching)
+
+**Autonomous Operation**: Full autonomous development capabilities
+- Project analysis and technology detection
+- Automatic planning and task breakdown
+- File creation, modification, and refactoring
+- Build process integration and error resolution
+- Git operations with intelligent commit messaging
+
+**Multi-Agent Collaboration**: Parallel execution of specialized agents
+- Task distribution across multiple agent instances
+- Progress tracking and result aggregation
+- Conflict resolution for concurrent file modifications
+- Coordinated workflow execution with dependency management
+
+### Testing & Quality Assurance
+
+**Test Configuration** (`vitest.config.ts`):
+- Comprehensive test coverage with 80% minimum thresholds
+- Node.js test environment with extended timeouts for AI operations
+- Path aliases matching the main application structure
+- Coverage reporting in multiple formats (text, JSON, HTML)
+
+**Quality Standards**:
+- ESLint enforcement with TypeScript-specific rules
+- Strict TypeScript compilation settings
+- Automated dependency vulnerability scanning
+- Performance monitoring for agent execution times

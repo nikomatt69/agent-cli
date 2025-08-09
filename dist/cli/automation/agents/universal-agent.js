@@ -102,7 +102,7 @@ class UniversalAgent {
             'architecture-review',
             'documentation-generation'
         ];
-        this.version = '3.0.0';
+        this.version = '0.1.2-beta';
         this.status = 'initializing';
         this.currentTasks = 0;
         this.maxConcurrentTasks = 3;
@@ -135,7 +135,7 @@ class UniversalAgent {
                 retryableErrors: ['NetworkError', 'TimeoutError', 'ENOENT']
             },
             enabledTools: ['file-system', 'code-analysis', 'execution', 'git', 'npm'],
-            guidanceFiles: ['CLAUDE.md', 'README.md', 'package.json'],
+            guidanceFiles: ['NIKOCLI.md', 'README.md', 'package.json'],
             logLevel: 'info',
             permissions: {
                 canReadFiles: true,
@@ -848,7 +848,7 @@ class UniversalAgent {
         };
     }
     async loadGuidanceFiles() {
-        const guidanceFiles = ['CLAUDE.md', 'README.md', 'package.json', '.gitignore'];
+        const guidanceFiles = ['NIKOCLI.md', 'CLAUDE.md', 'README.md', 'package.json', '.gitignore'];
         let loadedGuidance = '';
         for (const file of guidanceFiles) {
             const filePath = path.join(this.workingDirectory, file);

@@ -9,7 +9,7 @@ function registerAgents(agentManager) {
         name: 'Universal Agent',
         description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
         specialization: 'universal',
-        version: '3.0.0',
+        version: '0.1.2-beta',
         capabilities: [
             // Core capabilities
             'code-generation',

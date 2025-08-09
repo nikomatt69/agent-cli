@@ -7,7 +7,7 @@ import * as yaml from 'js-yaml';
 
 export interface GuidanceFile {
   path: string;
-  type: 'claude' | 'codex' | 'agents';
+  type: 'claude' | 'codex' | 'agents' | 'nikocli';
   level: 'global' | 'project' | 'subdirectory';
   content: string;
   lastModified: Date;
@@ -76,7 +76,7 @@ export class GuidanceManager {
    */
   private async scanGuidanceFiles(): Promise<void> {
     const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md'];
-    
+
     // Scan global directory
     for (const filename of guidanceTypes) {
       const globalPath = path.join(this.globalGuidanceDir, filename);
@@ -90,8 +90,8 @@ export class GuidanceManager {
   }
 
   private async scanProjectGuidance(dir: string): Promise<void> {
-    const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md'];
-    
+    const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md', 'NIKOCLI.md'];
+
     try {
       const items = fs.readdirSync(dir, { withFileTypes: true });
 
@@ -129,9 +129,9 @@ export class GuidanceManager {
       const stats = fs.statSync(filePath);
       const content = fs.readFileSync(filePath, 'utf-8');
       const filename = path.basename(filePath);
-      
-      const type = filename.startsWith('CLAUDE') ? 'claude' : 
-                   filename.startsWith('CODEX') ? 'codex' : 'agents';
+
+      const type = filename.startsWith('CLAUDE') ? 'claude' :
+        filename.startsWith('CODEX') ? 'codex' : 'agents';
 
       const guidanceFile: GuidanceFile = {
         path: filePath,
@@ -143,7 +143,7 @@ export class GuidanceManager {
       };
 
       this.guidanceFiles.set(filePath, guidanceFile);
-      
+
       console.log(chalk.cyan(`📋 Loaded ${level} guidance: ${path.relative(this.workingDirectory, filePath)}`));
     } catch (error: any) {
       console.log(chalk.yellow(`⚠️ Could not load guidance file ${filePath}: ${error.message}`));
@@ -181,7 +181,7 @@ export class GuidanceManager {
         if (currentSection && currentContent.trim()) {
           parsed.sections[currentSection] = currentContent.trim();
         }
-        
+
         currentSection = token.text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, '_');
         currentContent = '';
       } else if (token.type === 'list') {
@@ -209,7 +209,7 @@ export class GuidanceManager {
 
   private extractListItems(listToken: any): string[] {
     const items: string[] = [];
-    
+
     if (listToken.items) {
       for (const item of listToken.items) {
         if (item.tokens) {
@@ -218,7 +218,7 @@ export class GuidanceManager {
         }
       }
     }
-    
+
     return items;
   }
 
@@ -248,6 +248,7 @@ export class GuidanceManager {
     const watchPaths = [
       path.join(this.globalGuidanceDir, '*.md'),
       path.join(this.workingDirectory, '**/CLAUDE.md'),
+      path.join(this.workingDirectory, '**/NIKOCLI.md'),
       path.join(this.workingDirectory, '**/CODEX.md'),
       path.join(this.workingDirectory, '**/AGENTS.md')
     ];
@@ -276,7 +277,7 @@ export class GuidanceManager {
       this.guidanceFiles.delete(filePath);
     } else {
       const level = filePath.includes(this.globalGuidanceDir) ? 'global' :
-                   path.dirname(filePath) === this.workingDirectory ? 'project' : 'subdirectory';
+        path.dirname(filePath) === this.workingDirectory ? 'project' : 'subdirectory';
       await this.loadGuidanceFile(filePath, level);
     }
 
@@ -403,7 +404,7 @@ export class GuidanceManager {
   /**
    * Create a sample guidance file
    */
-  createSampleGuidanceFile(type: 'claude' | 'codex' | 'agents', location: 'global' | 'project'): string {
+  createSampleGuidanceFile(type: 'claude' | 'codex' | 'agents' | 'nikocli', location: 'global' | 'project'): string {
     const templates = {
       claude: `# CLAUDE.md
 
@@ -454,6 +455,29 @@ Instructions for Codex AI assistant.
 - Back up important files before major changes
 `,
 
+      nikocli: `# NIKOCLI.md
+
+Codebase and user instructions are shown below. Be sure to adhere to these instructions.
+
+## Development Commands
+
+### Next.js Web Application
+- \`npm run dev\` - Start Next.js development server on http://localhost:3000
+- \`npm run build\` - Build the Next.js application for production
+- \`npm run start\` - Start the production Next.js server
+- \`npm run lint\` - Run ESLint for code linting
+
+## Architecture Overview
+
+This is an autonomous AI-powered CLI coding assistant.
+
+## Important Instructions
+
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files`,
+
       agents: `---
 name: "Project Agent Configuration"
 version: "1.0"
@@ -488,8 +512,8 @@ You are a backend specialist focusing on:
 
     const content = templates[type];
     const filename = `${type.toUpperCase()}.md`;
-    const targetPath = location === 'global' ? 
-      path.join(this.globalGuidanceDir, filename) : 
+    const targetPath = location === 'global' ?
+      path.join(this.globalGuidanceDir, filename) :
       path.join(this.workingDirectory, filename);
 
     try {
@@ -519,7 +543,7 @@ You are a backend specialist focusing on:
     totalSize: number;
   } {
     const files = Array.from(this.guidanceFiles.values());
-    
+
     return {
       totalFiles: files.length,
       byType: {
@@ -541,15 +565,15 @@ You are a backend specialist focusing on:
    */
   async cleanup(): Promise<void> {
     console.log(chalk.blue('🧹 Cleaning up guidance system...'));
-    
+
     for (const watcher of this.watchers) {
       await watcher.close();
     }
-    
+
     this.watchers = [];
     this.guidanceFiles.clear();
     this.currentContext = null;
-    
+
     console.log(chalk.green('✅ Guidance system cleaned up'));
   }
 }

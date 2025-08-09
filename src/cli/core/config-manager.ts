@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // Validation schemas
 const ModelConfigSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'ollama']),
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().min(1).max(8000).optional(),
@@ -18,11 +18,36 @@ const ConfigSchema = z.object({
   maxTokens: z.number().min(1).max(8000).default(4000),
   chatHistory: z.boolean().default(true),
   maxHistoryLength: z.number().min(1).max(1000).default(100),
+  // Optional system prompt for general chat mode
+  systemPrompt: z.string().optional(),
   autoAnalyzeWorkspace: z.boolean().default(true),
   enableAutoApprove: z.boolean().default(false),
   preferredAgent: z.string().optional(),
   models: z.record(ModelConfigSchema),
   apiKeys: z.record(z.string()).optional(),
+  // MCP (Model Context Protocol) servers configuration
+  mcpServers: z.record(z.object({
+    name: z.string(),
+    type: z.enum(['http', 'websocket', 'command', 'stdio']),
+    endpoint: z.string().optional(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    headers: z.record(z.string()).optional(),
+    timeout: z.number().optional(),
+    retries: z.number().optional(),
+    healthCheck: z.string().optional(),
+    enabled: z.boolean(),
+    priority: z.number().optional(),
+    capabilities: z.array(z.string()).optional(),
+    authentication: z.object({
+      type: z.enum(['bearer', 'basic', 'api_key']),
+      token: z.string().optional(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+      apiKey: z.string().optional(),
+      header: z.string().optional(),
+    }).optional(),
+  })).optional(),
   // Agent Manager specific config
   maxConcurrentAgents: z.number().min(1).max(10).default(3),
   enableGuidanceSystem: z.boolean().default(true),
@@ -65,6 +90,10 @@ export class SimpleConfigManager {
       provider: 'openai',
       model: 'gpt-4o-mini',
     },
+    'gpt-5': {
+      provider: 'openai',
+      model: 'gpt-5',
+    },
     'gpt-4o': {
       provider: 'openai',
       model: 'gpt-4o',
@@ -93,6 +122,18 @@ export class SimpleConfigManager {
       provider: 'google',
       model: 'gemini-1.5-pro',
     },
+    'llama3.1:8b': {
+      provider: 'ollama',
+      model: 'llama3.1:8b',
+    },
+    'codellama:7b': {
+      provider: 'ollama',
+      model: 'codellama:7b',
+    },
+    'mistral:7b': {
+      provider: 'ollama',
+      model: 'mistral:7b',
+    },
   };
 
   private defaultConfig: ConfigType = {
@@ -101,10 +142,12 @@ export class SimpleConfigManager {
     maxTokens: 4000,
     chatHistory: true,
     maxHistoryLength: 100,
+    systemPrompt: undefined,
     autoAnalyzeWorkspace: true,
     enableAutoApprove: false,
     models: this.defaultModels,
     apiKeys: {},
+    mcpServers: {},
     maxConcurrentAgents: 3,
     enableGuidanceSystem: true,
     defaultAgentTimeout: 60000,
@@ -121,7 +164,7 @@ export class SimpleConfigManager {
 
   constructor() {
     // Create config directory in user's home directory
-    const configDir = path.join(os.homedir(), '.claude-code-clone');
+    const configDir = path.join(os.homedir(), '.nikcli');
     this.configPath = path.join(configDir, 'config.json');
 
     // Ensure config directory exists
@@ -195,6 +238,8 @@ export class SimpleConfigManager {
           return process.env.ANTHROPIC_API_KEY;
         case 'google':
           return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        case 'ollama':
+          return undefined; // Ollama doesn't need API keys
       }
     }
 

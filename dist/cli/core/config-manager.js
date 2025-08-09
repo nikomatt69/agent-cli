@@ -44,7 +44,7 @@ const chalk_1 = __importDefault(require("chalk"));
 const zod_1 = require("zod");
 // Validation schemas
 const ModelConfigSchema = zod_1.z.object({
-    provider: zod_1.z.enum(['openai', 'anthropic', 'google']),
+    provider: zod_1.z.enum(['openai', 'anthropic', 'google', 'ollama']),
     model: zod_1.z.string(),
     temperature: zod_1.z.number().min(0).max(2).optional(),
     maxTokens: zod_1.z.number().min(1).max(8000).optional(),
@@ -55,11 +55,36 @@ const ConfigSchema = zod_1.z.object({
     maxTokens: zod_1.z.number().min(1).max(8000).default(4000),
     chatHistory: zod_1.z.boolean().default(true),
     maxHistoryLength: zod_1.z.number().min(1).max(1000).default(100),
+    // Optional system prompt for general chat mode
+    systemPrompt: zod_1.z.string().optional(),
     autoAnalyzeWorkspace: zod_1.z.boolean().default(true),
     enableAutoApprove: zod_1.z.boolean().default(false),
     preferredAgent: zod_1.z.string().optional(),
     models: zod_1.z.record(ModelConfigSchema),
     apiKeys: zod_1.z.record(zod_1.z.string()).optional(),
+    // MCP (Model Context Protocol) servers configuration
+    mcpServers: zod_1.z.record(zod_1.z.object({
+        name: zod_1.z.string(),
+        type: zod_1.z.enum(['http', 'websocket', 'command', 'stdio']),
+        endpoint: zod_1.z.string().optional(),
+        command: zod_1.z.string().optional(),
+        args: zod_1.z.array(zod_1.z.string()).optional(),
+        headers: zod_1.z.record(zod_1.z.string()).optional(),
+        timeout: zod_1.z.number().optional(),
+        retries: zod_1.z.number().optional(),
+        healthCheck: zod_1.z.string().optional(),
+        enabled: zod_1.z.boolean(),
+        priority: zod_1.z.number().optional(),
+        capabilities: zod_1.z.array(zod_1.z.string()).optional(),
+        authentication: zod_1.z.object({
+            type: zod_1.z.enum(['bearer', 'basic', 'api_key']),
+            token: zod_1.z.string().optional(),
+            username: zod_1.z.string().optional(),
+            password: zod_1.z.string().optional(),
+            apiKey: zod_1.z.string().optional(),
+            header: zod_1.z.string().optional(),
+        }).optional(),
+    })).optional(),
     // Agent Manager specific config
     maxConcurrentAgents: zod_1.z.number().min(1).max(10).default(3),
     enableGuidanceSystem: zod_1.z.boolean().default(true),
@@ -95,6 +120,10 @@ class SimpleConfigManager {
                 provider: 'openai',
                 model: 'gpt-4o-mini',
             },
+            'gpt-5': {
+                provider: 'openai',
+                model: 'gpt-5',
+            },
             'gpt-4o': {
                 provider: 'openai',
                 model: 'gpt-4o',
@@ -123,6 +152,18 @@ class SimpleConfigManager {
                 provider: 'google',
                 model: 'gemini-1.5-pro',
             },
+            'llama3.1:8b': {
+                provider: 'ollama',
+                model: 'llama3.1:8b',
+            },
+            'codellama:7b': {
+                provider: 'ollama',
+                model: 'codellama:7b',
+            },
+            'mistral:7b': {
+                provider: 'ollama',
+                model: 'mistral:7b',
+            },
         };
         this.defaultConfig = {
             currentModel: 'claude-sonnet-4-20250514',
@@ -130,10 +171,12 @@ class SimpleConfigManager {
             maxTokens: 4000,
             chatHistory: true,
             maxHistoryLength: 100,
+            systemPrompt: undefined,
             autoAnalyzeWorkspace: true,
             enableAutoApprove: false,
             models: this.defaultModels,
             apiKeys: {},
+            mcpServers: {},
             maxConcurrentAgents: 3,
             enableGuidanceSystem: true,
             defaultAgentTimeout: 60000,
@@ -148,7 +191,7 @@ class SimpleConfigManager {
             },
         };
         // Create config directory in user's home directory
-        const configDir = path.join(os.homedir(), '.claude-code-clone');
+        const configDir = path.join(os.homedir(), '.nikcli');
         this.configPath = path.join(configDir, 'config.json');
         // Ensure config directory exists
         if (!fs.existsSync(configDir)) {
@@ -215,6 +258,8 @@ class SimpleConfigManager {
                     return process.env.ANTHROPIC_API_KEY;
                 case 'google':
                     return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+                case 'ollama':
+                    return undefined; // Ollama doesn't need API keys
             }
         }
         return undefined;

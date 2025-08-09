@@ -40,7 +40,6 @@ exports.orchestratorService = exports.OrchestratorService = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const readline = __importStar(require("readline"));
 const boxen_1 = __importDefault(require("boxen"));
-const gradient_string_1 = __importDefault(require("gradient-string"));
 const events_1 = require("events");
 const agent_service_1 = require("./agent-service");
 const tool_service_1 = require("./tool-service");
@@ -422,18 +421,18 @@ class OrchestratorService extends events_1.EventEmitter {
         return true;
     }
     showWelcome() {
-        const title = gradient_string_1.default.rainbow('🎛️  AI Development Orchestrator');
+        const title = chalk_1.default.cyanBright('🎛️  AI Development Orchestrator');
         const subtitle = chalk_1.default.gray('Multi-Agent Autonomous Development System');
-        console.log((0, boxen_1.default)(`${title}\\n${subtitle}\\n\\n` +
-            `${chalk_1.default.blue('🎯 Mode:')} ${this.context.autonomous ? 'Autonomous' : 'Manual'}\\n` +
-            `${chalk_1.default.blue('📁 Directory:')} ${chalk_1.default.cyan(this.context.workingDirectory)}\\n` +
-            `${chalk_1.default.blue('🤖 Max Agents:')} 3 parallel\\n\\n` +
-            `${chalk_1.default.gray('I orchestrate specialized AI agents to handle your development tasks:')}\\n` +
-            `• ${chalk_1.default.green('Natural language processing')} - Just describe what you want\\n` +
-            `• ${chalk_1.default.green('Intelligent agent selection')} - Best agent for each task\\n` +
-            `• ${chalk_1.default.green('Parallel execution')} - Up to 3 agents working simultaneously\\n` +
-            `• ${chalk_1.default.green('Real-time monitoring')} - See everything happening live\\n` +
-            `• ${chalk_1.default.green('Autonomous operation')} - Minimal interruptions\\n\\n` +
+        console.log((0, boxen_1.default)(`${title}\n${subtitle}\n\n` +
+            `${chalk_1.default.blue('🎯 Mode:')} ${this.context.autonomous ? 'Autonomous' : 'Manual'}\n` +
+            `${chalk_1.default.blue('📁 Directory:')} ${chalk_1.default.cyan(this.context.workingDirectory)}\n` +
+            `${chalk_1.default.blue('🤖 Max Agents:')} 3 parallel\n\n` +
+            `${chalk_1.default.gray('I orchestrate specialized AI agents to handle your development tasks:')}\n` +
+            `• ${chalk_1.default.green('Natural language processing')} - Just describe what you want\n` +
+            `• ${chalk_1.default.green('Intelligent agent selection')} - Best agent for each task\n` +
+            `• ${chalk_1.default.green('Parallel execution')} - Up to 3 agents working simultaneously\n` +
+            `• ${chalk_1.default.green('Real-time monitoring')} - See everything happening live\n` +
+            `• ${chalk_1.default.green('Autonomous operation')} - Minimal interruptions\n\n` +
             `${chalk_1.default.yellow('💡 Press / for commands, @ for agents, or just tell me what to do')}`, {
             padding: 1,
             margin: 1,
@@ -493,7 +492,7 @@ class OrchestratorService extends events_1.EventEmitter {
             const modeIndicator = indicators.length > 0 ? ` ${indicators.join(' ')} ` : '';
             const activeCount = this.activeAgentTasks.size;
             const agentIndicator = activeCount > 0 ? chalk_1.default.blue(`${activeCount}🤖`) : '🎛️';
-            const prompt = gradient_string_1.default.rainbow(`\\n┌─[${agentIndicator}:${workingDir}${modeIndicator}]\\n└─❯ `);
+            const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(workingDir)}${modeIndicator}]\n└─❯ `;
             this.rl.setPrompt(prompt);
             this.rl.prompt();
         }
@@ -522,12 +521,12 @@ class OrchestratorService extends events_1.EventEmitter {
     showGoodbye() {
         const activeAgents = this.activeAgentTasks.size;
         const toolsUsed = tool_service_1.toolService.getExecutionHistory().length;
-        console.log((0, boxen_1.default)(`${gradient_string_1.default.rainbow('🎛️  AI Development Orchestrator')}\\n\\n` +
-            `${chalk_1.default.gray('Session completed!')}\\n\\n` +
-            `${chalk_1.default.blue('Messages processed:')} ${this.context.session.messages.length}\\n` +
-            `${chalk_1.default.green('Tools executed:')} ${toolsUsed}\\n` +
-            `${chalk_1.default.cyan('Agents launched:')} ${this.context.session.executionHistory.length}\\n` +
-            `${chalk_1.default.yellow('Duration:')} ${Math.round((Date.now() - parseInt(this.context.session.id)) / 1000)}s\\n\\n` +
+        console.log((0, boxen_1.default)(`${chalk_1.default.cyanBright('🎛️  AI Development Orchestrator')}\n\n` +
+            `${chalk_1.default.gray('Session completed!')}\n\n` +
+            `${chalk_1.default.blue('Messages processed:')} ${this.context.session.messages.length}\n` +
+            `${chalk_1.default.green('Tools executed:')} ${toolsUsed}\n` +
+            `${chalk_1.default.cyan('Agents launched:')} ${this.context.session.executionHistory.length}\n` +
+            `${chalk_1.default.yellow('Duration:')} ${Math.round((Date.now() - parseInt(this.context.session.id)) / 1000)}s\n\n` +
             `${chalk_1.default.blue('Thanks for using the AI orchestrator! 🚀')}`, {
             padding: 1,
             margin: 1,

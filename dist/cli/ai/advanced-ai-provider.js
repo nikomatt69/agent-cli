@@ -7,6 +7,7 @@ exports.advancedAIProvider = exports.AdvancedAIProvider = void 0;
 const anthropic_1 = require("@ai-sdk/anthropic");
 const openai_1 = require("@ai-sdk/openai");
 const google_1 = require("@ai-sdk/google");
+const ollama_ai_provider_1 = require("ollama-ai-provider");
 const ai_1 = require("ai");
 const zod_1 = require("zod");
 const config_manager_1 = require("../core/config-manager");
@@ -15,10 +16,19 @@ const path_1 = require("path");
 const child_process_1 = require("child_process");
 const chalk_1 = __importDefault(require("chalk"));
 const util_1 = require("util");
+const analysis_utils_1 = require("../utils/analysis-utils");
+const token_cache_1 = require("../core/token-cache");
+const completion_protocol_cache_1 = require("../core/completion-protocol-cache");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
         throw new Error('Method not implemented.');
+    }
+    // Truncate long free-form strings to keep prompts safe
+    truncateForPrompt(s, maxChars = 2000) {
+        if (!s)
+            return '';
+        return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
     }
     constructor() {
         this.workingDirectory = process.cwd();
@@ -229,9 +239,15 @@ class AdvancedAIProvider {
                             analyzeDependencies,
                             securityScan
                         });
-                        // Store complete analysis in context
+                        // Store complete analysis in context (may be large)
                         this.executionContext.set('project:analysis', analysis);
-                        return analysis;
+                        // Return a compact, chunk-safe summary to avoid prompt overflow
+                        const compact = (0, analysis_utils_1.compactAnalysis)(analysis, {
+                            maxDirs: 40,
+                            maxFiles: 150,
+                            maxChars: 8000,
+                        });
+                        return compact;
                     }
                     catch (error) {
                         return { error: `Project analysis failed: ${error.message}` };
@@ -335,6 +351,39 @@ class AdvancedAIProvider {
         const model = this.getModel();
         const tools = this.getAdvancedTools();
         try {
+            // ADVANCED: Check completion protocol cache first (ultra-efficient)
+            const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+            const systemContext = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+            if (lastUserMessage) {
+                // Try completion protocol cache first (most efficient)
+                const userContent = typeof lastUserMessage.content === 'string'
+                    ? lastUserMessage.content
+                    : Array.isArray(lastUserMessage.content)
+                        ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                        : String(lastUserMessage.content);
+                const completionRequest = {
+                    prefix: userContent,
+                    context: systemContext.substring(0, 300),
+                    maxTokens: 1000,
+                    temperature: 0.7,
+                    model: this.currentModel
+                };
+                const protocolCompletion = await completion_protocol_cache_1.completionCache.getCompletion(completionRequest);
+                if (protocolCompletion) {
+                    yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
+                    yield { type: 'text_delta', content: protocolCompletion.completion };
+                    yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
+                    return;
+                }
+                // Fallback to full response cache
+                const cachedResponse = await token_cache_1.tokenCache.getCachedResponse(userContent, systemContext.substring(0, 500), ['chat', 'autonomous']);
+                if (cachedResponse) {
+                    yield { type: 'start', content: '🎯 Using cached response...' };
+                    yield { type: 'text_delta', content: cachedResponse.response };
+                    yield { type: 'complete', content: 'Cache hit - tokens saved!' };
+                    return;
+                }
+            }
             yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
             const result = (0, ai_1.streamText)({
                 model,
@@ -390,6 +439,30 @@ class AdvancedAIProvider {
                         }
                         break;
                     case 'finish':
+                        // DUAL CACHE: Store both completion pattern AND full response
+                        if (lastUserMessage && accumulatedText.trim()) {
+                            const userContentLength = typeof lastUserMessage.content === 'string'
+                                ? lastUserMessage.content.length
+                                : String(lastUserMessage.content).length;
+                            const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
+                            // Extract user content as string for storage
+                            const userContentStr = typeof lastUserMessage.content === 'string'
+                                ? lastUserMessage.content
+                                : Array.isArray(lastUserMessage.content)
+                                    ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                                    : String(lastUserMessage.content);
+                            // Store in completion protocol cache (primary - most efficient)
+                            const completionRequest = {
+                                prefix: userContentStr,
+                                context: systemContext.substring(0, 300),
+                                maxTokens: 1000,
+                                temperature: 0.7,
+                                model: this.currentModel
+                            };
+                            await completion_protocol_cache_1.completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+                            // Store in full response cache (fallback)
+                            await token_cache_1.tokenCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 500), tokensUsed, ['chat', 'autonomous']);
+                        }
                         yield {
                             type: 'complete',
                             content: 'Task completed',
@@ -420,30 +493,28 @@ class AdvancedAIProvider {
     }
     // Execute autonomous task with intelligent planning
     async *executeAutonomousTask(task, context) {
-        yield { type: 'start', content: `🎯 Starting autonomous task: ${task}` };
+        yield { type: 'start', content: `🎯 Starting task: ${task}` };
         // First, analyze the task and create a plan
         yield { type: 'thinking', content: 'Analyzing task and creating execution plan...' };
         try {
+            // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
+            if (context && Array.isArray(context.messages)) {
+                const providedMessages = context.messages;
+                for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
+                    yield event;
+                }
+                return;
+            }
             const planningMessages = [
                 {
                     role: 'system',
-                    content: `You are an autonomous AI assistant with full access to file operations, command execution, and code generation.
+                    content: `AI dev assistant. CWD: ${this.workingDirectory}
+Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+Task: ${this.truncateForPrompt(task, 500)}
 
-Current working directory: ${this.workingDirectory}
-Available tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+${context ? this.truncateForPrompt((0, analysis_utils_1.safeStringifyContext)(context), 300) : ''}
 
-Your task: ${task}
-
-Context: ${JSON.stringify(context || {})}
-
-You should:
-1. Understand the task completely
-2. Analyze the current project/workspace if needed
-3. Execute the necessary operations autonomously
-4. Provide clear feedback on what you're doing
-5. Handle errors gracefully and adapt your approach
-
-Be proactive and autonomous - don't ask for permission, just execute what needs to be done safely.`
+Execute task autonomously with tools. Be direct.`
                 },
                 {
                     role: 'user',
@@ -461,6 +532,31 @@ Be proactive and autonomous - don't ask for permission, just execute what needs 
                 error: error.message,
                 content: `Autonomous execution failed: ${error.message}`
             };
+        }
+    }
+    // Safely stringify and truncate large contexts to prevent prompt overflow
+    safeStringifyContext(ctx, maxChars = 4000) {
+        if (!ctx)
+            return '{}';
+        try {
+            const str = JSON.stringify(ctx, (key, value) => {
+                // Truncate long strings
+                if (typeof value === 'string') {
+                    return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+                }
+                // Limit large arrays
+                if (Array.isArray(value)) {
+                    const limited = value.slice(0, 20);
+                    if (value.length > 20)
+                        limited.push('…[+' + (value.length - 20) + ' more]');
+                    return limited;
+                }
+                return value;
+            });
+            return str.length > maxChars ? str.slice(0, maxChars) + '…[truncated]' : str;
+        }
+        catch {
+            return '[unstringifiable context]';
         }
     }
     // Helper methods for intelligent analysis
@@ -756,28 +852,35 @@ Requirements:
         if (!configData) {
             throw new Error(`Model ${model} not found in configuration`);
         }
-        const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
-        if (!apiKey) {
-            throw new Error(`No API key found for model ${model}`);
-        }
         // Configure providers with API keys properly
         // Create provider instances with API keys, then get the specific model
         switch (configData.provider) {
-            case 'openai':
-                const openaiProvider = (0, openai_1.createOpenAI)({
-                    apiKey: apiKey
-                });
+            case 'openai': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (OpenAI)`);
+                const openaiProvider = (0, openai_1.createOpenAI)({ apiKey });
                 return openaiProvider(configData.model);
-            case 'anthropic':
-                const anthropicProvider = (0, anthropic_1.createAnthropic)({
-                    apiKey: apiKey
-                });
+            }
+            case 'anthropic': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (Anthropic)`);
+                const anthropicProvider = (0, anthropic_1.createAnthropic)({ apiKey });
                 return anthropicProvider(configData.model);
-            case 'google':
-                const googleProvider = (0, google_1.createGoogleGenerativeAI)({
-                    apiKey: apiKey
-                });
+            }
+            case 'google': {
+                const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
+                if (!apiKey)
+                    throw new Error(`No API key found for model ${model} (Google)`);
+                const googleProvider = (0, google_1.createGoogleGenerativeAI)({ apiKey });
                 return googleProvider(configData.model);
+            }
+            case 'ollama': {
+                // Ollama runs locally and does not require API keys
+                const ollamaProvider = (0, ollama_ai_provider_1.createOllama)({});
+                return ollamaProvider(configData.model);
+            }
             default:
                 throw new Error(`Unsupported provider: ${configData.provider}`);
         }

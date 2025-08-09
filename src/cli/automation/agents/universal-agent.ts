@@ -31,13 +31,13 @@ export class UniversalAgent implements Agent {
   public readonly capabilities: string[] = [
     // Core capabilities
     'code-generation',
-    'code-analysis', 
+    'code-analysis',
     'code-review',
     'optimization',
     'debugging',
     'refactoring',
     'testing',
-    
+
     // Frontend capabilities
     'react',
     'nextjs',
@@ -50,7 +50,7 @@ export class UniversalAgent implements Agent {
     'hooks',
     'jsx',
     'tsx',
-    
+
     // Backend capabilities
     'backend',
     'nodejs',
@@ -60,7 +60,7 @@ export class UniversalAgent implements Agent {
     'rest-api',
     'graphql',
     'microservices',
-    
+
     // DevOps capabilities
     'devops',
     'ci-cd',
@@ -70,14 +70,14 @@ export class UniversalAgent implements Agent {
     'infrastructure',
     'monitoring',
     'security',
-    
+
     // Autonomous capabilities
     'file-operations',
     'project-creation',
     'autonomous-coding',
     'system-administration',
     'full-stack-development',
-    
+
     // Analysis capabilities
     'performance-analysis',
     'security-analysis',
@@ -85,12 +85,12 @@ export class UniversalAgent implements Agent {
     'architecture-review',
     'documentation-generation'
   ];
-  
-  public readonly version: string = '3.0.0';
+
+  public readonly version: string = '0.1.2-beta';
   public status: AgentStatus = 'initializing';
   public currentTasks: number = 0;
   public readonly maxConcurrentTasks: number = 3;
-  
+
   private workingDirectory: string;
   private context?: AgentContext;
   private config: AgentConfig;
@@ -125,7 +125,7 @@ export class UniversalAgent implements Agent {
         retryableErrors: ['NetworkError', 'TimeoutError', 'ENOENT']
       },
       enabledTools: ['file-system', 'code-analysis', 'execution', 'git', 'npm'],
-      guidanceFiles: ['CLAUDE.md', 'README.md', 'package.json'],
+      guidanceFiles: ['NIKOCLI.md', 'README.md', 'package.json'],
       logLevel: 'info',
       permissions: {
         canReadFiles: true,
@@ -149,11 +149,11 @@ export class UniversalAgent implements Agent {
   async initialize(context?: AgentContext): Promise<void> {
     this.status = 'initializing';
     this.context = context;
-    
+
     if (context?.guidance) {
       this.guidance = context.guidance;
     }
-    
+
     if (context?.configuration) {
       this.config = { ...this.config, ...context.configuration };
     }
@@ -166,12 +166,12 @@ export class UniversalAgent implements Agent {
 
     // Load guidance files
     await this.loadGuidanceFiles();
-    
+
     // Initialize development environment detection
     await this.detectEnvironment();
 
     this.status = 'ready';
-    
+
     await logger.logAgent('info', this.id, 'Universal Agent initialized successfully', {
       status: this.status,
       guidanceLoaded: this.guidance.length > 0
@@ -195,10 +195,10 @@ export class UniversalAgent implements Agent {
 
       // Analyze task to determine best approach
       const approach = await this.analyzeTask(task);
-      
+
       // Execute based on task type and requirements
       let result: any;
-      
+
       switch (approach.category) {
         case 'code-analysis':
           result = await this.performCodeAnalysis(task);
@@ -233,10 +233,10 @@ export class UniversalAgent implements Agent {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
-      
+
       // Update metrics
       this.updateMetrics(true, duration);
-      
+
       const taskResult: AgentTaskResult = {
         taskId: task.id,
         agentId: this.id,
@@ -265,9 +265,9 @@ export class UniversalAgent implements Agent {
     } catch (error: any) {
       const endTime = Date.now();
       const duration = endTime - startTime;
-      
+
       this.updateMetrics(false, duration);
-      
+
       await logger.logTask('error', task.id, this.id, 'Task execution failed', {
         error: error.message,
         duration
@@ -315,16 +315,16 @@ export class UniversalAgent implements Agent {
 
   async cleanup(): Promise<void> {
     this.status = 'offline';
-    
+
     await logger.logAgent('info', this.id, 'Universal Agent cleanup started');
-    
+
     // Save any pending state
     if (this.currentTasks > 0) {
       await logger.logAgent('warn', this.id, `Cleanup called with ${this.currentTasks} tasks still running`);
     }
-    
+
     this.status = 'offline';
-    
+
     await logger.logAgent('info', this.id, 'Universal Agent cleanup completed');
   }
 
@@ -348,7 +348,7 @@ export class UniversalAgent implements Agent {
       updatedAt: new Date(),
       progress: 0
     };
-    
+
     await this.executeTask(task);
   }
 
@@ -371,31 +371,31 @@ export class UniversalAgent implements Agent {
     if (combined.includes('react') || combined.includes('component') || combined.includes('jsx')) {
       return { category: 'react-development', confidence: 0.9, reasoning: 'Contains React-related keywords' };
     }
-    
+
     if (combined.includes('api') || combined.includes('backend') || combined.includes('server') || combined.includes('database')) {
       return { category: 'backend-development', confidence: 0.85, reasoning: 'Contains backend-related keywords' };
     }
-    
+
     if (combined.includes('docker') || combined.includes('deploy') || combined.includes('ci/cd') || combined.includes('kubernetes')) {
       return { category: 'devops-operations', confidence: 0.9, reasoning: 'Contains DevOps-related keywords' };
     }
-    
+
     if (combined.includes('analyze') || combined.includes('review') || combined.includes('audit')) {
       return { category: 'code-analysis', confidence: 0.8, reasoning: 'Contains analysis-related keywords' };
     }
-    
+
     if (combined.includes('generate') || combined.includes('create') || combined.includes('build')) {
       return { category: 'code-generation', confidence: 0.8, reasoning: 'Contains generation-related keywords' };
     }
-    
+
     if (combined.includes('optimize') || combined.includes('improve') || combined.includes('performance')) {
       return { category: 'optimization', confidence: 0.85, reasoning: 'Contains optimization-related keywords' };
     }
-    
+
     if (combined.includes('file') || combined.includes('read') || combined.includes('write')) {
       return { category: 'file-operations', confidence: 0.7, reasoning: 'Contains file operation keywords' };
     }
-    
+
     if (combined.includes('autonomous') || combined.includes('full') || combined.includes('complete')) {
       return { category: 'autonomous-development', confidence: 0.75, reasoning: 'Contains autonomous development keywords' };
     }
@@ -436,7 +436,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         analysisType: 'comprehensive',
         findings: 5,
         recommendations: 5
@@ -478,7 +478,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         generationType: 'full-implementation',
         filesGenerated: 3,
         testsIncluded: true
@@ -523,7 +523,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         reviewType: 'comprehensive',
         issuesFound: 2,
         criticalIssues: 0,
@@ -579,7 +579,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         optimizationType: 'comprehensive',
         performanceGain: 40,
         memoryReduction: 25
@@ -631,7 +631,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         developmentType: 'react-frontend',
         componentsCreated: 5,
         hooksImplemented: 3,
@@ -685,7 +685,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         developmentType: 'backend-api',
         endpointsCreated: 12,
         databaseTables: 5,
@@ -739,7 +739,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         operationType: 'full-devops-setup',
         containersConfigured: 3,
         pipelinesCreated: 2,
@@ -791,7 +791,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         operationType: 'safe-file-operations',
         filesProcessed: 25,
         directoriesCreated: 3,
@@ -849,7 +849,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         developmentType: 'autonomous-fullstack',
         componentsCreated: 15,
         apiEndpoints: 20,
@@ -898,7 +898,7 @@ export class UniversalAgent implements Agent {
 
     return {
       output,
-      data: { 
+      data: {
         taskType: 'general-purpose',
         complexity: 'medium',
         satisfied: true
@@ -909,7 +909,7 @@ export class UniversalAgent implements Agent {
   }
 
   private async loadGuidanceFiles(): Promise<void> {
-    const guidanceFiles = ['CLAUDE.md', 'README.md', 'package.json', '.gitignore'];
+    const guidanceFiles = ['NIKOCLI.md', 'CLAUDE.md', 'README.md', 'package.json', '.gitignore'];
     let loadedGuidance = '';
 
     for (const file of guidanceFiles) {
@@ -931,18 +931,18 @@ export class UniversalAgent implements Agent {
 
   private async detectEnvironment(): Promise<void> {
     const packageJsonPath = path.join(this.workingDirectory, 'package.json');
-    
+
     if (fs.existsSync(packageJsonPath)) {
       try {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
-        
+
         // Detect frameworks and tools
         if (deps.react) this.capabilities.push('react-detected');
         if (deps.next) this.capabilities.push('nextjs-detected');
         if (deps.express) this.capabilities.push('express-detected');
         if (deps.typescript) this.capabilities.push('typescript-detected');
-        
+
       } catch (error) {
         await logger.logAgent('debug', this.id, 'Could not parse package.json');
       }
@@ -957,7 +957,7 @@ export class UniversalAgent implements Agent {
     }
 
     this.metrics.totalExecutionTime += duration;
-    
+
     const totalTasks = this.metrics.tasksSucceeded + this.metrics.tasksFailed;
     this.metrics.successRate = totalTasks > 0 ? this.metrics.tasksSucceeded / totalTasks : 0;
     this.metrics.averageExecutionTime = totalTasks > 0 ? this.metrics.totalExecutionTime / totalTasks : 0;

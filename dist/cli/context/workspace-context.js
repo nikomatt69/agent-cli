@@ -326,8 +326,12 @@ class WorkspaceContextManager {
             structure: projectAnalysis.structure,
         };
     }
-    // Get context for AI agents
-    getContextForAgent(agentId, maxFiles = 20) {
+    // Get context for AI agents with automatic grep filtering
+    getContextForAgent(agentId, maxFiles = 20, searchQuery) {
+        // Auto-apply grep filtering if we have too many files or if a search query is provided
+        if (searchQuery || this.context.files.size > 50) {
+            return this.getFilteredContextForAgent(agentId, maxFiles, searchQuery);
+        }
         // Get most important files within selected paths
         const relevantFiles = Array.from(this.context.files.values())
             .filter(file => this.context.selectedPaths.some(path => file.path.startsWith(path.replace(this.context.rootPath, ''))))
@@ -343,6 +347,64 @@ class WorkspaceContextManager {
             totalContext,
         };
     }
+    // Get filtered context using grep-like search
+    getFilteredContextForAgent(agentId, maxFiles = 20, searchQuery) {
+        console.log(chalk_1.default.yellow(`🔍 Auto-filtering context${searchQuery ? ` for query: "${searchQuery}"` : ' (large workspace)'}...`));
+        let relevantFiles;
+        if (searchQuery) {
+            // Use search query to filter files
+            relevantFiles = this.searchFilesWithQuery(searchQuery, maxFiles);
+        }
+        else {
+            // Just get the most important files when no search query
+            relevantFiles = Array.from(this.context.files.values())
+                .sort((a, b) => b.importance - a.importance)
+                .slice(0, maxFiles);
+        }
+        const projectSummary = this.generateProjectSummary();
+        const totalContext = this.generateContextString(relevantFiles, projectSummary);
+        console.log(chalk_1.default.green(`✅ Context filtered to ${relevantFiles.length} relevant files`));
+        return {
+            selectedPaths: this.context.selectedPaths,
+            relevantFiles,
+            projectSummary,
+            totalContext,
+        };
+    }
+    // Search files using grep-like functionality
+    searchFilesWithQuery(query, maxFiles) {
+        const searchResults = [];
+        // Search in file content and paths
+        for (const file of this.context.files.values()) {
+            let score = 0;
+            // Score based on query matches in file path
+            const pathMatches = (file.path.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
+            score += pathMatches * 20;
+            // Score based on query matches in content
+            const contentMatches = (file.content.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
+            score += contentMatches * 10;
+            // Score based on query matches in summary
+            if (file.summary) {
+                const summaryMatches = (file.summary.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
+                score += summaryMatches * 15;
+            }
+            // Score based on query matches in exports
+            if (file.exports) {
+                const exportMatches = file.exports.filter(exp => exp.toLowerCase().includes(query.toLowerCase())).length;
+                score += exportMatches * 25;
+            }
+            // Add base importance score
+            score += file.importance;
+            if (score > 0) {
+                searchResults.push({ file, score });
+            }
+        }
+        // Sort by relevance score and return top results
+        return searchResults
+            .sort((a, b) => b.score - a.score)
+            .slice(0, maxFiles)
+            .map(result => result.file);
+    }
     generateProjectSummary() {
         const metadata = this.context.projectMetadata;
         const fileCount = this.context.files.size;
@@ -356,6 +418,14 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
     generateContextString(files, projectSummary) {
         let context = `=== WORKSPACE CONTEXT ===\n${projectSummary}\n\n`;
         context += `=== SELECTED FILES (${files.length}) ===\n`;
+        // Calculate if we need to truncate content due to size
+        const totalSize = files.reduce((sum, file) => sum + file.content.length, 0);
+        const maxContextSize = 50000; // ~50KB limit for context
+        const shouldTruncate = totalSize > maxContextSize;
+        const truncateSize = shouldTruncate ? Math.floor(maxContextSize / files.length) : 4000;
+        if (shouldTruncate) {
+            context += `\n⚠️ Large workspace detected - content truncated to ${truncateSize} chars per file\n`;
+        }
         files.forEach(file => {
             context += `\n--- ${file.path} (${file.language}, ${file.size} bytes, importance: ${file.importance}) ---\n`;
             context += `Summary: ${file.summary}\n`;
@@ -365,9 +435,9 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
             if (file.dependencies && file.dependencies.length > 0) {
                 context += `Dependencies: ${file.dependencies.join(', ')}\n`;
             }
-            // Include file content (truncated for large files)
-            const contentPreview = file.content.length > 2000 ?
-                file.content.slice(0, 2000) + '\n... [truncated]' :
+            // Smart content truncation
+            const contentPreview = file.content.length > truncateSize ?
+                file.content.slice(0, truncateSize) + '\n... [truncated - use /search to find specific content]' :
                 file.content;
             context += `Content:\n${contentPreview}\n`;
         });
@@ -393,6 +463,51 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
     stopWatching() {
         this.watchers.forEach(watcher => watcher.close());
         this.watchers.clear();
+    }
+    // Smart context extraction for specific queries
+    extractRelevantContext(query) {
+        console.log(chalk_1.default.blue(`🔍 Extracting context for: "${query}"`));
+        const relevantFiles = this.searchFilesWithQuery(query, 10);
+        if (relevantFiles.length === 0) {
+            return `No relevant files found for query: "${query}"`;
+        }
+        let context = `=== RELEVANT CONTEXT FOR: "${query}" ===\n\n`;
+        relevantFiles.forEach(file => {
+            context += `\n--- ${file.path} ---\n`;
+            // Extract relevant snippets from the file
+            const snippets = this.extractRelevantSnippets(file.content, query);
+            if (snippets.length > 0) {
+                context += snippets.join('\n...\n') + '\n';
+            }
+            else {
+                // If no specific snippets, show summary and first part
+                context += `${file.summary}\n`;
+                context += file.content.slice(0, 500) + '\n';
+            }
+        });
+        return context;
+    }
+    // Extract relevant code snippets around query matches
+    extractRelevantSnippets(content, query) {
+        const lines = content.split('\n');
+        const queryLower = query.toLowerCase();
+        const snippets = [];
+        const contextLines = 3; // Lines of context around matches
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().includes(queryLower)) {
+                const start = Math.max(0, i - contextLines);
+                const end = Math.min(lines.length, i + contextLines + 1);
+                const snippet = lines.slice(start, end)
+                    .map((line, index) => {
+                    const lineNum = start + index + 1;
+                    const marker = (start + index === i) ? '>>> ' : '    ';
+                    return `${marker}${lineNum}: ${line}`;
+                })
+                    .join('\n');
+                snippets.push(snippet);
+            }
+        }
+        return snippets.slice(0, 5); // Limit to 5 snippets per file
     }
     // Display context summary
     showContextSummary() {

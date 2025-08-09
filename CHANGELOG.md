@@ -13,6 +13,7 @@ This is the first major release transforming the original AI Agents CLI into a t
 #### ✨ **Added**
 
 ##### **Multi-Agent AI System**
+
 - **6 Specialized Agents**: Full-stack developer, React expert, Backend engineer, DevOps specialist, Testing expert, Code reviewer
 - **Smart Agent Selection**: `/auto` command automatically selects best agent for tasks
 - **Agent Mode**: `/use <agent>` switches to focused agent conversation
@@ -20,7 +21,8 @@ This is the first major release transforming the original AI Agents CLI into a t
 - **Execution History**: Track and review all agent activities
 - **Agent Suggestions**: AI suggests relevant agents based on task description
 
-##### **Real-Time Tool Integration** 
+##### **Real-Time Tool Integration**
+
 - **File Operations**: `read_file`, `write_file`, `list_directory` tools integrated in chat
 - **Command Execution**: `execute_command` tool with safety confirmations
 - **Workspace Analysis**: `analyze_workspace` tool for automatic project understanding
@@ -28,20 +30,23 @@ This is the first major release transforming the original AI Agents CLI into a t
 - **Context Awareness**: Automatic project structure detection and analysis
 
 ##### **Multi-Model Support**
+
 - **OpenAI Integration**: GPT-4, GPT-3.5 Turbo support
-- **Anthropic Integration**: Claude 3.5 Sonnet, Claude 3 Haiku support  
+- **Anthropic Integration**: Claude 3.5 Sonnet, Claude 3 Haiku support
 - **Google Integration**: Gemini Pro, Gemini 1.5 Flash support
 - **Model Switching**: `/model` command for runtime model changes
 - **API Key Management**: Secure storage and environment variable fallback
 
 ##### **Modern CLI Experience**
+
 - **Beautiful Interface**: Colored output, gradient prompts, formatted responses
 - **Interactive Commands**: Rich slash command system (`/help`, `/agents`, `/auto`, etc.)
 - **Session Management**: Persistent chat history and context
 - **Working Directory**: `/cd`, `/pwd`, `/ls` commands for navigation
-- **Configuration**: Comprehensive config system with `claude-code-clone config`
+- **Configuration**: Comprehensive config system with `nikcli config`
 
 ##### **Developer Experience**
+
 - **TypeScript First**: Full TypeScript support with proper types
 - **Yarn Integration**: Uses Yarn for all package management (never npm)
 - **Modern Dependencies**: Latest Vercel AI SDK, TypeScript 5.7+, modern tooling
@@ -49,6 +54,7 @@ This is the first major release transforming the original AI Agents CLI into a t
 - **Testing**: Comprehensive test suite with `yarn test:system`
 
 ##### **Setup & Installation**
+
 - **One-Line Setup**: `yarn setup` handles complete installation
 - **Interactive Configuration**: Guided API key setup
 - **Global Installation**: `yarn link` for system-wide access
@@ -56,6 +62,7 @@ This is the first major release transforming the original AI Agents CLI into a t
 - **Desktop Shortcuts**: Optional shortcuts for easy access
 
 ##### **Documentation**
+
 - **Comprehensive README**: Detailed usage guide and examples
 - **Installation Guide**: Step-by-step setup instructions
 - **Examples Collection**: Real-world usage patterns and workflows
@@ -64,29 +71,33 @@ This is the first major release transforming the original AI Agents CLI into a t
 #### 🔧 **Technical Improvements**
 
 ##### **Core Architecture**
+
 - **ModernAIProvider**: New AI provider with tool calling support
 - **ModernAgentSystem**: Specialized agent capabilities and orchestration
 - **ClaudeCodeInterface**: Enhanced chat interface with streaming
 - **ModernConfigManager**: Robust configuration with validation
 
 ##### **Tool System**
+
 - **Function Definitions**: Proper Zod schemas for all tools
 - **Error Handling**: Comprehensive error management and user feedback
 - **Security**: Path sanitization and command validation
 - **Performance**: Optimized file operations and streaming
 
-##### **Build & Deployment** 
+##### **Build & Deployment**
+
 - **Automated Build**: `build.sh` script for consistent compilation
 - **Package Management**: Yarn-first approach with proper lockfiles
 - **Binary Distribution**: Optimized CLI binary with proper entry points
 - **Validation**: System tests ensure functionality before release
 
 #### 📦 **Package Updates**
+
 ```json
 {
   "dependencies": {
     "@ai-sdk/anthropic": "^0.0.56",
-    "@ai-sdk/google": "^0.0.61", 
+    "@ai-sdk/google": "^0.0.61",
     "@ai-sdk/openai": "^0.0.74",
     "ai": "^4.0.7",
     "boxen": "^8.0.1",
@@ -107,11 +118,12 @@ This is the first major release transforming the original AI Agents CLI into a t
 ```
 
 #### 🗂️ **New File Structure**
+
 ```
-claude-code-clone/
+nikcli/
 ├── src/cli/
 │   ├── ai/modern-ai-provider.ts         # New AI provider with tools
-│   ├── agents/modern-agent-system.ts    # Multi-agent orchestration  
+│   ├── agents/modern-agent-system.ts    # Multi-agent orchestration
 │   ├── chat/claude-code-interface.ts    # Enhanced chat interface
 │   ├── config/config-manager.ts         # Modern configuration
 │   └── index.ts                         # Updated CLI entry
@@ -126,8 +138,9 @@ claude-code-clone/
 #### 💬 **Command Reference**
 
 ##### **New Chat Commands**
+
 - `/help` - Show all available commands
-- `/agents` - List all specialized agents  
+- `/agents` - List all specialized agents
 - `/use <agent>` - Switch to agent mode
 - `/auto <task>` - Auto-select best agent
 - `@<agent> <task>` - Direct agent execution
@@ -137,33 +150,36 @@ claude-code-clone/
 - `/pwd` - Show current directory
 - `/ls` - List directory contents
 
-##### **New CLI Commands**  
-- `claude-code-clone setup` - Interactive setup
-- `claude-code-clone agents` - List agents
-- `claude-code-clone models` - List AI models
-- `claude-code-clone key <model> <key>` - Set API key
-- `claude-code-clone analyze [path]` - Analyze project
-- `claude-code-clone create <desc>` - Create files/components
+##### **New CLI Commands**
+
+- `nikcli setup` - Interactive setup
+- `nikcli agents` - List agents
+- `nikcli models` - List AI models
+- `nikcli key <model> <key>` - Set API key
+- `nikcli analyze [path]` - Analyze project
+- `nikcli create <desc>` - Create files/components
 
 #### 🎯 **Agent Capabilities**
 
-| Agent | Specialization | Key Features |
-|-------|----------------|-------------|
-| **full-stack-developer** | Complete applications | React + Node.js + DB + Deploy |
-| **react-expert** | Frontend mastery | Components, hooks, Next.js, optimization |
-| **backend-engineer** | Server-side systems | APIs, databases, authentication, scaling |
-| **devops-engineer** | Infrastructure | Docker, CI/CD, deployment, monitoring |
-| **testing-specialist** | Quality assurance | Unit, integration, E2E, automation |
-| **code-reviewer** | Code quality | Security, performance, best practices |
+| Agent                    | Specialization        | Key Features                             |
+| ------------------------ | --------------------- | ---------------------------------------- |
+| **full-stack-developer** | Complete applications | React + Node.js + DB + Deploy            |
+| **react-expert**         | Frontend mastery      | Components, hooks, Next.js, optimization |
+| **backend-engineer**     | Server-side systems   | APIs, databases, authentication, scaling |
+| **devops-engineer**      | Infrastructure        | Docker, CI/CD, deployment, monitoring    |
+| **testing-specialist**   | Quality assurance     | Unit, integration, E2E, automation       |
+| **code-reviewer**        | Code quality          | Security, performance, best practices    |
 
 #### 🚀 **Performance Improvements**
+
 - **Streaming**: Real-time response rendering
 - **Tool Execution**: Parallel file operations where safe
-- **Context Loading**: Optimized workspace analysis  
+- **Context Loading**: Optimized workspace analysis
 - **Memory Usage**: Efficient chat history management
 - **Startup Time**: Fast CLI initialization
 
 #### 🔒 **Security Enhancements**
+
 - **Path Validation**: Prevent directory traversal attacks
 - **Command Sanitization**: Safe command execution
 - **API Key Storage**: Secure credential management
@@ -174,13 +190,15 @@ claude-code-clone/
 ## [Unreleased]
 
 ### 🔮 **Planned for v2.1**
+
 - [ ] **Multi-Agent Collaboration**: Agents working together on complex tasks
-- [ ] **Vision Integration**: Analyze UI screenshots and mockups  
+- [ ] **Vision Integration**: Analyze UI screenshots and mockups
 - [ ] **Plugin System**: Custom tools and extensions
 - [ ] **Cloud Synchronization**: Cross-device project state
 - [ ] **Advanced Streaming**: Progress bars and detailed status
 
 ### 🔮 **Planned for v2.2**
+
 - [ ] **Team Features**: Multi-user collaboration
 - [ ] **Analytics Dashboard**: Usage insights and optimization
 - [ ] **Custom Model Support**: Local and custom AI models
@@ -193,51 +211,57 @@ claude-code-clone/
 ### **From v1.x to v2.0**
 
 #### **Breaking Changes**
+
 1. **New Command Structure**: Old commands like `/run` replaced with agent system
-2. **Configuration Format**: Config file structure completely redesigned  
+2. **Configuration Format**: Config file structure completely redesigned
 3. **Dependencies**: Major package updates require fresh install
 4. **File Structure**: New TypeScript organization
 
 #### **Migration Steps**
+
 1. **Backup old configuration**:
+
    ```bash
    cp ~/.ai-coder-cli.json ~/.ai-coder-cli.json.backup
    ```
 
 2. **Fresh installation**:
+
    ```bash
    git pull origin main
    rm -rf node_modules dist
    yarn install
-   yarn build:cli  
+   yarn build:cli
    ```
 
 3. **Reconfigure API keys**:
+
    ```bash
-   claude-code-clone setup
+   nikcli setup
    ```
 
 4. **Test new system**:
    ```bash
    yarn test:system
-   claude-code-clone chat
+   nikcli chat
    ```
 
 #### **Feature Mapping**
 
-| v1.x Command | v2.0 Equivalent |
-|--------------|-----------------|
+| v1.x Command               | v2.0 Equivalent              |
+| -------------------------- | ---------------------------- |
 | `/run coding-agent "task"` | `@full-stack-developer task` |
-| `/run react-agent "task"` | `@react-expert task` |  
-| `/agent list` | `/agents` |
-| `/models` | `claude-code-clone models` |
-| `/config` | `claude-code-clone config` |
+| `/run react-agent "task"`  | `@react-expert task`         |
+| `/agent list`              | `/agents`                    |
+| `/models`                  | `nikcli models`              |
+| `/config`                  | `nikcli config`              |
 
 ---
 
 ## Development Notes
 
 ### **Version 2.0.0 Development Timeline**
+
 - **Planning Phase**: January 2025
 - **Core Development**: January-February 2025
 - **Testing & Refinement**: February 2025
@@ -245,6 +269,7 @@ claude-code-clone/
 - **Release**: August 2025
 
 ### **Key Development Decisions**
+
 1. **Yarn over npm**: Consistent package management
 2. **TypeScript 5.7+**: Latest language features
 3. **Vercel AI SDK 4.0+**: Modern AI integration
@@ -253,8 +278,9 @@ claude-code-clone/
 6. **Agent Specialization**: Domain-specific expertise
 
 ### **Testing Strategy**
+
 - **Unit Tests**: Core functionality validation
-- **Integration Tests**: AI provider and tool integration  
+- **Integration Tests**: AI provider and tool integration
 - **System Tests**: End-to-end CLI validation
 - **Manual Testing**: Real-world usage scenarios
 
@@ -263,11 +289,13 @@ claude-code-clone/
 ## Acknowledgments
 
 ### **v2.0 Contributors**
+
 - **Core Development**: AI-assisted development with Claude
 - **Testing**: Comprehensive validation across platforms
 - **Documentation**: Extensive guides and examples
 
 ### **Special Thanks**
+
 - **Claude Code Team**: Original inspiration and design patterns
 - **Vercel AI Team**: Excellent AI SDK and tooling
 - **OpenAI, Anthropic, Google**: AI model providers
@@ -275,4 +303,4 @@ claude-code-clone/
 
 ---
 
-**View the full diff and implementation details in the [GitHub release](https://github.com/your-repo/claude-code-clone/releases/tag/v2.0.0).**
+**View the full diff and implementation details in the [GitHub release](https://github.com/your-repo/nikcli/releases/tag/v2.0.0).**

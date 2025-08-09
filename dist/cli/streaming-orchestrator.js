@@ -40,7 +40,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StreamingOrchestrator = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const readline = __importStar(require("readline"));
-const gradient_string_1 = __importDefault(require("gradient-string"));
 const events_1 = require("events");
 const agent_service_1 = require("./services/agent-service");
 const tool_service_1 = require("./services/tool-service");
@@ -532,7 +531,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             modes.push(chalk_1.default.green('auto-accept'));
         const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
         const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
-        const prompt = gradient_string_1.default.rainbow(`\\n┌─[${agentIndicator}:${dir}${modeStr}]─[${contextStr}]\\n└─❯ `);
+        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
@@ -549,7 +548,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         return [hits.length ? hits : all, line];
     }
     gracefulExit() {
-        console.log(chalk_1.default.blue('\\n👋 Shutting down orchestrator...'));
+        console.log(chalk_1.default.blue('\n👋 Shutting down orchestrator...'));
         if (this.activeAgents.size > 0) {
             console.log(chalk_1.default.yellow(`⏳ Waiting for ${this.activeAgents.size} agents to finish...`));
             // In production, you'd wait for agents to complete
@@ -580,14 +579,14 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         return true;
     }
     showWelcome() {
-        const title = gradient_string_1.default.rainbow('🎛️ Streaming AI Development Orchestrator');
+        const title = chalk_1.default.cyanBright('🎛️ Streaming AI Development Orchestrator');
         console.log(chalk_1.default.cyan('─'.repeat(80)));
         console.log(title);
         console.log(chalk_1.default.cyan('─'.repeat(80)));
         console.log(`${chalk_1.default.blue('Directory:')} ${this.context.workingDirectory}`);
         console.log(`${chalk_1.default.blue('Max Agents:')} 3 parallel`);
         console.log(`${chalk_1.default.blue('Mode:')} ${this.context.autoAcceptEdits ? 'Auto-accept' : 'Manual'}`);
-        console.log(chalk_1.default.dim('\\nPress / for commands, @ for agents, or describe what you want to do\\n'));
+        console.log(chalk_1.default.dim('\nPress / for commands, @ for agents, or describe what you want to do\n'));
     }
     async initializeServices() {
         // Initialize all services

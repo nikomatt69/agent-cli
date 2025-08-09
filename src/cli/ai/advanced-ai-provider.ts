@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOllama } from 'ollama-ai-provider';
 import {
   generateText,
   streamText,
@@ -18,6 +19,9 @@ import { join, relative, resolve, dirname, extname } from 'path';
 import { exec, execSync } from 'child_process';
 import chalk from 'chalk';
 import { promisify } from 'util';
+import { compactAnalysis, safeStringifyContext, truncateForPrompt } from '../utils/analysis-utils';
+import { tokenCache } from '../core/token-cache';
+import { completionCache } from '../core/completion-protocol-cache';
 
 const execAsync = promisify(exec);
 
@@ -39,6 +43,12 @@ export interface AutonomousProvider {
 export class AdvancedAIProvider implements AutonomousProvider {
   generateWithTools(planningMessages: CoreMessage[]) {
     throw new Error('Method not implemented.');
+  }
+
+  // Truncate long free-form strings to keep prompts safe
+  private truncateForPrompt(s: string, maxChars: number = 2000): string {
+    if (!s) return '';
+    return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
   }
   private currentModel: string;
   private workingDirectory: string = process.cwd();
@@ -274,10 +284,17 @@ export class AdvancedAIProvider implements AutonomousProvider {
               securityScan
             });
 
-            // Store complete analysis in context
+            // Store complete analysis in context (may be large)
             this.executionContext.set('project:analysis', analysis);
 
-            return analysis;
+            // Return a compact, chunk-safe summary to avoid prompt overflow
+            const compact = compactAnalysis(analysis, {
+              maxDirs: 40,
+              maxFiles: 150,
+              maxChars: 8000,
+            });
+
+            return compact;
           } catch (error: any) {
             return { error: `Project analysis failed: ${error.message}` };
           }
@@ -383,10 +400,53 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Claude Code style streaming with full autonomy
   async *streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent> {
-    const model = this.getModel();
+    const model = this.getModel() as any;
     const tools = this.getAdvancedTools();
 
     try {
+      // ADVANCED: Check completion protocol cache first (ultra-efficient)
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      const systemContext = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+
+      if (lastUserMessage) {
+        // Try completion protocol cache first (most efficient)
+        const userContent = typeof lastUserMessage.content === 'string'
+          ? lastUserMessage.content
+          : Array.isArray(lastUserMessage.content)
+            ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+            : String(lastUserMessage.content);
+
+        const completionRequest = {
+          prefix: userContent,
+          context: systemContext.substring(0, 300),
+          maxTokens: 1000,
+          temperature: 0.7,
+          model: this.currentModel
+        };
+
+        const protocolCompletion = await completionCache.getCompletion(completionRequest);
+        if (protocolCompletion) {
+          yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
+          yield { type: 'text_delta', content: protocolCompletion.completion };
+          yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
+          return;
+        }
+
+        // Fallback to full response cache
+        const cachedResponse = await tokenCache.getCachedResponse(
+          userContent,
+          systemContext.substring(0, 500),
+          ['chat', 'autonomous']
+        );
+
+        if (cachedResponse) {
+          yield { type: 'start', content: '🎯 Using cached response...' };
+          yield { type: 'text_delta', content: cachedResponse.response };
+          yield { type: 'complete', content: 'Cache hit - tokens saved!' };
+          return;
+        }
+      }
+
       yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
 
       const result = streamText({
@@ -449,6 +509,40 @@ export class AdvancedAIProvider implements AutonomousProvider {
             break;
 
           case 'finish':
+            // DUAL CACHE: Store both completion pattern AND full response
+            if (lastUserMessage && accumulatedText.trim()) {
+              const userContentLength = typeof lastUserMessage.content === 'string'
+                ? lastUserMessage.content.length
+                : String(lastUserMessage.content).length;
+              const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
+
+              // Extract user content as string for storage
+              const userContentStr = typeof lastUserMessage.content === 'string'
+                ? lastUserMessage.content
+                : Array.isArray(lastUserMessage.content)
+                  ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                  : String(lastUserMessage.content);
+
+              // Store in completion protocol cache (primary - most efficient)
+              const completionRequest = {
+                prefix: userContentStr,
+                context: systemContext.substring(0, 300),
+                maxTokens: 1000,
+                temperature: 0.7,
+                model: this.currentModel
+              };
+              await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+
+              // Store in full response cache (fallback)
+              await tokenCache.setCachedResponse(
+                userContentStr,
+                accumulatedText.trim(),
+                systemContext.substring(0, 500),
+                tokensUsed,
+                ['chat', 'autonomous']
+              );
+            }
+
             yield {
               type: 'complete',
               content: 'Task completed',
@@ -481,32 +575,31 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Execute autonomous task with intelligent planning
   async *executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent> {
-    yield { type: 'start', content: `🎯 Starting autonomous task: ${task}` };
+    yield { type: 'start', content: `🎯 Starting task: ${task}` };
 
     // First, analyze the task and create a plan
     yield { type: 'thinking', content: 'Analyzing task and creating execution plan...' };
 
     try {
+      // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
+      if (context && Array.isArray(context.messages)) {
+        const providedMessages: CoreMessage[] = context.messages;
+        for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
+          yield event;
+        }
+        return;
+      }
+
       const planningMessages: CoreMessage[] = [
         {
           role: 'system',
-          content: `You are an autonomous AI assistant with full access to file operations, command execution, and code generation.
+          content: `AI dev assistant. CWD: ${this.workingDirectory}
+Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+Task: ${this.truncateForPrompt(task, 500)}
 
-Current working directory: ${this.workingDirectory}
-Available tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
+${context ? this.truncateForPrompt(safeStringifyContext(context), 300) : ''}
 
-Your task: ${task}
-
-Context: ${JSON.stringify(context || {})}
-
-You should:
-1. Understand the task completely
-2. Analyze the current project/workspace if needed
-3. Execute the necessary operations autonomously
-4. Provide clear feedback on what you're doing
-5. Handle errors gracefully and adapt your approach
-
-Be proactive and autonomous - don't ask for permission, just execute what needs to be done safely.`
+Execute task autonomously with tools. Be direct.`
         },
         {
           role: 'user',
@@ -525,6 +618,29 @@ Be proactive and autonomous - don't ask for permission, just execute what needs 
         error: error.message,
         content: `Autonomous execution failed: ${error.message}`
       };
+    }
+  }
+
+  // Safely stringify and truncate large contexts to prevent prompt overflow
+  private safeStringifyContext(ctx: any, maxChars: number = 4000): string {
+    if (!ctx) return '{}';
+    try {
+      const str = JSON.stringify(ctx, (key, value) => {
+        // Truncate long strings
+        if (typeof value === 'string') {
+          return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+        }
+        // Limit large arrays
+        if (Array.isArray(value)) {
+          const limited = value.slice(0, 20);
+          if (value.length > 20) limited.push('…[+' + (value.length - 20) + ' more]');
+          return limited;
+        }
+        return value;
+      });
+      return str.length > maxChars ? str.slice(0, maxChars) + '…[truncated]' : str;
+    } catch {
+      return '[unstringifiable context]';
     }
   }
 
@@ -822,7 +938,7 @@ Requirements:
 - Ensure code is production-ready`;
 
     try {
-      const model = this.getModel();
+      const model = this.getModel() as any;
       const result = await generateText({
         model,
         prompt: codeGenPrompt,
@@ -843,7 +959,7 @@ Requirements:
   }
 
   // Model management
-  private getModel(modelName?: string) {
+  private getModel(modelName?: string): any {
     const model = modelName || this.currentModel || configManager.get('currentModel');
     const allModels = configManager.get('models');
     const configData = allModels[model];
@@ -852,29 +968,32 @@ Requirements:
       throw new Error(`Model ${model} not found in configuration`);
     }
 
-    const apiKey = configManager.getApiKey(model);
-    if (!apiKey) {
-      throw new Error(`No API key found for model ${model}`);
-    }
-
     // Configure providers with API keys properly
     // Create provider instances with API keys, then get the specific model
     switch (configData.provider) {
-      case 'openai':
-        const openaiProvider = createOpenAI({
-          apiKey: apiKey
-        });
+      case 'openai': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (OpenAI)`);
+        const openaiProvider = createOpenAI({ apiKey });
         return openaiProvider(configData.model);
-      case 'anthropic':
-        const anthropicProvider = createAnthropic({
-          apiKey: apiKey
-        });
+      }
+      case 'anthropic': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (Anthropic)`);
+        const anthropicProvider = createAnthropic({ apiKey });
         return anthropicProvider(configData.model);
-      case 'google':
-        const googleProvider = createGoogleGenerativeAI({
-          apiKey: apiKey
-        });
+      }
+      case 'google': {
+        const apiKey = configManager.getApiKey(model);
+        if (!apiKey) throw new Error(`No API key found for model ${model} (Google)`);
+        const googleProvider = createGoogleGenerativeAI({ apiKey });
         return googleProvider(configData.model);
+      }
+      case 'ollama': {
+        // Ollama runs locally and does not require API keys
+        const ollamaProvider = createOllama({});
+        return ollamaProvider(configData.model);
+      }
       default:
         throw new Error(`Unsupported provider: ${configData.provider}`);
     }
