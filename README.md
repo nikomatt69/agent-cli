@@ -1,4 +1,4 @@
-# 🚀 Claude Code Clone
+# 🚀  NikCli
 
 **Autonomous AI Developer Assistant with Terminal Velocity**
 
