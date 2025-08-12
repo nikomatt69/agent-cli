@@ -46,9 +46,8 @@ const advanced_ai_provider_1 = require("../ai/advanced-ai-provider");
 const modern_agent_system_1 = require("../automation/agents/modern-agent-system");
 const config_manager_1 = require("../core/config-manager");
 const ora_1 = __importDefault(require("ora"));
-const diff_manager_1 = require("../ui/diff-manager");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const execution_policy_1 = require("../policies/execution-policy");
-const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 const context_manager_1 = require("../core/context-manager");
 // Configure marked for terminal rendering
 marked_1.marked.setOptions({
@@ -84,7 +83,7 @@ class AutonomousClaudeInterface {
         // Initialize security policy manager
         this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
         // Initialize structured UI
-        advanced_cli_ui_1.advancedUI.startInteractiveMode();
+        terminal_ui_1.advancedUI.startInteractiveMode();
         this.initializeStructuredPanels();
         this.setupEventHandlers();
         this.setupStreamOptimization();
@@ -421,18 +420,18 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 break;
             case 'diff':
                 if (args[0]) {
-                    diff_manager_1.diffManager.showDiff(args[0]);
+                    terminal_ui_1.diffManager.showDiff(args[0]);
                 }
                 else {
-                    diff_manager_1.diffManager.showAllDiffs();
+                    terminal_ui_1.diffManager.showAllDiffs();
                 }
                 break;
             case 'accept':
                 if (args[0] === 'all') {
-                    diff_manager_1.diffManager.acceptAllDiffs();
+                    terminal_ui_1.diffManager.acceptAllDiffs();
                 }
                 else if (args[0]) {
-                    diff_manager_1.diffManager.acceptDiff(args[0]);
+                    terminal_ui_1.diffManager.acceptDiff(args[0]);
                 }
                 else {
                     console.log(chalk_1.default.red('Usage: /accept <file> or /accept all'));
@@ -440,7 +439,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 break;
             case 'reject':
                 if (args[0]) {
-                    diff_manager_1.diffManager.rejectDiff(args[0]);
+                    terminal_ui_1.diffManager.rejectDiff(args[0]);
                 }
                 else {
                     console.log(chalk_1.default.red('Usage: /reject <file>'));
@@ -734,17 +733,17 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         switch (toolName) {
             case 'read_file':
                 if (toolResult.path && toolResult.content) {
-                    advanced_cli_ui_1.advancedUI.showFileContent(toolResult.path, toolResult.content);
+                    terminal_ui_1.advancedUI.showFileContent(toolResult.path, toolResult.content);
                 }
                 break;
             case 'write_file':
                 if (toolResult.path && toolResult.content) {
                     // Show diff if we have original content
                     if (toolResult.originalContent) {
-                        advanced_cli_ui_1.advancedUI.showFileDiff(toolResult.path, toolResult.originalContent, toolResult.content);
+                        terminal_ui_1.advancedUI.showFileDiff(toolResult.path, toolResult.originalContent, toolResult.content);
                     }
                     else {
-                        advanced_cli_ui_1.advancedUI.showFileContent(toolResult.path, toolResult.content);
+                        terminal_ui_1.advancedUI.showFileContent(toolResult.path, toolResult.content);
                     }
                 }
                 break;
@@ -752,20 +751,20 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             case 'list_files':
                 if (toolResult.files && Array.isArray(toolResult.files)) {
                     const files = toolResult.files.map((f) => f.path || f.name || f);
-                    advanced_cli_ui_1.advancedUI.showFileList(files, `📁 ${toolResult.path || 'Files'}`);
+                    terminal_ui_1.advancedUI.showFileList(files, `📁 ${toolResult.path || 'Files'}`);
                 }
                 break;
             case 'grep':
             case 'search_files':
                 if (toolResult.matches && Array.isArray(toolResult.matches)) {
                     const pattern = toolResult.pattern || 'search';
-                    advanced_cli_ui_1.advancedUI.showGrepResults(pattern, toolResult.matches);
+                    terminal_ui_1.advancedUI.showGrepResults(pattern, toolResult.matches);
                 }
                 break;
             case 'execute_command':
                 if (toolResult.stdout) {
                     // Show command output as status update
-                    advanced_cli_ui_1.advancedUI.logInfo(`Command: ${toolResult.command || 'unknown'}`, toolResult.stdout.slice(0, 200));
+                    terminal_ui_1.advancedUI.logInfo(`Command: ${toolResult.command || 'unknown'}`, toolResult.stdout.slice(0, 200));
                 }
                 break;
         }
@@ -1146,7 +1145,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     toggleAutoAcceptEdits() {
         this.session.autoAcceptEdits = !this.session.autoAcceptEdits;
         // Sync with diff manager
-        diff_manager_1.diffManager.setAutoAccept(this.session.autoAcceptEdits);
+        terminal_ui_1.diffManager.setAutoAccept(this.session.autoAcceptEdits);
         if (this.session.autoAcceptEdits) {
             console.log(chalk_1.default.green('\n✅ auto-accept edits on ') + chalk_1.default.dim('(shift+tab to cycle)'));
         }
@@ -1168,7 +1167,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         if (this.session.autonomous)
             indicators.push(chalk_1.default.blue('autonomous'));
         // Add diff count if there are pending diffs
-        const pendingCount = diff_manager_1.diffManager.getPendingCount();
+        const pendingCount = terminal_ui_1.diffManager.getPendingCount();
         if (pendingCount > 0) {
             indicators.push(chalk_1.default.yellow(`${pendingCount} diffs`));
         }

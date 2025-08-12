@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ListTool = exports.IGNORE_PATTERNS = void 0;
 const base_tool_1 = require("./base-tool");
 const prompt_manager_1 = require("../prompts/prompt-manager");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
@@ -53,7 +53,7 @@ class ListTool extends base_tool_1.BaseTool {
                 toolName: 'list-tool',
                 parameters: params
             });
-            cli_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
+            terminal_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
             const searchPath = params.path || this.workingDirectory;
             const limit = params.limit || DEFAULT_LIMIT;
             const maxDepth = Math.min(params.maxDepth || 5, MAX_DEPTH);
@@ -64,7 +64,7 @@ class ListTool extends base_tool_1.BaseTool {
             if (!(0, fs_1.existsSync)(searchPath)) {
                 throw new Error(`Directory does not exist: ${searchPath}`);
             }
-            cli_ui_1.CliUI.logInfo(`📁 Listing directory: ${(0, path_1.relative)(this.workingDirectory, searchPath)}`);
+            terminal_ui_1.CliUI.logInfo(`📁 Listing directory: ${(0, path_1.relative)(this.workingDirectory, searchPath)}`);
             // Scansione intelligente con limiti
             const results = await this.scanDirectory(searchPath, {
                 maxDepth,
@@ -99,7 +99,7 @@ class ListTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`List tool failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`List tool failed: ${error.message}`);
             return {
                 success: false,
                 error: error.message,
@@ -161,12 +161,12 @@ class ListTool extends base_tool_1.BaseTool {
                     }
                     catch (statError) {
                         // Skip file con errori di accesso
-                        cli_ui_1.CliUI.logDebug(`Skipping ${fullPath}: ${statError}`);
+                        terminal_ui_1.CliUI.logDebug(`Skipping ${fullPath}: ${statError}`);
                     }
                 }
             }
             catch (readdirError) {
-                cli_ui_1.CliUI.logDebug(`Cannot read directory ${currentPath}: ${readdirError}`);
+                terminal_ui_1.CliUI.logDebug(`Cannot read directory ${currentPath}: ${readdirError}`);
             }
         };
         await scanRecursive(searchPath, 0);

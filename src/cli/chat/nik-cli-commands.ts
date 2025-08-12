@@ -11,9 +11,7 @@ import { agentStream } from '../core/agent-stream';
 import { AgentTask } from '../types/types';
 import { workspaceContext } from '../context/workspace-context';
 import { enhancedPlanning } from '../planning/enhanced-planning';
-import { approvalSystem } from '../ui/approval-system';
-import { DiffViewer } from '../ui/diff-viewer';
-import { advancedUI } from '../ui/advanced-cli-ui';
+import { approvalSystem, DiffViewer, advancedUI } from '../ui/terminal-ui';
 
 
 export interface CommandResult {

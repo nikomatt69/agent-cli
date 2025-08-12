@@ -48,9 +48,7 @@ const agent_factory_1 = require("../core/agent-factory");
 const agent_stream_1 = require("../core/agent-stream");
 const workspace_context_1 = require("../context/workspace-context");
 const enhanced_planning_1 = require("../planning/enhanced-planning");
-const approval_system_1 = require("../ui/approval-system");
-const diff_viewer_1 = require("../ui/diff-viewer");
-const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 class SlashCommandHandler {
     constructor() {
         this.commands = new Map();
@@ -595,23 +593,23 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             const filePath = args[0];
             const content = args.slice(1).join(' ');
             // Create FileDiff for approval
-            const fileDiff = await diff_viewer_1.DiffViewer.createFileDiff(filePath);
+            const fileDiff = await terminal_ui_1.DiffViewer.createFileDiff(filePath);
             fileDiff.newContent = content;
             // Request approval before writing
-            const approved = await approval_system_1.approvalSystem.requestFileApproval(`Write file: ${filePath}`, [fileDiff], 'medium');
+            const approved = await terminal_ui_1.approvalSystem.requestFileApproval(`Write file: ${filePath}`, [fileDiff], 'medium');
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ File write operation cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
             // Create progress indicator
-            const writeId = advanced_cli_ui_1.advancedUI.createIndicator('file-write', `Writing ${filePath}`).id;
-            advanced_cli_ui_1.advancedUI.startSpinner(writeId, 'Writing file...');
+            const writeId = terminal_ui_1.advancedUI.createIndicator('file-write', `Writing ${filePath}`).id;
+            terminal_ui_1.advancedUI.startSpinner(writeId, 'Writing file...');
             await tools_manager_1.toolsManager.writeFile(filePath, content);
-            advanced_cli_ui_1.advancedUI.stopSpinner(writeId, true, `File written: ${filePath}`);
+            terminal_ui_1.advancedUI.stopSpinner(writeId, true, `File written: ${filePath}`);
             console.log(chalk_1.default.green(`✅ File written: ${filePath}`));
         }
         catch (error) {
-            advanced_cli_ui_1.advancedUI.logError(`Error writing file: ${error.message}`);
+            terminal_ui_1.advancedUI.logError(`Error writing file: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error writing file: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -695,27 +693,27 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             const [command, ...commandArgs] = args;
             const fullCommand = `${command} ${commandArgs.join(' ')}`;
             // Request approval for command execution
-            const approved = await approval_system_1.approvalSystem.requestCommandApproval(command, commandArgs, process.cwd());
+            const approved = await terminal_ui_1.approvalSystem.requestCommandApproval(command, commandArgs, process.cwd());
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ Command execution cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
             console.log(chalk_1.default.blue(`⚡ Running: ${fullCommand}`));
             // Create progress indicator
-            const cmdId = advanced_cli_ui_1.advancedUI.createIndicator('command', `Executing: ${command}`).id;
-            advanced_cli_ui_1.advancedUI.startSpinner(cmdId, `Running: ${fullCommand}`);
+            const cmdId = terminal_ui_1.advancedUI.createIndicator('command', `Executing: ${command}`).id;
+            terminal_ui_1.advancedUI.startSpinner(cmdId, `Running: ${fullCommand}`);
             const result = await tools_manager_1.toolsManager.runCommand(command, commandArgs, { stream: true });
             if (result.code === 0) {
-                advanced_cli_ui_1.advancedUI.stopSpinner(cmdId, true, 'Command completed successfully');
+                terminal_ui_1.advancedUI.stopSpinner(cmdId, true, 'Command completed successfully');
                 console.log(chalk_1.default.green('✅ Command completed successfully'));
             }
             else {
-                advanced_cli_ui_1.advancedUI.stopSpinner(cmdId, false, `Command failed with exit code ${result.code}`);
+                terminal_ui_1.advancedUI.stopSpinner(cmdId, false, `Command failed with exit code ${result.code}`);
                 console.log(chalk_1.default.red(`❌ Command failed with exit code ${result.code}`));
             }
         }
         catch (error) {
-            advanced_cli_ui_1.advancedUI.logError(`Error running command: ${error.message}`);
+            terminal_ui_1.advancedUI.logError(`Error running command: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error running command: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -733,37 +731,37 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             const manager = args.includes('--yarn') ? 'yarn' :
                 args.includes('--pnpm') ? 'pnpm' : 'npm';
             // Request approval for package installation
-            const approved = await approval_system_1.approvalSystem.requestPackageApproval(packages, manager, isGlobal);
+            const approved = await terminal_ui_1.approvalSystem.requestPackageApproval(packages, manager, isGlobal);
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ Package installation cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
             console.log(chalk_1.default.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
             // Create progress indicator
-            const installId = advanced_cli_ui_1.advancedUI.createIndicator('install', `Installing packages`).id;
-            advanced_cli_ui_1.advancedUI.createProgressBar(installId, 'Installing packages', packages.length);
+            const installId = terminal_ui_1.advancedUI.createIndicator('install', `Installing packages`).id;
+            terminal_ui_1.advancedUI.createProgressBar(installId, 'Installing packages', packages.length);
             for (let i = 0; i < packages.length; i++) {
                 const pkg = packages[i];
-                advanced_cli_ui_1.advancedUI.updateSpinner(installId, `Installing ${pkg}...`);
+                terminal_ui_1.advancedUI.updateSpinner(installId, `Installing ${pkg}...`);
                 const success = await tools_manager_1.toolsManager.installPackage(pkg, {
                     global: isGlobal,
                     dev: isDev,
                     manager: manager
                 });
                 if (!success) {
-                    advanced_cli_ui_1.advancedUI.logWarning(`Failed to install ${pkg}`);
+                    terminal_ui_1.advancedUI.logWarning(`Failed to install ${pkg}`);
                     console.log(chalk_1.default.yellow(`⚠️ Failed to install ${pkg}`));
                 }
                 else {
-                    advanced_cli_ui_1.advancedUI.logSuccess(`Installed ${pkg}`);
+                    terminal_ui_1.advancedUI.logSuccess(`Installed ${pkg}`);
                 }
-                advanced_cli_ui_1.advancedUI.updateProgress(installId, i + 1, packages.length);
+                terminal_ui_1.advancedUI.updateProgress(installId, i + 1, packages.length);
             }
-            advanced_cli_ui_1.advancedUI.completeProgress(installId, `Completed installation of ${packages.length} packages`);
+            terminal_ui_1.advancedUI.completeProgress(installId, `Completed installation of ${packages.length} packages`);
             console.log(chalk_1.default.green(`✅ Package installation completed`));
         }
         catch (error) {
-            advanced_cli_ui_1.advancedUI.logError(`Error installing packages: ${error.message}`);
+            terminal_ui_1.advancedUI.logError(`Error installing packages: ${error.message}`);
             console.log(chalk_1.default.red(`❌ Error installing packages: ${error.message}`));
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -1185,7 +1183,7 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
     async approvalCommand(args) {
         if (args.length === 0) {
             console.log(chalk_1.default.blue('Approval System Configuration:'));
-            const config = approval_system_1.approvalSystem.getConfig();
+            const config = terminal_ui_1.approvalSystem.getConfig();
             console.log(JSON.stringify(config, null, 2));
             return { shouldExit: false, shouldUpdatePrompt: false };
         }
@@ -1200,7 +1198,7 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                         console.log(chalk_1.default.gray('Types: low-risk, medium-risk, file-operations, package-installs'));
                         return { shouldExit: false, shouldUpdatePrompt: false };
                     }
-                    const currentConfig = approval_system_1.approvalSystem.getConfig();
+                    const currentConfig = terminal_ui_1.approvalSystem.getConfig();
                     const newConfig = { ...currentConfig };
                     switch (type) {
                         case 'low-risk':
@@ -1219,13 +1217,13 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                             console.log(chalk_1.default.red(`Unknown approval type: ${type}`));
                             return { shouldExit: false, shouldUpdatePrompt: false };
                     }
-                    approval_system_1.approvalSystem.updateConfig(newConfig);
+                    terminal_ui_1.approvalSystem.updateConfig(newConfig);
                     console.log(chalk_1.default.green(`✅ Auto-approval for ${type} ${enabled ? 'enabled' : 'disabled'}`));
                     break;
                 }
                 case 'test': {
                     console.log(chalk_1.default.blue('Testing approval system...'));
-                    const approved = await approval_system_1.approvalSystem.quickApproval('Test Approval', 'This is a test of the approval system', 'low');
+                    const approved = await terminal_ui_1.approvalSystem.quickApproval('Test Approval', 'This is a test of the approval system', 'low');
                     console.log(approved ? chalk_1.default.green('Approved') : chalk_1.default.yellow('Cancelled'));
                     break;
                 }

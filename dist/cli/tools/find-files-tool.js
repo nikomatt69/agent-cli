@@ -4,7 +4,7 @@ exports.FindFilesTool = void 0;
 const glob_1 = require("glob");
 const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
-const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 class FindFilesTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
         super('find-files-tool', workingDirectory);
@@ -16,7 +16,7 @@ class FindFilesTool extends base_tool_1.BaseTool {
             const files = glob_1.glob.sync(pattern, { cwd: sanitizedCwd, nodir: true });
             // Show file list in structured UI
             if (files.length > 0) {
-                advanced_cli_ui_1.advancedUI.showFileList(files, `🔍 Find: ${pattern}`);
+                terminal_ui_1.advancedUI.showFileList(files, `🔍 Find: ${pattern}`);
             }
             return {
                 success: true,

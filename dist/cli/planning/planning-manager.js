@@ -38,7 +38,7 @@ const events_1 = require("events");
 const plan_generator_1 = require("./plan-generator");
 const plan_executor_1 = require("./plan-executor");
 const tool_registry_1 = require("../tools/tool-registry");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Planning Manager
  * Orchestrates the complete planning and execution workflow
@@ -63,8 +63,8 @@ class PlanningManager extends events_1.EventEmitter {
      * Main entry point: Plan and execute a user request
      */
     async planAndExecute(userRequest, projectPath) {
-        cli_ui_1.CliUI.logSection('AI Planning & Execution System');
-        cli_ui_1.CliUI.logInfo(`Processing request: ${cli_ui_1.CliUI.highlight(userRequest)}`);
+        terminal_ui_1.CliUI.logSection('AI Planning & Execution System');
+        terminal_ui_1.CliUI.logInfo(`Processing request: ${terminal_ui_1.CliUI.highlight(userRequest)}`);
         try {
             // Step 1: Analyze project context
             const context = await this.buildPlannerContext(userRequest, projectPath);
@@ -91,7 +91,7 @@ class PlanningManager extends events_1.EventEmitter {
             return result;
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Planning and execution failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Planning and execution failed: ${error.message}`);
             throw error;
         }
     }
@@ -99,7 +99,7 @@ class PlanningManager extends events_1.EventEmitter {
      * Generate a plan without executing it
      */
     async generatePlanOnly(userRequest, projectPath) {
-        cli_ui_1.CliUI.logSection('Plan Generation');
+        terminal_ui_1.CliUI.logSection('Plan Generation');
         const context = await this.buildPlannerContext(userRequest, projectPath);
         const plan = await this.planGenerator.generatePlan(context);
         // Show todos panel in structured UI
@@ -121,7 +121,7 @@ class PlanningManager extends events_1.EventEmitter {
         if (!plan) {
             throw new Error(`Plan not found: ${planId}`);
         }
-        cli_ui_1.CliUI.logSection('Plan Execution');
+        terminal_ui_1.CliUI.logSection('Plan Execution');
         return await this.executeWithEventTracking(plan);
     }
     /**
@@ -244,7 +244,7 @@ class PlanningManager extends events_1.EventEmitter {
      * Build planner context from user request and project analysis
      */
     async buildPlannerContext(userRequest, projectPath) {
-        cli_ui_1.CliUI.startSpinner('Analyzing project context...');
+        terminal_ui_1.CliUI.startSpinner('Analyzing project context...');
         try {
             // Get available tools
             const availableTools = this.toolRegistry.listTools().map(name => {
@@ -261,7 +261,7 @@ class PlanningManager extends events_1.EventEmitter {
             });
             // Basic project analysis (could be enhanced with actual file scanning)
             const projectAnalysis = await this.analyzeProject(projectPath);
-            cli_ui_1.CliUI.succeedSpinner('Project context analyzed');
+            terminal_ui_1.CliUI.succeedSpinner('Project context analyzed');
             return {
                 userRequest,
                 projectPath,
@@ -275,7 +275,7 @@ class PlanningManager extends events_1.EventEmitter {
             };
         }
         catch (error) {
-            cli_ui_1.CliUI.failSpinner('Failed to analyze project context');
+            terminal_ui_1.CliUI.failSpinner('Failed to analyze project context');
             throw error;
         }
     }
@@ -297,13 +297,13 @@ class PlanningManager extends events_1.EventEmitter {
      * Display plan details
      */
     displayPlan(plan) {
-        cli_ui_1.CliUI.logSection(`Generated Plan: ${plan.title}`);
-        cli_ui_1.CliUI.logKeyValue('Plan ID', plan.id);
-        cli_ui_1.CliUI.logKeyValue('Description', plan.description);
-        cli_ui_1.CliUI.logKeyValue('Total Steps', plan.steps.length.toString());
-        cli_ui_1.CliUI.logKeyValue('Estimated Duration', `${Math.round(plan.estimatedTotalDuration / 1000)}s`);
-        cli_ui_1.CliUI.logKeyValue('Risk Level', plan.riskAssessment.overallRisk);
-        cli_ui_1.CliUI.logSubsection('Execution Steps');
+        terminal_ui_1.CliUI.logSection(`Generated Plan: ${plan.title}`);
+        terminal_ui_1.CliUI.logKeyValue('Plan ID', plan.id);
+        terminal_ui_1.CliUI.logKeyValue('Description', plan.description);
+        terminal_ui_1.CliUI.logKeyValue('Total Steps', plan.steps.length.toString());
+        terminal_ui_1.CliUI.logKeyValue('Estimated Duration', `${Math.round(plan.estimatedTotalDuration / 1000)}s`);
+        terminal_ui_1.CliUI.logKeyValue('Risk Level', plan.riskAssessment.overallRisk);
+        terminal_ui_1.CliUI.logSubsection('Execution Steps');
         plan.steps.forEach((step, index) => {
             const riskIcon = step.riskLevel === 'high' ? '🔴' :
                 step.riskLevel === 'medium' ? '🟡' : '🟢';
@@ -311,9 +311,9 @@ class PlanningManager extends events_1.EventEmitter {
                 step.type === 'validation' ? '✅' :
                     step.type === 'user_input' ? '👤' : '🤔';
             console.log(`  ${index + 1}. ${riskIcon} ${typeIcon} ${step.title}`);
-            console.log(`     ${cli_ui_1.CliUI.dim(step.description)}`);
+            console.log(`     ${terminal_ui_1.CliUI.dim(step.description)}`);
             if (step.dependencies && step.dependencies.length > 0) {
-                console.log(`     ${cli_ui_1.CliUI.dim(`Dependencies: ${step.dependencies.length} step(s)`)}`);
+                console.log(`     ${terminal_ui_1.CliUI.dim(`Dependencies: ${step.dependencies.length} step(s)`)}`);
             }
         });
     }
@@ -322,34 +322,34 @@ class PlanningManager extends events_1.EventEmitter {
      */
     displayValidationResults(validation) {
         if (validation.errors.length > 0) {
-            cli_ui_1.CliUI.logSubsection('Validation Errors');
-            validation.errors.forEach(error => cli_ui_1.CliUI.logError(error));
+            terminal_ui_1.CliUI.logSubsection('Validation Errors');
+            validation.errors.forEach(error => terminal_ui_1.CliUI.logError(error));
         }
         if (validation.warnings.length > 0) {
-            cli_ui_1.CliUI.logSubsection('Validation Warnings');
-            validation.warnings.forEach(warning => cli_ui_1.CliUI.logWarning(warning));
+            terminal_ui_1.CliUI.logSubsection('Validation Warnings');
+            validation.warnings.forEach(warning => terminal_ui_1.CliUI.logWarning(warning));
         }
         if (validation.suggestions.length > 0) {
-            cli_ui_1.CliUI.logSubsection('Suggestions');
-            validation.suggestions.forEach(suggestion => cli_ui_1.CliUI.logInfo(suggestion));
+            terminal_ui_1.CliUI.logSubsection('Suggestions');
+            validation.suggestions.forEach(suggestion => terminal_ui_1.CliUI.logInfo(suggestion));
         }
     }
     /**
      * Log complete planning session results
      */
     logPlanningSession(plan, result) {
-        cli_ui_1.CliUI.logSection('Planning Session Complete');
+        terminal_ui_1.CliUI.logSection('Planning Session Complete');
         const duration = result.endTime ?
             result.endTime.getTime() - result.startTime.getTime() : 0;
-        cli_ui_1.CliUI.logKeyValue('Plan ID', plan.id);
-        cli_ui_1.CliUI.logKeyValue('Execution Status', result.status.toUpperCase());
-        cli_ui_1.CliUI.logKeyValue('Total Duration', `${Math.round(duration / 1000)}s`);
-        cli_ui_1.CliUI.logKeyValue('Steps Executed', `${result.summary.successfulSteps}/${result.summary.totalSteps}`);
+        terminal_ui_1.CliUI.logKeyValue('Plan ID', plan.id);
+        terminal_ui_1.CliUI.logKeyValue('Execution Status', result.status.toUpperCase());
+        terminal_ui_1.CliUI.logKeyValue('Total Duration', `${Math.round(duration / 1000)}s`);
+        terminal_ui_1.CliUI.logKeyValue('Steps Executed', `${result.summary.successfulSteps}/${result.summary.totalSteps}`);
         if (result.summary.failedSteps > 0) {
-            cli_ui_1.CliUI.logWarning(`${result.summary.failedSteps} steps failed`);
+            terminal_ui_1.CliUI.logWarning(`${result.summary.failedSteps} steps failed`);
         }
         if (result.summary.skippedSteps > 0) {
-            cli_ui_1.CliUI.logInfo(`${result.summary.skippedSteps} steps skipped`);
+            terminal_ui_1.CliUI.logInfo(`${result.summary.skippedSteps} steps skipped`);
         }
         // Save session log
         this.saveSessionLog(plan, result);
@@ -369,7 +369,7 @@ class PlanningManager extends events_1.EventEmitter {
                 .map(s => s.toolName)
         };
         // In production, this would save to a persistent log store
-        cli_ui_1.CliUI.logInfo(`Session logged: ${plan.id}`);
+        terminal_ui_1.CliUI.logInfo(`Session logged: ${plan.id}`);
     }
     /**
      * Calculate risk distribution across plans

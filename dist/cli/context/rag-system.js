@@ -6,7 +6,7 @@ const chromadb_1 = require("chromadb");
 const glob_1 = require("glob");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const config_manager_1 = require("../core/config-manager");
 class OpenAIEmbeddingFunction {
     constructor() {
@@ -36,7 +36,7 @@ class OpenAIEmbeddingFunction {
             return results;
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Embedding generation failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Embedding generation failed: ${error.message}`);
             throw error;
         }
     }
@@ -112,25 +112,25 @@ function isBinaryFile(content) {
     return nullBytes > 0 || nonPrintable > threshold;
 }
 async function indexProject(projectPath) {
-    cli_ui_1.CliUI.logSection('Project Indexing');
-    cli_ui_1.CliUI.startSpinner('Starting project indexing...');
+    terminal_ui_1.CliUI.logSection('Project Indexing');
+    terminal_ui_1.CliUI.startSpinner('Starting project indexing...');
     try {
         const collection = await client.getOrCreateCollection({
             name: "project_index",
             embeddingFunction: embedder,
         });
-        cli_ui_1.CliUI.updateSpinner('Finding files to index...');
+        terminal_ui_1.CliUI.updateSpinner('Finding files to index...');
         const files = glob_1.glob.sync("**/*", {
             cwd: projectPath,
             ignore: ["node_modules/**", ".git/**", "*.log", "dist/**", "build/**"],
             nodir: true,
         });
-        cli_ui_1.CliUI.stopSpinner();
-        cli_ui_1.CliUI.logInfo(`Found ${cli_ui_1.CliUI.highlight(files.length.toString())} files to index`);
+        terminal_ui_1.CliUI.stopSpinner();
+        terminal_ui_1.CliUI.logInfo(`Found ${terminal_ui_1.CliUI.highlight(files.length.toString())} files to index`);
         // Estimate cost before proceeding
         const estimatedCost = await estimateIndexingCost(files, projectPath);
-        cli_ui_1.CliUI.logInfo(`Estimated embedding cost: ${cli_ui_1.CliUI.highlight('$' + estimatedCost.toFixed(4))}`);
-        cli_ui_1.CliUI.startSpinner('Indexing files...');
+        terminal_ui_1.CliUI.logInfo(`Estimated embedding cost: ${terminal_ui_1.CliUI.highlight('$' + estimatedCost.toFixed(4))}`);
+        terminal_ui_1.CliUI.startSpinner('Indexing files...');
         let processedFiles = 0;
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -139,7 +139,7 @@ async function indexProject(projectPath) {
                 const content = await (0, promises_1.readFile)(filePath, "utf-8");
                 // Skip binary files and very large files
                 if (isBinaryFile(content) || content.length > 1000000) {
-                    cli_ui_1.CliUI.logWarning(`Skipping large/binary file: ${cli_ui_1.CliUI.dim(file)}`);
+                    terminal_ui_1.CliUI.logWarning(`Skipping large/binary file: ${terminal_ui_1.CliUI.dim(file)}`);
                     continue;
                 }
                 await collection.add({
@@ -148,18 +148,18 @@ async function indexProject(projectPath) {
                     metadatas: [{ source: file, size: content.length }],
                 });
                 processedFiles++;
-                cli_ui_1.CliUI.updateSpinner(`Indexing files... (${processedFiles}/${files.length})`);
+                terminal_ui_1.CliUI.updateSpinner(`Indexing files... (${processedFiles}/${files.length})`);
             }
             catch (fileError) {
-                cli_ui_1.CliUI.logWarning(`Failed to index ${cli_ui_1.CliUI.dim(file)}: ${fileError.message}`);
+                terminal_ui_1.CliUI.logWarning(`Failed to index ${terminal_ui_1.CliUI.dim(file)}: ${fileError.message}`);
             }
         }
-        cli_ui_1.CliUI.succeedSpinner(`Project indexed successfully! Processed ${cli_ui_1.CliUI.highlight(processedFiles.toString())} files`);
-        cli_ui_1.CliUI.logInfo(`Index ready for search queries`);
+        terminal_ui_1.CliUI.succeedSpinner(`Project indexed successfully! Processed ${terminal_ui_1.CliUI.highlight(processedFiles.toString())} files`);
+        terminal_ui_1.CliUI.logInfo(`Index ready for search queries`);
     }
     catch (error) {
-        cli_ui_1.CliUI.failSpinner('Error indexing project');
-        console.error(cli_ui_1.CliUI.formatError(error, 'Project indexing'));
+        terminal_ui_1.CliUI.failSpinner('Error indexing project');
+        console.error(terminal_ui_1.CliUI.formatError(error, 'Project indexing'));
     }
 }
 async function search(query) {

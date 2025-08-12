@@ -1,11 +1,9 @@
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { PromptManager } from '../prompts/prompt-manager';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI, DiffViewer, FileDiff, diffManager } from '../ui/terminal-ui';
 import { readFile, writeFile, stat } from 'fs/promises';
 import { join, relative, dirname, basename } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { DiffViewer, FileDiff } from '../ui/diff-viewer';
-import { diffManager } from '../ui/diff-manager';
 
 /**
  * Enhanced EditTool - Editor avanzato con diff, patch e validation

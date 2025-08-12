@@ -1,11 +1,10 @@
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { PromptManager } from '../prompts/prompt-manager';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI, advancedUI } from '../ui/terminal-ui';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative, extname } from 'path';
 import { existsSync } from 'fs';
 import { IGNORE_PATTERNS } from './list-tool';
-import { advancedUI } from '../ui/advanced-cli-ui';
 
 /**
  * Enhanced GrepTool - Ricerca avanzata con pattern matching intelligente

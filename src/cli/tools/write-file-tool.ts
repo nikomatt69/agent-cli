@@ -2,9 +2,7 @@ import { writeFile, mkdir, copyFile, unlink, readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
-import { CliUI } from '../utils/cli-ui';
-import { DiffViewer, FileDiff } from '../ui/diff-viewer';
-import { diffManager } from '../ui/diff-manager';
+import { CliUI, DiffViewer, FileDiff, diffManager } from '../ui/terminal-ui';
 
 /**
  * Production-ready Write File Tool

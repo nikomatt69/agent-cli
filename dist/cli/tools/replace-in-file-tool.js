@@ -4,7 +4,7 @@ exports.ReplaceInFileTool = void 0;
 const promises_1 = require("fs/promises");
 const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Replace In File Tool
  * Safely performs content replacements with validation and rollback
@@ -59,10 +59,10 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 }
             };
             if (replaceResult.matchCount > 0) {
-                cli_ui_1.CliUI.logSuccess(`Replaced ${replaceResult.matchCount} occurrence(s) in ${filePath}`);
+                terminal_ui_1.CliUI.logSuccess(`Replaced ${replaceResult.matchCount} occurrence(s) in ${filePath}`);
             }
             else {
-                cli_ui_1.CliUI.logInfo(`No matches found in ${filePath}`);
+                terminal_ui_1.CliUI.logInfo(`No matches found in ${filePath}`);
             }
             return {
                 success: true,
@@ -92,7 +92,7 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                     hasChanges: false
                 }
             };
-            cli_ui_1.CliUI.logError(`Failed to replace in file ${filePath}: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Failed to replace in file ${filePath}: ${error.message}`);
             return {
                 success: false,
                 data: errorResult,

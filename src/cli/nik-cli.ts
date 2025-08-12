@@ -22,13 +22,11 @@ import { ModernAgentOrchestrator } from './automation/agents/modern-agent-system
 import { advancedAIProvider, AdvancedAIProvider } from './ai/advanced-ai-provider';
 import { SimpleConfigManager, simpleConfigManager } from './core/config-manager';
 import { enhancedPlanning } from './planning/enhanced-planning';
-import { approvalSystem } from './ui/approval-system';
+import { approvalSystem, DiffViewer, advancedUI, wrapBlue, formatStatus, formatCommand, formatFileOp, formatProgress, formatAgent, formatSearch } from './ui/terminal-ui';
 
 import { tokenCache } from './core/token-cache';
 import { completionCache } from './core/completion-protocol-cache';
 import { mcpClient, McpServerConfig } from './core/mcp-client';
-import { wrapBlue, formatStatus, formatCommand, formatFileOp, formatProgress, formatAgent, formatSearch } from './utils/text-wrapper';
-import { DiffViewer } from './ui/diff-viewer';
 import { SlashCommandHandler } from './chat/nik-cli-commands';
 import { chatManager } from './chat/chat-manager';
 import { agentService } from './services/agent-service';
@@ -36,7 +34,6 @@ import { planningService } from './services/planning-service';
 import { AgentTask } from './types/types';
 import { ExecutionPlan } from './planning/types';
 import { registerAgents } from './register-agents';
-import { advancedUI } from './ui/advanced-cli-ui';
 
 // Configure marked for terminal rendering
 marked.setOptions({

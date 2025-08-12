@@ -1,8 +1,7 @@
 import { readFile } from 'fs/promises';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
-import { CliUI } from '../utils/cli-ui';
-import { advancedUI } from '../ui/advanced-cli-ui';
+import { CliUI, advancedUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Read File Tool

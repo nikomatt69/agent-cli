@@ -5,7 +5,7 @@ import http from 'http';
 import { promisify } from 'util';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
-import { wrapBlue, formatStatus } from '../utils/text-wrapper';
+import { wrapBlue, formatStatus } from '../ui/terminal-ui';
 import { completionCache } from './completion-protocol-cache';
 
 export interface McpServerConfig {

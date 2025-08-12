@@ -8,7 +8,7 @@ import {
   PlanningToolCapability
 } from './types';
 import { ToolCapability } from '../services/tool-service';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Plan Generator

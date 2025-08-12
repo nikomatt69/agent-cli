@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'fs/promises';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Replace In File Tool

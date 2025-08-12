@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { nanoid } from 'nanoid';
 import { modelProvider, ChatMessage } from '../ai/model-provider';
-import { approvalSystem } from '../ui/approval-system';
+import { approvalSystem } from '../ui/terminal-ui';
 import { workspaceContext } from '../context/workspace-context';
 import boxen from 'boxen';
 

@@ -9,7 +9,7 @@ import {
 import { PlanGenerator } from './plan-generator';
 import { PlanExecutor } from './plan-executor';
 import { ToolRegistry } from '../tools/tool-registry';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Planning Manager

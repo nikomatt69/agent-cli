@@ -1,7 +1,7 @@
 import { glob } from 'glob';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
-import { advancedUI } from '../ui/advanced-cli-ui';
+import { advancedUI } from '../ui/terminal-ui';
 
 export class FindFilesTool extends BaseTool {
   constructor(workingDirectory: string) {

@@ -7,7 +7,7 @@ import { agentService, AgentTask } from './agent-service';
 import { toolService } from './tool-service';
 import { planningService } from './planning-service';
 import { lspService } from './lsp-service';
-import { diffManager } from '../ui/diff-manager';
+import { diffManager } from '../ui/terminal-ui';
 import { ExecutionPolicyManager } from '../policies/execution-policy';
 import { simpleConfigManager as configManager } from '../core/config-manager';
 import { ModuleManager, ModuleContext } from '../core/module-manager';

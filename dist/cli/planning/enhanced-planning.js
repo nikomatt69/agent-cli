@@ -42,7 +42,7 @@ const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const nanoid_1 = require("nanoid");
 const model_provider_1 = require("../ai/model-provider");
-const approval_system_1 = require("../ui/approval-system");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const workspace_context_1 = require("../context/workspace-context");
 const boxen_1 = __importDefault(require("boxen"));
 class EnhancedPlanningSystem {
@@ -115,7 +115,7 @@ class EnhancedPlanningSystem {
         // Show plan summary
         this.displayPlanSummary(plan);
         // Ask for approval
-        const approved = await approval_system_1.approvalSystem.quickApproval(`Execute Plan: ${plan.title}`, `Execute ${plan.todos.length} tasks with estimated duration of ${Math.round(plan.estimatedTotalDuration)} minutes`, this.assessPlanRisk(plan));
+        const approved = await terminal_ui_1.approvalSystem.quickApproval(`Execute Plan: ${plan.title}`, `Execute ${plan.todos.length} tasks with estimated duration of ${Math.round(plan.estimatedTotalDuration)} minutes`, this.assessPlanRisk(plan));
         if (approved) {
             plan.status = 'approved';
             plan.approvedAt = new Date();
@@ -170,7 +170,7 @@ class EnhancedPlanningSystem {
                     todo.status = 'failed';
                     console.log(chalk_1.default.red(`   ❌ Failed: ${error.message}`));
                     // Ask if should continue with remaining todos
-                    const shouldContinue = await approval_system_1.approvalSystem.quickApproval('Continue Execution?', `Todo "${todo.title}" failed. Continue with remaining todos?`, 'medium');
+                    const shouldContinue = await terminal_ui_1.approvalSystem.quickApproval('Continue Execution?', `Todo "${todo.title}" failed. Continue with remaining todos?`, 'medium');
                     if (!shouldContinue) {
                         console.log(chalk_1.default.yellow('🛑 Plan execution stopped by user'));
                         plan.status = 'failed';

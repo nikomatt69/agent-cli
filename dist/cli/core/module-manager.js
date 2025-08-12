@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModuleManager = void 0;
 const chalk_1 = __importDefault(require("chalk"));
-const diff_manager_1 = require("../ui/diff-manager");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const config_manager_1 = require("./config-manager");
 const advanced_ai_provider_1 = require("../ai/advanced-ai-provider");
 class ModuleManager {
@@ -352,18 +352,18 @@ class ModuleManager {
     }
     async handleDiff(args, context) {
         if (args[0]) {
-            diff_manager_1.diffManager.showDiff(args[0]);
+            terminal_ui_1.diffManager.showDiff(args[0]);
         }
         else {
-            diff_manager_1.diffManager.showAllDiffs();
+            terminal_ui_1.diffManager.showAllDiffs();
         }
     }
     async handleAccept(args, context) {
         if (args[0] === 'all') {
-            diff_manager_1.diffManager.acceptAllDiffs();
+            terminal_ui_1.diffManager.acceptAllDiffs();
         }
         else if (args[0]) {
-            diff_manager_1.diffManager.acceptDiff(args[0]);
+            terminal_ui_1.diffManager.acceptDiff(args[0]);
         }
         else {
             console.log(chalk_1.default.red('Usage: /accept <file> or /accept all'));
@@ -371,7 +371,7 @@ class ModuleManager {
     }
     async handleReject(args, context) {
         if (args[0]) {
-            diff_manager_1.diffManager.rejectDiff(args[0]);
+            terminal_ui_1.diffManager.rejectDiff(args[0]);
         }
         else {
             console.log(chalk_1.default.red('Usage: /reject <file>'));
@@ -435,7 +435,7 @@ class ModuleManager {
     }
     async handleAutoAccept(args, context) {
         context.autoAcceptEdits = !context.autoAcceptEdits;
-        diff_manager_1.diffManager.setAutoAccept(context.autoAcceptEdits);
+        terminal_ui_1.diffManager.setAutoAccept(context.autoAcceptEdits);
         if (context.autoAcceptEdits) {
             console.log(chalk_1.default.green('\\n✅ auto-accept edits on ') + chalk_1.default.dim('(shift+tab to cycle)'));
         }

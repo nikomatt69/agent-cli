@@ -8,9 +8,8 @@ import { modernAgentOrchestrator, AGENT_CAPABILITIES } from '../automation/agent
 import { simpleConfigManager as configManager } from '../core/config-manager';
 import { CoreMessage } from 'ai';
 import ora, { Ora } from 'ora';
-import { diffManager } from '../ui/diff-manager';
+import { diffManager, advancedUI } from '../ui/terminal-ui';
 import { ExecutionPolicyManager } from '../policies/execution-policy';
-import { advancedUI } from '../ui/advanced-cli-ui';
 import { contextManager } from '../core/context-manager';
 
 
