@@ -3,6 +3,7 @@ import boxen from 'boxen';
 import { diffLines, Change } from 'diff';
 import * as fs from 'fs';
 import * as path from 'path';
+import { advancedUI } from './advanced-cli-ui';
 
 export interface FileDiff {
   filePath: string;
@@ -34,7 +35,7 @@ export class DiffManager {
    */
   addFileDiff(filePath: string, oldContent: string, newContent: string): void {
     const changes = diffLines(oldContent, newContent);
-    
+
     const fileDiff: FileDiff = {
       filePath,
       oldContent,
@@ -44,6 +45,9 @@ export class DiffManager {
     };
 
     this.pendingDiffs.set(filePath, fileDiff);
+
+    // Show diff in structured UI
+    advancedUI.showFileDiff(filePath, oldContent, newContent);
 
     if (this.autoAccept) {
       this.applyDiff(filePath);
@@ -132,7 +136,7 @@ export class DiffManager {
    */
   acceptAllDiffs(): number {
     let applied = 0;
-    
+
     for (const [filePath, diff] of this.pendingDiffs) {
       if (diff.status === 'pending') {
         if (this.acceptDiff(filePath)) {
@@ -176,7 +180,7 @@ export class DiffManager {
 
       // Write new content
       fs.writeFileSync(filePath, diff.newContent, 'utf8');
-      
+
       console.log(chalk.green(`✅ Applied changes to ${filePath}`));
       return true;
     } catch (error: any) {
@@ -194,7 +198,7 @@ export class DiffManager {
 
     for (const change of diff.changes) {
       const lines = change.value.split('\\n').filter(line => line !== '');
-      
+
       for (const line of lines) {
         let prefix = ' ';
         let color = chalk.dim;

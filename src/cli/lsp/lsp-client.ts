@@ -63,8 +63,8 @@ export class LSPClient {
 
     // Create JSON-RPC connection
     this.connection = createMessageConnection(
-      new StreamMessageReader(server.process.stdout),
-      new StreamMessageWriter(server.process.stdin)
+      new StreamMessageReader(server.process.stdout!),
+      new StreamMessageWriter(server.process.stdin!)
     );
 
     this.setupEventHandlers();

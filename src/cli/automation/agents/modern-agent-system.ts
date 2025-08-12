@@ -406,6 +406,25 @@ export class ModernAgentOrchestrator {
     return [...this.executions].sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
   }
 
+  getActiveExecutions(): AgentExecution[] {
+    return this.executions.filter(exec => exec.status === 'running');
+  }
+
+  interruptActiveExecutions(): number {
+    const activeExecs = this.getActiveExecutions();
+    let interruptedCount = 0;
+
+    activeExecs.forEach(exec => {
+      exec.status = 'failed';
+      exec.endTime = new Date();
+      exec.error = 'Interrupted by user';
+      interruptedCount++;
+    });
+
+    console.log(chalk.yellow(`🛑 Interrupted ${interruptedCount} active agent executions`));
+    return interruptedCount;
+  }
+
   setWorkingDirectory(directory: string): void {
     modernAIProvider.setWorkingDirectory(directory);
     // Update all agents

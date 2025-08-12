@@ -4,6 +4,8 @@ import { CliUI } from '../utils/cli-ui';
 import { readFile, writeFile, stat } from 'fs/promises';
 import { join, relative, dirname, basename } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { DiffViewer, FileDiff } from '../ui/diff-viewer';
+import { diffManager } from '../ui/diff-manager';
 
 /**
  * Enhanced EditTool - Editor avanzato con diff, patch e validation
@@ -223,8 +225,25 @@ export class EditTool extends BaseTool {
       newContent = newLines.join('\n');
     }
 
-    // Genera diff
+    // Genera e mostra diff
     const diff = this.generateDiff(originalContent, newContent, filePath);
+    
+    // Mostra diff usando il DiffViewer se ci sono state modifiche
+    if (replacementsMade > 0 && !params.previewOnly) {
+      const fileDiff: FileDiff = {
+        filePath,
+        originalContent,
+        newContent,
+        isNew: !fileExists,
+        isDeleted: false
+      };
+      
+      console.log('\n');
+      DiffViewer.showFileDiff(fileDiff, { compact: true });
+      
+      // Aggiungi al diff manager per l'approval system
+      diffManager.addFileDiff(filePath, originalContent, newContent);
+    }
 
     // Validazione sintassi se richiesta
     let syntaxValid: boolean | undefined;

@@ -750,10 +750,14 @@ class MainOrchestrator {
       // Show quick start guide
       this.showQuickStart();
 
-      // Start unified NikCLI interface
-      console.log(chalk.blue.bold('🤖 Starting NikCLI...\n'));
+      // Start unified NikCLI interface with structured UI
+      console.log(chalk.blue.bold('🤖 Starting NikCLI with Structured UI...\n'));
+      
       const cli = new NikCLI();
-      await cli.startChat({});
+      await cli.startChat({ 
+        // Enable structured UI mode from the start
+        structuredUI: true 
+      });
 
     } catch (error: any) {
       console.error(chalk.red('❌ Failed to start orchestrator:'), error);

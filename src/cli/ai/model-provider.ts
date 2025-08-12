@@ -28,7 +28,7 @@ export class ModelProvider {
         if (!apiKey) {
           throw new Error(`API key not found for model: ${currentModelName} (OpenAI). Use /set-key to configure.`);
         }
-        const openaiProvider = createOpenAI({ apiKey });
+        const openaiProvider = createOpenAI({ apiKey, compatibility: 'strict' });
         return openaiProvider(config.model);
       }
       case 'anthropic': {
@@ -68,15 +68,15 @@ export class ModelProvider {
 
     const model = this.getModel(currentModelConfig);
 
-    const { text } = await generateText({
+    const baseOptions: any = {
       model: model as any,
-      messages: options.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      temperature: options.temperature ?? configManager.get('temperature'),
-      maxTokens: options.maxTokens ?? 4000,
-    });
+      messages: options.messages.map(msg => ({ role: msg.role, content: msg.content })),
+    };
+    if (currentModelConfig.provider !== 'openai') {
+      baseOptions.maxTokens = options.maxTokens ?? 1000;
+      baseOptions.temperature = options.temperature ?? configManager.get('temperature');
+    }
+    const { text } = await generateText(baseOptions);
 
     return text;
   }
@@ -92,15 +92,15 @@ export class ModelProvider {
 
     const model = this.getModel(currentModelConfig);
 
-    const result = await streamText({
+    const streamOptions: any = {
       model: model as any,
-      messages: options.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      temperature: options.temperature ?? configManager.get('temperature'),
-      maxTokens: options.maxTokens ?? 4000,
-    });
+      messages: options.messages.map(msg => ({ role: msg.role, content: msg.content })),
+    };
+    if (currentModelConfig.provider !== 'openai') {
+      streamOptions.maxTokens = options.maxTokens ?? 1000;
+      streamOptions.temperature = options.temperature ?? configManager.get('temperature');
+    }
+    const result = await streamText(streamOptions);
 
     for await (const delta of result.textStream) {
       yield delta;

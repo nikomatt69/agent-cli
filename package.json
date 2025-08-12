@@ -1,6 +1,6 @@
 {
   "name": "@cadcamfun/niko-cli",
-  "version": "0.1.2-beta",
+  "version": "0.1.3-beta",
   "description": "Unified Claude Code Clone - Context-Aware AI Development Assistant",
   "main": "dist/cli/index.js",
   "bin": {

@@ -346,10 +346,10 @@ export class ContextAwareRAGSystem {
   // Helper methods
   private performCodeAnalysis(content: string, language: string): any {
     const analysis = {
-      imports: [],
-      exports: [],
-      functions: [],
-      classes: [],
+      imports: [] as string[],
+      exports: [] as string[],
+      functions: [] as string[],
+      classes: [] as string[],
       lines: content.split('\n').length,
       complexity: 0
     };

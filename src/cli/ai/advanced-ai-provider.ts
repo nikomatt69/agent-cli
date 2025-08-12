@@ -36,7 +36,7 @@ export interface StreamEvent {
 }
 
 export interface AutonomousProvider {
-  streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent>;
+  streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent>;
   executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent>;
 }
 
@@ -49,6 +49,109 @@ export class AdvancedAIProvider implements AutonomousProvider {
   private truncateForPrompt(s: string, maxChars: number = 2000): string {
     if (!s) return '';
     return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
+  }
+
+  // Approximate token counting (1 token ≈ 4 characters for most languages)
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    // More accurate estimation: count words, punctuation, special chars
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    const specialChars = (text.match(/[{}[\](),.;:!?'"]/g) || []).length;
+    return Math.ceil((words.length + specialChars * 0.5) * 1.3); // Conservative estimate
+  }
+
+  // Estimate total tokens in messages array
+  private estimateMessagesTokens(messages: CoreMessage[]): number {
+    let totalTokens = 0;
+    for (const message of messages) {
+      const content = typeof message.content === 'string'
+        ? message.content
+        : Array.isArray(message.content)
+          ? message.content.map(part => typeof part === 'string' ? part : JSON.stringify(part)).join('')
+          : JSON.stringify(message.content);
+
+      totalTokens += this.estimateTokens(content);
+      totalTokens += 10; // Role, metadata overhead
+    }
+    return totalTokens;
+  }
+
+  // Intelligent message truncation to stay within token limits - AGGRESSIVE MODE
+  private truncateMessages(messages: CoreMessage[], maxTokens: number = 120000): CoreMessage[] {
+    const currentTokens = this.estimateMessagesTokens(messages);
+
+    if (currentTokens <= maxTokens) {
+      console.log(`✅ Messages fit within limit: ${currentTokens}/${maxTokens} tokens`);
+      return messages;
+    }
+
+    console.warn(`⚠️ Messages too long: ${currentTokens}/${maxTokens} tokens - applying intelligent truncation`);
+
+    // Strategy: Keep system messages, recent user/assistant, and important tool calls
+    const truncatedMessages: CoreMessage[] = [];
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const nonSystemMessages = messages.filter(m => m.role !== 'system');
+
+    // Always keep system messages (but truncate AGGRESSIVELY)
+    for (const sysMsg of systemMessages) {
+      const content = typeof sysMsg.content === 'string' ? sysMsg.content : JSON.stringify(sysMsg.content);
+      truncatedMessages.push({
+        ...sysMsg,
+        content: this.truncateForPrompt(content, 3000) // REDUCED: Max 3k chars for system messages
+      });
+    }
+
+    // Keep the most recent messages (MORE AGGRESSIVE sliding window)
+    const recentMessages = nonSystemMessages.slice(-10); // REDUCED: Keep last 10 non-system messages
+    let accumulatedTokens = this.estimateMessagesTokens(truncatedMessages);
+
+    // Add recent messages in reverse order until we hit the limit
+    for (let i = recentMessages.length - 1; i >= 0; i--) {
+      const msg = recentMessages[i];
+      const msgTokens = this.estimateTokens(
+        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      );
+
+      if (accumulatedTokens + msgTokens > maxTokens) {
+        // Truncate this message if it's too long
+        const availableTokens = maxTokens - accumulatedTokens;
+        const availableChars = Math.max(500, availableTokens * 3); // Conservative char conversion
+
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        const truncatedContent = this.truncateForPrompt(content, availableChars);
+
+        // Handle different message types properly
+        if (msg.role === 'tool') {
+          truncatedMessages.push({
+            ...msg,
+            content: [{ type: 'text', text: truncatedContent }] as any
+          });
+        } else {
+          truncatedMessages.push({
+            ...msg,
+            content: truncatedContent
+          });
+        }
+        break;
+      }
+
+      truncatedMessages.push(msg);
+      accumulatedTokens += msgTokens;
+    }
+
+    // If we still need more space, add truncation summary
+    if (nonSystemMessages.length > 10) {
+      const skippedCount = nonSystemMessages.length - 10;
+      truncatedMessages.splice(systemMessages.length, 0, {
+        role: 'system' as const,
+        content: `[Conversation truncated: ${skippedCount} older messages removed to fit context limit. Total original: ${currentTokens} tokens, truncated to: ~${this.estimateMessagesTokens(truncatedMessages)} tokens]`
+      });
+    }
+
+    const finalTokens = this.estimateMessagesTokens(truncatedMessages);
+    console.log(`✂️ Truncation complete: ${finalTokens}/${maxTokens} tokens (${truncatedMessages.length}/${messages.length} messages)`);
+
+    return truncatedMessages;
   }
   private currentModel: string;
   private workingDirectory: string = process.cwd();
@@ -399,14 +502,17 @@ export class AdvancedAIProvider implements AutonomousProvider {
   }
 
   // Claude Code style streaming with full autonomy
-  async *streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent> {
+  async *streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent> {
+    // Apply AGGRESSIVE truncation to prevent prompt length errors
+    const truncatedMessages = this.truncateMessages(messages, 100000); // REDUCED: 100k tokens safety margin
+
     const model = this.getModel() as any;
     const tools = this.getAdvancedTools();
 
     try {
       // ADVANCED: Check completion protocol cache first (ultra-efficient)
-      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-      const systemContext = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+      const lastUserMessage = truncatedMessages.filter(m => m.role === 'user').pop();
+      const systemContext = truncatedMessages.filter(m => m.role === 'system').map(m => m.content).join('\n');
 
       if (lastUserMessage) {
         // Try completion protocol cache first (most efficient)
@@ -416,11 +522,12 @@ export class AdvancedAIProvider implements AutonomousProvider {
             ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
             : String(lastUserMessage.content);
 
+        const params = this.getProviderParams();
         const completionRequest = {
           prefix: userContent,
-          context: systemContext.substring(0, 300),
-          maxTokens: 1000,
-          temperature: 0.7,
+          context: systemContext.substring(0, 200), // REDUCED context length
+          maxTokens: Math.min(500, params.maxTokens), // REDUCED: Cap at 500 for completion cache
+          temperature: params.temperature,
           model: this.currentModel
         };
 
@@ -435,7 +542,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
         // Fallback to full response cache
         const cachedResponse = await tokenCache.getCachedResponse(
           userContent,
-          systemContext.substring(0, 500),
+          systemContext.substring(0, 200), // REDUCED context length  
           ['chat', 'autonomous']
         );
 
@@ -449,126 +556,177 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
       yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
 
-      const result = streamText({
+      const originalTokens = this.estimateMessagesTokens(messages);
+      const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
+      console.log(`📊 Message tokens: original=${originalTokens}, truncated=${truncatedTokens}, messages=${messages.length}→${truncatedMessages.length}`);
+
+      const params = this.getProviderParams();
+      console.log(`🔧 Provider params for ${this.getCurrentModelInfo().config.provider}: maxTokens=${params.maxTokens}, temp=${params.temperature}`);
+      const provider = this.getCurrentModelInfo().config.provider;
+      const safeMessages = this.sanitizeMessagesForProvider(provider, truncatedMessages);
+      const streamOpts: any = {
         model,
-        messages,
+        messages: safeMessages,
         tools,
-        maxToolRoundtrips: 10, // Allow multiple tool calls
-        maxTokens: 4000,
-        temperature: 0.7,
-        onStepFinish: ({ stepType, toolCalls, toolResults }) => {
-          // This will be handled by the stream
-        },
-      });
+        maxToolRoundtrips: 10,
+        temperature: params.temperature,
+        abortSignal,
+        onStepFinish: (_evt: any) => { },
+      };
+      if (provider !== 'openai') {
+        streamOpts.maxTokens = params.maxTokens;
+      }
+      const result = streamText(streamOpts);
 
       let currentToolCalls: ToolCallPart[] = [];
       let accumulatedText = '';
 
+      const approxCharLimit = provider === 'openai' ? params.maxTokens * 4 : Number.POSITIVE_INFINITY;
+      let truncatedByCap = false;
       for await (const delta of (await result).fullStream) {
-        switch (delta.type) {
-          case 'text-delta':
-            if (delta.textDelta) {
-              accumulatedText += delta.textDelta;
-              yield {
-                type: 'text_delta',
-                content: delta.textDelta,
-                metadata: { accumulatedLength: accumulatedText.length }
-              };
-            }
-            break;
-
-          case 'tool-call':
-            currentToolCalls.push(delta);
-            yield {
-              type: 'tool_call',
-              toolName: delta.toolName,
-              toolArgs: delta.args,
-              content: `Executing ${delta.toolName}...`,
-              metadata: { toolCallId: delta.toolCallId }
-            };
-            break;
-
-          case 'tool-call-delta':
-            const toolCall = currentToolCalls.find(tc => tc.toolCallId === delta.toolCallId);
-            yield {
-              type: 'tool_result',
-              toolName: toolCall?.toolName,
-              toolResult: delta.argsTextDelta,
-              content: `Completed ${toolCall?.toolName}`,
-              metadata: {
-                toolCallId: delta.toolCallId,
-                success: !delta.argsTextDelta
-              }
-            };
-            break;
-
-          case 'step-finish':
-            if (delta.isContinued) {
-              // Step completed, continue to next
-            }
-            break;
-
-          case 'finish':
-            // DUAL CACHE: Store both completion pattern AND full response
-            if (lastUserMessage && accumulatedText.trim()) {
-              const userContentLength = typeof lastUserMessage.content === 'string'
-                ? lastUserMessage.content.length
-                : String(lastUserMessage.content).length;
-              const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
-
-              // Extract user content as string for storage
-              const userContentStr = typeof lastUserMessage.content === 'string'
-                ? lastUserMessage.content
-                : Array.isArray(lastUserMessage.content)
-                  ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
-                  : String(lastUserMessage.content);
-
-              // Store in completion protocol cache (primary - most efficient)
-              const completionRequest = {
-                prefix: userContentStr,
-                context: systemContext.substring(0, 300),
-                maxTokens: 1000,
-                temperature: 0.7,
-                model: this.currentModel
-              };
-              await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
-
-              // Store in full response cache (fallback)
-              await tokenCache.setCachedResponse(
-                userContentStr,
-                accumulatedText.trim(),
-                systemContext.substring(0, 500),
-                tokensUsed,
-                ['chat', 'autonomous']
-              );
-            }
-
-            yield {
-              type: 'complete',
-              content: 'Task completed',
-              metadata: {
-                finishReason: delta.finishReason,
-                usage: delta.usage,
-                totalText: accumulatedText.length
-              }
-            };
-            break;
-
-          case 'error':
+        try {
+          // Check for abort signal interruption
+          if (abortSignal?.aborted) {
             yield {
               type: 'error',
-              error: (delta?.error) as any,
-              content: `Error: ${delta.error}`
+              error: 'Interrupted by user',
+              content: 'Stream processing interrupted'
             };
             break;
+          }
+
+          switch (delta.type) {
+            case 'text-delta':
+              if (delta.textDelta) {
+                accumulatedText += delta.textDelta;
+                yield {
+                  type: 'text_delta',
+                  content: delta.textDelta,
+                  metadata: {
+                    accumulatedLength: accumulatedText.length,
+                    provider: this.getCurrentModelInfo().config.provider
+                  }
+                };
+                if (provider === 'openai' && accumulatedText.length >= approxCharLimit) {
+                  truncatedByCap = true;
+                  break;
+                }
+              }
+              break;
+
+            case 'tool-call':
+              currentToolCalls.push(delta);
+              yield {
+                type: 'tool_call',
+                toolName: delta.toolName,
+                toolArgs: delta.args,
+                content: `Executing ${delta.toolName}...`,
+                metadata: { toolCallId: delta.toolCallId }
+              };
+              break;
+
+            case 'tool-call-delta':
+              const toolCall = currentToolCalls.find(tc => tc.toolCallId === delta.toolCallId);
+              yield {
+                type: 'tool_result',
+                toolName: toolCall?.toolName,
+                toolResult: delta.argsTextDelta,
+                content: `Completed ${toolCall?.toolName}`,
+                metadata: {
+                  toolCallId: delta.toolCallId,
+                  success: !delta.argsTextDelta
+                }
+              };
+              break;
+
+            case 'step-finish':
+              if (delta.isContinued) {
+                // Step completed, continue to next
+              }
+              break;
+
+            case 'finish':
+              // DUAL CACHE: Store both completion pattern AND full response
+              if (lastUserMessage && accumulatedText.trim()) {
+                const userContentLength = typeof lastUserMessage.content === 'string'
+                  ? lastUserMessage.content.length
+                  : String(lastUserMessage.content).length;
+                const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
+
+                // Extract user content as string for storage
+                const userContentStr = typeof lastUserMessage.content === 'string'
+                  ? lastUserMessage.content
+                  : Array.isArray(lastUserMessage.content)
+                    ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                    : String(lastUserMessage.content);
+
+                // Store in completion protocol cache (primary - most efficient)
+                const cacheParams = this.getProviderParams();
+                const completionRequest = {
+                  prefix: userContentStr,
+                  context: systemContext.substring(0, 200), // REDUCED context length
+                  maxTokens: Math.min(500, cacheParams.maxTokens), // REDUCED: Cap at 500 for completion cache
+                  temperature: cacheParams.temperature,
+                  model: this.currentModel
+                };
+                await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+
+                // Store in full response cache (fallback)
+                await tokenCache.setCachedResponse(
+                  userContentStr,
+                  accumulatedText.trim(),
+                  systemContext.substring(0, 500),
+                  tokensUsed,
+                  ['chat', 'autonomous']
+                );
+              }
+
+              yield {
+                type: 'complete',
+                content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
+                metadata: {
+                  finishReason: delta.finishReason,
+                  usage: delta.usage,
+                  totalText: accumulatedText.length,
+                  capped: truncatedByCap
+                }
+              };
+              break;
+
+            case 'error':
+              yield {
+                type: 'error',
+                error: (delta?.error) as any,
+                content: `Error: ${delta.error}`
+              };
+              break;
+          }
+        } catch (deltaError: any) {
+          console.warn(`Stream delta error (${this.getCurrentModelInfo().config.provider}):`, deltaError.message);
+          yield {
+            type: 'error',
+            error: deltaError.message,
+            content: `Stream error: ${deltaError.message}`
+          };
         }
       }
 
+      // Check if response was complete
+      if (accumulatedText.length === 0) {
+        console.warn(`No text received from ${this.getCurrentModelInfo().config.provider} model`);
+        yield {
+          type: 'error',
+          error: 'Empty response',
+          content: 'No text was generated - possible parameter mismatch'
+        };
+      }
+
     } catch (error: any) {
+      console.error(`Provider error (${this.getCurrentModelInfo().config.provider}):`, error);
       yield {
         type: 'error',
         error: error.message,
-        content: `System error: ${error.message}`
+        content: `System error: ${error.message} (Provider: ${this.getCurrentModelInfo().config.provider})`
       };
     }
   }
@@ -584,6 +742,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
       // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
       if (context && Array.isArray(context.messages)) {
         const providedMessages: CoreMessage[] = context.messages;
+        // Note: streamChatWithFullAutonomy will handle truncation internally
         for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
           yield event;
         }
@@ -595,9 +754,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
           role: 'system',
           content: `AI dev assistant. CWD: ${this.workingDirectory}
 Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
-Task: ${this.truncateForPrompt(task, 500)}
+Task: ${this.truncateForPrompt(task, 300)} 
 
-${context ? this.truncateForPrompt(safeStringifyContext(context), 300) : ''}
+${context ? this.truncateForPrompt(safeStringifyContext(context), 150) : ''}
 
 Execute task autonomously with tools. Be direct.`
         },
@@ -621,14 +780,14 @@ Execute task autonomously with tools. Be direct.`
     }
   }
 
-  // Safely stringify and truncate large contexts to prevent prompt overflow
-  private safeStringifyContext(ctx: any, maxChars: number = 4000): string {
+  // Safely stringify and truncate large contexts to prevent prompt overflow - AGGRESSIVE
+  private safeStringifyContext(ctx: any, maxChars: number = 1000): string { // REDUCED from 4000
     if (!ctx) return '{}';
     try {
       const str = JSON.stringify(ctx, (key, value) => {
-        // Truncate long strings
+        // Truncate long strings AGGRESSIVELY
         if (typeof value === 'string') {
-          return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+          return value.length > 100 ? value.slice(0, 100) + '…[truncated]' : value; // REDUCED from 512
         }
         // Limit large arrays
         if (Array.isArray(value)) {
@@ -939,11 +1098,16 @@ Requirements:
 
     try {
       const model = this.getModel() as any;
-      const result = await generateText({
+      const params = this.getProviderParams();
+      const provider = this.getCurrentModelInfo().config.provider;
+      const genOpts: any = {
         model,
-        prompt: codeGenPrompt,
-        maxTokens: 2000,
-      });
+        prompt: this.truncateForPrompt(codeGenPrompt, provider === 'openai' ? 120000 : 80000),
+      };
+      if (this.getCurrentModelInfo().config.provider !== 'openai') {
+        genOpts.maxTokens = Math.min(params.maxTokens, 2000);
+      }
+      const result = await generateText(genOpts);
 
       return {
         type,
@@ -974,7 +1138,7 @@ Requirements:
       case 'openai': {
         const apiKey = configManager.getApiKey(model);
         if (!apiKey) throw new Error(`No API key found for model ${model} (OpenAI)`);
-        const openaiProvider = createOpenAI({ apiKey });
+        const openaiProvider = createOpenAI({ apiKey, compatibility: 'strict' });
         return openaiProvider(configData.model);
       }
       case 'anthropic': {
@@ -997,6 +1161,118 @@ Requirements:
       default:
         throw new Error(`Unsupported provider: ${configData.provider}`);
     }
+  }
+
+  // Get provider-specific parameters
+  private getProviderParams(modelName?: string): { maxTokens: number; temperature: number } {
+    const model = modelName || this.currentModel || configManager.get('currentModel');
+    const allModels = configManager.get('models');
+    const configData = allModels[model];
+
+    if (!configData) {
+      return { maxTokens: 4000, temperature: 0.7 }; // REDUCED default
+    }
+
+    // Provider-specific token limits and settings
+    switch (configData.provider) {
+      case 'openai':
+        // OpenAI models - REDUCED for lighter requests
+        if (configData.model.includes('gpt-5')) {
+          return { maxTokens: 8192, temperature: 1 }; // REDUCED from 8192
+        } else if (configData.model.includes('gpt-4')) {
+          return { maxTokens: 4096, temperature: 1 }; // REDUCED from 4096
+        }
+        return { maxTokens: 1000, temperature: 1 };
+
+      case 'anthropic':
+        // Claude models - REDUCED for lighter requests
+        if (configData.model.includes('claude-4') ||
+          configData.model.includes('claude-4-sonnet') ||
+          configData.model.includes('claude-sonnet-4')) {
+          return { maxTokens: 4000, temperature: 0.7 }; // REDUCED from 8192
+        }
+        return { maxTokens: 4000, temperature: 0.7 };
+
+      case 'google':
+        // Gemini models - REDUCED for lighter requests
+        return { maxTokens: 1500, temperature: 0.7 }; // REDUCED from 8192
+
+      case 'ollama':
+        // Local models, more conservative
+        return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 2048
+
+      default:
+        return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 4000
+    }
+  }
+
+  // Build provider-specific options to satisfy differing token parameter names
+  private getProviderOptions(maxTokens: number): any {
+    try {
+      const provider = this.getCurrentModelInfo().config.provider;
+      switch (provider) {
+        case 'openai':
+          return { openai: { max_completion_tokens: maxTokens } };
+        case 'google':
+          // Google Generative AI expects max_output_tokens
+          return { google: { max_output_tokens: maxTokens } };
+        // Anthropic and others work with normalized maxTokens via AI SDK
+        default:
+          return {};
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  // Build a provider-safe message array by enforcing hard character caps
+  private sanitizeMessagesForProvider(provider: string, messages: CoreMessage[]): CoreMessage[] {
+    const maxTotalChars = provider === 'openai' ? 800_000 : 400_000; // conservative caps
+    const maxPerMessage = provider === 'openai' ? 60_000 : 40_000;
+
+    const safeMessages: CoreMessage[] = [];
+    let total = 0;
+
+    const clamp = (text: string, limit: number): string => {
+      if (text.length <= limit) return text;
+      const head = text.slice(0, Math.floor(limit * 0.8));
+      const tail = text.slice(-Math.floor(limit * 0.2));
+      return `${head}\n…[omitted ${text.length - limit} chars]\n${tail}`;
+    };
+
+    // Keep system messages first (clamped)
+    const systems = messages.filter(m => m.role === 'system');
+    for (const m of systems) {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const clamped = clamp(content, 8000);
+      total += clamped.length;
+      if (total > maxTotalChars) break;
+      // For tool messages, wrap clamped string as tool-friendly text content
+      if ((m as any).role === 'tool') {
+        safeMessages.push({ ...(m as any), content: [{ type: 'text', text: clamped }] as any });
+      } else {
+        const role = (m as any).role;
+        safeMessages.push({ role, content: clamped } as any);
+      }
+    }
+
+    // Then add the most recent non-system messages until we hit the cap
+    const rest = messages.filter(m => m.role !== 'system');
+    for (let i = Math.max(0, rest.length - 40); i < rest.length; i++) { // last 40 msgs
+      const m = rest[i];
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const clamped = clamp(content, maxPerMessage);
+      if (total + clamped.length > maxTotalChars) break;
+      total += clamped.length;
+      if ((m as any).role === 'tool') {
+        safeMessages.push({ ...(m as any), content: [{ type: 'text', text: clamped }] as any });
+      } else {
+        const role = (m as any).role;
+        safeMessages.push({ role, content: clamped } as any);
+      }
+    }
+
+    return safeMessages;
   }
 
   // Configuration methods

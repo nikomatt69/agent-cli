@@ -1,8 +1,10 @@
-import { writeFile, mkdir, copyFile, unlink } from 'fs/promises';
+import { writeFile, mkdir, copyFile, unlink, readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
 import { CliUI } from '../utils/cli-ui';
+import { DiffViewer, FileDiff } from '../ui/diff-viewer';
+import { diffManager } from '../ui/diff-manager';
 
 /**
  * Production-ready Write File Tool
@@ -34,6 +36,16 @@ export class WriteFileTool extends BaseTool {
                 }
             }
 
+            // Read existing content for diff display
+            let existingContent = '';
+            let isNewFile = false;
+            try {
+                existingContent = await readFile(sanitizedPath, 'utf8');
+            } catch (error) {
+                // File doesn't exist, it's a new file
+                isNewFile = true;
+            }
+
             // Create backup if file exists and backup is enabled
             if (options.createBackup !== false) {
                 backupPath = await this.createBackup(sanitizedPath);
@@ -49,6 +61,34 @@ export class WriteFileTool extends BaseTool {
                 for (const transformer of options.transformers) {
                     processedContent = await transformer(processedContent, sanitizedPath);
                 }
+            }
+
+            // Show diff before writing (unless disabled)
+            if (options.showDiff !== false && !isNewFile && existingContent !== processedContent) {
+                const fileDiff: FileDiff = {
+                    filePath: sanitizedPath,
+                    originalContent: existingContent,
+                    newContent: processedContent,
+                    isNew: false,
+                    isDeleted: false
+                };
+                
+                console.log('\n');
+                DiffViewer.showFileDiff(fileDiff, { compact: true });
+                
+                // Also add to diff manager for approval system
+                diffManager.addFileDiff(sanitizedPath, existingContent, processedContent);
+            } else if (isNewFile) {
+                const fileDiff: FileDiff = {
+                    filePath: sanitizedPath,
+                    originalContent: '',
+                    newContent: processedContent,
+                    isNew: true,
+                    isDeleted: false
+                };
+                
+                console.log('\n');
+                DiffViewer.showFileDiff(fileDiff, { compact: true });
             }
 
             // Write file with specified encoding
@@ -362,6 +402,7 @@ export interface WriteFileOptions {
     rollbackOnPartialFailure?: boolean;
     validators?: ContentValidator[];
     transformers?: ContentTransformer[];
+    showDiff?: boolean; // Whether to show diff before writing (default: true)
 }
 
 export interface AppendOptions {

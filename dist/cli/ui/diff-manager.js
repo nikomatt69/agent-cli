@@ -42,6 +42,7 @@ const boxen_1 = __importDefault(require("boxen"));
 const diff_1 = require("diff");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const advanced_cli_ui_1 = require("./advanced-cli-ui");
 class DiffManager {
     constructor() {
         this.pendingDiffs = new Map();
@@ -66,6 +67,8 @@ class DiffManager {
             status: this.autoAccept ? 'accepted' : 'pending'
         };
         this.pendingDiffs.set(filePath, fileDiff);
+        // Show diff in structured UI
+        advanced_cli_ui_1.advancedUI.showFileDiff(filePath, oldContent, newContent);
         if (this.autoAccept) {
             this.applyDiff(filePath);
         }

@@ -360,6 +360,7 @@ export class ModernAIProvider {
 
     switch (config.provider) {
       case 'openai':
+        // OpenAI provider is already response-API compatible via model options; no chainable helper here.
         return openai(config.model);
       case 'anthropic':
         return anthropic(config.model);
@@ -386,8 +387,9 @@ export class ModernAIProvider {
         model,
         messages,
         tools,
-        maxTokens: 4000,
-        temperature: 0.7,
+        maxTokens: 1000,
+        temperature: 1,
+
       });
 
       for await (const delta of result.textStream) {

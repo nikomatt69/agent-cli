@@ -7,6 +7,8 @@ const cli_ui_1 = require("../utils/cli-ui");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
+const diff_viewer_1 = require("../ui/diff-viewer");
+const diff_manager_1 = require("../ui/diff-manager");
 class EditTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
         super('edit-tool', workingDirectory);
@@ -160,8 +162,22 @@ class EditTool extends base_tool_1.BaseTool {
             }
             newContent = newLines.join('\n');
         }
-        // Genera diff
+        // Genera e mostra diff
         const diff = this.generateDiff(originalContent, newContent, filePath);
+        // Mostra diff usando il DiffViewer se ci sono state modifiche
+        if (replacementsMade > 0 && !params.previewOnly) {
+            const fileDiff = {
+                filePath,
+                originalContent,
+                newContent,
+                isNew: !fileExists,
+                isDeleted: false
+            };
+            console.log('\n');
+            diff_viewer_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
+            // Aggiungi al diff manager per l'approval system
+            diff_manager_1.diffManager.addFileDiff(filePath, originalContent, newContent);
+        }
         // Validazione sintassi se richiesta
         let syntaxValid;
         if (params.validateSyntax) {

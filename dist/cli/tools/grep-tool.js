@@ -8,6 +8,7 @@ const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
 const list_tool_1 = require("./list-tool");
+const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 const DEFAULT_MAX_RESULTS = 100;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const BINARY_FILE_PATTERNS = ['.jpg', '.png', '.gif', '.pdf', '.zip', '.tar', '.gz', '.exe', '.dll', '.so'];
@@ -83,6 +84,10 @@ class GrepTool extends base_tool_1.BaseTool {
                 }
             };
             cli_ui_1.CliUI.logSuccess(`✅ Found ${result.totalMatches} matches in ${filesWithMatches} files`);
+            // Show grep results in structured UI
+            if (result.matches.length > 0) {
+                advanced_cli_ui_1.advancedUI.showGrepResults(params.pattern, result.matches);
+            }
             return {
                 success: true,
                 data: result,

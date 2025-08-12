@@ -38,6 +38,7 @@ const promises_1 = require("fs/promises");
 const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
 const cli_ui_1 = require("../utils/cli-ui");
+const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 /**
  * Production-ready Read File Tool
  * Safely reads file contents with security checks and error handling
@@ -112,6 +113,10 @@ class ReadFileTool extends base_tool_1.BaseTool {
                     extension: this.getFileExtension(filePath)
                 }
             };
+            // Show file content in structured UI if not binary and not too large
+            if (!result.metadata?.isBinary && typeof processedContent === 'string' && processedContent.length < 50000) {
+                advanced_cli_ui_1.advancedUI.showFileContent(sanitizedPath, processedContent);
+            }
             return result;
         }
         catch (error) {

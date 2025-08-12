@@ -100,8 +100,8 @@ export class ApprovalSystem {
    * Quick approval for simple operations
    */
   async quickApproval(
-    title: string, 
-    description: string, 
+    title: string,
+    description: string,
     riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'medium'
   ): Promise<boolean> {
     const request: ApprovalRequest = {
@@ -125,10 +125,10 @@ export class ApprovalSystem {
     riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'medium'
   ): Promise<boolean> {
     console.log(chalk.blue.bold(`\\n🔍 ${title}`));
-    
+
     // Show file diffs
     DiffViewer.showMultiFileDiff(fileDiffs, { compact: true });
-    
+
     const actions: ApprovalAction[] = fileDiffs.map(diff => ({
       type: diff.isNew ? 'file_create' : diff.isDeleted ? 'file_delete' : 'file_modify',
       description: `${diff.isNew ? 'Create' : diff.isDeleted ? 'Delete' : 'Modify'} ${diff.filePath}`,
@@ -160,10 +160,10 @@ export class ApprovalSystem {
     workingDir?: string
   ): Promise<boolean> {
     const fullCommand = `${command} ${args.join(' ')}`;
-    
+
     // Assess risk level based on command
     const riskLevel = this.assessCommandRisk(command, args);
-    
+
     const request: ApprovalRequest = {
       id: `cmd-${Date.now()}`,
       title: 'Execute Command',
@@ -193,7 +193,7 @@ export class ApprovalSystem {
     isGlobal: boolean = false
   ): Promise<boolean> {
     const riskLevel = isGlobal ? 'high' : 'medium';
-    
+
     const request: ApprovalRequest = {
       id: `pkg-${Date.now()}`,
       title: 'Install Packages',
@@ -217,7 +217,7 @@ export class ApprovalSystem {
   private displayApprovalRequest(request: ApprovalRequest): void {
     const riskColor = this.getRiskColor(request.riskLevel);
     const riskIcon = this.getRiskIcon(request.riskLevel);
-    
+
     console.log(boxen(
       `${riskIcon} ${chalk.bold(request.title)}\\n\\n` +
       `${chalk.gray('Description:')} ${request.description}\\n` +
@@ -227,8 +227,8 @@ export class ApprovalSystem {
         padding: 1,
         margin: { top: 1, bottom: 0, left: 0, right: 0 },
         borderStyle: 'round',
-        borderColor: request.riskLevel === 'critical' ? 'red' : 
-                    request.riskLevel === 'high' ? 'yellow' : 'blue',
+        borderColor: request.riskLevel === 'critical' ? 'red' :
+          request.riskLevel === 'high' ? 'yellow' : 'blue',
       }
     ));
 
@@ -238,7 +238,7 @@ export class ApprovalSystem {
       request.actions.forEach((action, index) => {
         const actionRisk = this.getRiskColor(action.riskLevel);
         const actionIcon = this.getActionIcon(action.type);
-        
+
         console.log(`  ${index + 1}. ${actionIcon} ${action.description} ${actionRisk(`[${action.riskLevel}]`)}`);
       });
     }
@@ -300,9 +300,9 @@ export class ApprovalSystem {
 
     try {
       const answers = await inquirer.prompt(questions);
-      
+
       const approved = answers.approved && (answers.confirmHighRisk !== false);
-      
+
       if (approved) {
         console.log(chalk.green('✅ Operation approved'));
       } else {
@@ -329,7 +329,7 @@ export class ApprovalSystem {
    */
   private shouldAutoApprove(request: ApprovalRequest): boolean {
     const config = this.config.autoApprove;
-    
+
     if (!config) return false;
 
     // Check risk level auto-approval
@@ -337,7 +337,7 @@ export class ApprovalSystem {
     if (request.riskLevel === 'medium' && config.mediumRisk) return true;
 
     // Check specific operation types
-    const hasFileOps = request.actions.some(a => 
+    const hasFileOps = request.actions.some(a =>
       ['file_create', 'file_modify', 'file_delete'].includes(a.type)
     );
     if (hasFileOps && config.fileOperations) return true;
