@@ -29,10 +29,33 @@ interface ContextMetrics {
 export class ContextManager {
   private readonly MAX_TOKENS = 180000; // Leave buffer for response
   private readonly MIN_MESSAGES = 4; // Always keep recent messages
-  private readonly COMPRESSION_THRESHOLD = 150000; // Start compression
-  
+  private readonly MAX_METRICS_SIZE = 1000; // Maximum cached metrics
+
   private messageMetrics: Map<string, MessageMetrics> = new Map();
 
+  private checkMetricsSize(): void {
+    const currentSize = this.messageMetrics.size;
+    if (currentSize <= this.MAX_METRICS_SIZE) {
+      return;
+    }
+
+    const numEntriesToRemove = currentSize - this.MAX_METRICS_SIZE;
+    let removedCount = 0;
+    const keysIterator = this.messageMetrics.keys();
+
+    while (removedCount < numEntriesToRemove) {
+      const nextKey = keysIterator.next();
+      if (nextKey.done) {
+        break;
+      }
+      this.messageMetrics.delete(nextKey.value);
+      removedCount += 1;
+    }
+
+    if (removedCount > 0) {
+      console.log(chalk.yellow(`⚠️ Trimmed ${removedCount} oldest message metrics to cap at ${this.MAX_METRICS_SIZE}`));
+    }
+  }
   /** 
    * Estimate tokens in a message (rough approximation) 
    * 1 token ≈ 4 characters for English text
@@ -40,33 +63,45 @@ export class ContextManager {
   private estimateTokens(content: string): number {
     return Math.ceil(content.length / 4);
   }
-
+  private hashMessage(message: CoreMessage): string {
+    const content = typeof message.content === 'string'
+      ? message.content
+      : JSON.stringify(message.content);
+    // Simple hash function - consider using crypto.createHash for production
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return `msg-${message.role}-${hash}`;
+  }
   /**
    * Calculate importance score for a message
    */
   private calculateImportance(message: CoreMessage, index: number, total: number): number {
     let importance = 0;
-    
+
     // Recent messages are more important
     const recency = (total - index) / total;
     importance += recency * 0.4;
-    
+
     // Message type importance
     if (message.role === 'system') importance += 0.3;
     if (message.role === 'user') importance += 0.2;
     if (message.role === 'assistant') importance += 0.1;
-    
+
     // Content-based importance
     const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-    
+
     // Important keywords boost importance
     const importantKeywords = ['error', 'bug', 'fix', 'implement', 'create', 'modify', 'delete', 'update'];
     const keywordCount = importantKeywords.filter(kw => content.toLowerCase().includes(kw)).length;
     importance += keywordCount * 0.05;
-    
+
     // Length penalty for very long messages
     if (content.length > 5000) importance -= 0.1;
-    
+
     return Math.max(0, Math.min(1, importance));
   }
 
@@ -74,9 +109,10 @@ export class ContextManager {
    * Optimize message context to fit within token limits
    */
   optimizeContext(messages: CoreMessage[]): { optimizedMessages: CoreMessage[], metrics: ContextMetrics } {
+    this.checkMetricsSize();
     if (messages.length === 0) {
-      return { 
-        optimizedMessages: messages, 
+      return {
+        optimizedMessages: messages,
         metrics: { totalMessages: 0, estimatedTokens: 0, tokenLimit: this.MAX_TOKENS, compressionRatio: 0 }
       };
     }
@@ -87,9 +123,11 @@ export class ContextManager {
       const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
       const tokens = this.estimateTokens(content);
       const importance = this.calculateImportance(message, index, messages.length);
-      
+
       totalTokens += tokens;
-      this.messageMetrics.set(`${index}-${Date.now()}`, {
+      // Use content hash for stable key generation
+      const contentHash = this.hashMessage(message);
+      this.messageMetrics.set(contentHash, {
         estimatedTokens: tokens,
         importance,
         timestamp: new Date(),
@@ -99,11 +137,11 @@ export class ContextManager {
 
     // If within limits, return as-is
     if (totalTokens <= this.MAX_TOKENS) {
-      return { 
-        optimizedMessages: messages, 
-        metrics: { 
-          totalMessages: messages.length, 
-          estimatedTokens: totalTokens, 
+      return {
+        optimizedMessages: messages,
+        metrics: {
+          totalMessages: messages.length,
+          estimatedTokens: totalTokens,
           tokenLimit: this.MAX_TOKENS,
           compressionRatio: 0
         }
@@ -115,7 +153,7 @@ export class ContextManager {
     // Optimization strategy
     const optimized = this.compressContext(messages);
     const optimizedTokens = this.calculateTotalTokens(optimized);
-    
+
     console.log(chalk.green(`✅ Context optimized: ${messages.length} → ${optimized.length} messages, ${totalTokens} → ${optimizedTokens} tokens`));
 
     return {
@@ -135,7 +173,7 @@ export class ContextManager {
   private compressContext(messages: CoreMessage[]): CoreMessage[] {
     const optimized: CoreMessage[] = [];
     let currentTokens = 0;
-    
+
     // Always keep system messages
     const systemMessages = messages.filter(m => m.role === 'system');
     systemMessages.forEach(msg => {
@@ -146,7 +184,7 @@ export class ContextManager {
     // Keep the most recent messages
     const nonSystemMessages = messages.filter(m => m.role !== 'system');
     const recentMessages = nonSystemMessages.slice(-this.MIN_MESSAGES);
-    
+
     recentMessages.forEach(msg => {
       optimized.push(msg);
       currentTokens += this.getMessageTokens(msg);
@@ -183,11 +221,11 @@ export class ContextManager {
   private createSummaryContext(messages: CoreMessage[]): CoreMessage[] {
     const systemMessages = messages.filter(m => m.role === 'system');
     const nonSystemMessages = messages.filter(m => m.role !== 'system');
-    
+
     // Keep first few and last few messages, summarize the middle
     const keepStart = 2;
     const keepEnd = 3;
-    
+
     if (nonSystemMessages.length <= keepStart + keepEnd) {
       return messages;
     }
@@ -217,10 +255,10 @@ export class ContextManager {
   private createMiddleSummary(messages: CoreMessage[]): string {
     const topics = new Set<string>();
     const actions = new Set<string>();
-    
+
     messages.forEach(msg => {
       const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      
+
       // Extract key topics and actions
       if (content.includes('file') || content.includes('create') || content.includes('modify')) {
         actions.add('file operations');
@@ -268,7 +306,7 @@ export class ContextManager {
       totalMessages: messages.length,
       estimatedTokens: totalTokens,
       tokenLimit: this.MAX_TOKENS,
-      compressionRatio: totalTokens > this.MAX_TOKENS ? (totalTokens - this.MAX_TOKENS) / totalTokens : 0
+      compressionRatio: 0 // No compression in this method, it only returns metrics
     };
   }
 

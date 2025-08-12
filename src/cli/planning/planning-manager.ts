@@ -52,11 +52,7 @@ export class PlanningManager extends EventEmitter {
       // Step 2: Generate execution plan
       const plan = await this.planGenerator.generatePlan(context);
       // Render real todos in structured UI (all modes)
-      try {
-        const { advancedUI } = await import('../ui/advanced-cli-ui');
-        const todoItems = (plan.todos || []).map(t => ({ content: (t as any).title || (t as any).description, status: (t as any).status }));
-        (advancedUI as any).showTodos?.(todoItems, plan.title || 'Update Todos');
-      } catch { }
+      await this.renderTodosUI(plan);
       this.planHistory.set(plan.id, plan);
 
       // Step 3: Validate plan
@@ -90,11 +86,7 @@ export class PlanningManager extends EventEmitter {
     const context = await this.buildPlannerContext(userRequest, projectPath);
     const plan = await this.planGenerator.generatePlan(context);
     // Show todos panel in structured UI
-    try {
-      const { advancedUI } = await import('../ui/advanced-cli-ui');
-      const todoItems = (plan.todos || []).map(t => ({ content: (t as any).title || (t as any).description, status: (t as any).status }));
-      (advancedUI as any).showTodos?.(todoItems, plan.title || 'Update Todos');
-    } catch { }
+    await this.renderTodosUI(plan);
 
     this.planHistory.set(plan.id, plan);
     this.displayPlan(plan);
@@ -121,47 +113,47 @@ export class PlanningManager extends EventEmitter {
   private async executeWithEventTracking(plan: ExecutionPlan): Promise<PlanExecutionResult> {
     // Emit plan start event
     this.emit('planExecutionStart', { planId: plan.id, title: plan.title });
-    
+
     try {
       // Track step execution
       const updatedTodos = [...plan.todos];
-      
+
       for (let i = 0; i < updatedTodos.length; i++) {
         const todo = updatedTodos[i];
-        
+
         // Emit step start event
-        this.emit('stepStart', { 
-          planId: plan.id, 
-          stepIndex: i, 
-          stepId: todo.id, 
-          todos: updatedTodos 
+        this.emit('stepStart', {
+          planId: plan.id,
+          stepIndex: i,
+          stepId: todo.id,
+          todos: updatedTodos
         });
-        
+
         // Update step status to in_progress
         updatedTodos[i] = { ...todo, status: 'in_progress' };
-        this.emit('stepProgress', { 
-          planId: plan.id, 
-          stepIndex: i, 
-          stepId: todo.id, 
-          todos: updatedTodos 
+        this.emit('stepProgress', {
+          planId: plan.id,
+          stepIndex: i,
+          stepId: todo.id,
+          todos: updatedTodos
         });
-        
+
         // Simulate step execution (in a real implementation, this would execute the actual step)
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Update step status to completed
         updatedTodos[i] = { ...todo, status: 'completed' };
-        this.emit('stepComplete', { 
-          planId: plan.id, 
-          stepIndex: i, 
-          stepId: todo.id, 
-          todos: updatedTodos 
+        this.emit('stepComplete', {
+          planId: plan.id,
+          stepIndex: i,
+          stepId: todo.id,
+          todos: updatedTodos
         });
       }
-      
+
       // Emit plan completion event
       this.emit('planExecutionComplete', { planId: plan.id, title: plan.title });
-      
+
       // Return execution result
       return {
         planId: plan.id,
@@ -184,11 +176,11 @@ export class PlanningManager extends EventEmitter {
           skippedSteps: 0
         }
       } as PlanExecutionResult;
-      
+
     } catch (error: any) {
-      this.emit('planExecutionError', { 
-        planId: plan.id, 
-        error: error.message || error 
+      this.emit('planExecutionError', {
+        planId: plan.id,
+        error: error.message || error
       });
       throw error;
     }
@@ -332,6 +324,24 @@ export class PlanningManager extends EventEmitter {
         console.log(`     ${CliUI.dim(`Dependencies: ${step.dependencies.length} step(s)`)}`);
       }
     });
+  }
+
+  /**
+   * Render the plan todos in the Advanced CLI UI
+   */
+  private async renderTodosUI(plan: ExecutionPlan): Promise<void> {
+    try {
+      const { advancedUI } = await import('../ui/advanced-cli-ui');
+      const todoItems = (plan.todos || []).map(t => ({
+        content: (t as any).title || (t as any).description,
+        status: (t as any).status
+      }));
+      (advancedUI as any).showTodos?.(todoItems, plan.title || 'Update Todos');
+    } catch (error: any) {
+      if (this.config.logLevel === 'debug') {
+        CliUI.logError(`Failed to render todos UI: ${error?.message || error}`);
+      }
+    }
   }
 
   /**

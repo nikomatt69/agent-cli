@@ -603,6 +603,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
       if (metrics.compressionRatio > 0) {
         console.log(chalk.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
         console.log(chalk.dim(`   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
+        console.log(); // Add spacing after token info
       }
 
       // Stream the autonomous response with optimized context
@@ -651,7 +652,8 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
 
             const duration = Date.now() - startTime;
             console.log();
-            console.log(chalk.green(`\\n✨ Completed in ${duration}ms • ${toolsExecuted} tools used`));
+            console.log(); // Add extra spacing before completion message
+            console.log(chalk.green(`✨ Completed in ${duration}ms • ${toolsExecuted} tools used`));
             break;
 
           case 'error':
@@ -1243,8 +1245,10 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     console.log(`${chalk.green('/doctor')}         Diagnose and verify Claude Code installation`);
     console.log(`${chalk.green('/bug')}            Submit feedback about Claude Code`);
 
-    // Agent Commands
-    console.log(chalk.white.bold('\n🤖 Specialized Agents:'));
+    // Agent Commands - Enhanced with all available agents
+    console.log(chalk.white.bold('\n🤖 Agent Commands:'));
+    console.log(chalk.dim('💡 Tip: Press @ to see auto-complete suggestions'));
+    console.log(`${chalk.blue('@universal-agent')} <task>  All-in-one enterprise agent (default)`);
     console.log(`${chalk.blue('@ai-analysis')} <task>     AI code analysis and review`);
     console.log(`${chalk.blue('@code-review')} <task>     Code review and suggestions`);
     console.log(`${chalk.blue('@backend-expert')} <task>   Backend development specialist`);
@@ -1253,6 +1257,15 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     console.log(`${chalk.blue('@devops-expert')} <task>   DevOps and infrastructure expert`);
     console.log(`${chalk.blue('@system-admin')} <task>    System administration tasks`);
     console.log(`${chalk.blue('@autonomous-coder')} <task> Full autonomous coding agent`);
+
+    // File Selection & Tagging
+    console.log(chalk.white.bold('\n📁 File Selection & Tagging:'));
+    console.log(chalk.dim('💡 Tip: Use * for interactive file selection'));
+    console.log(`${chalk.magenta('*')} [pattern]        Interactive file picker and tagger`);
+    console.log(`${chalk.magenta('* *.ts')}           Find and select TypeScript files`);
+    console.log(`${chalk.magenta('* src/**')}         Browse and select from src directory`);
+    console.log(`${chalk.green('/ls')}              List files in current directory`);
+    console.log(`${chalk.green('/search')} <pattern> Search for files with pattern`);
 
     console.log(chalk.white.bold('\n💬 Natural Language Examples:'));
     console.log(chalk.dim('• "Create a React todo app with TypeScript and tests"'));

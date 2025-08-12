@@ -1105,8 +1105,10 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(`${chalk_1.default.green('/cost')}           Show total cost and duration of current session`);
         console.log(`${chalk_1.default.green('/doctor')}         Diagnose and verify Claude Code installation`);
         console.log(`${chalk_1.default.green('/bug')}            Submit feedback about Claude Code`);
-        // Agent Commands
-        console.log(chalk_1.default.white.bold('\n🤖 Specialized Agents:'));
+        // Agent Commands - Enhanced with all available agents
+        console.log(chalk_1.default.white.bold('\n🤖 Agent Commands:'));
+        console.log(chalk_1.default.dim('💡 Tip: Press @ to see auto-complete suggestions'));
+        console.log(`${chalk_1.default.blue('@universal-agent')} <task>  All-in-one enterprise agent (default)`);
         console.log(`${chalk_1.default.blue('@ai-analysis')} <task>     AI code analysis and review`);
         console.log(`${chalk_1.default.blue('@code-review')} <task>     Code review and suggestions`);
         console.log(`${chalk_1.default.blue('@backend-expert')} <task>   Backend development specialist`);
@@ -1115,6 +1117,14 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(`${chalk_1.default.blue('@devops-expert')} <task>   DevOps and infrastructure expert`);
         console.log(`${chalk_1.default.blue('@system-admin')} <task>    System administration tasks`);
         console.log(`${chalk_1.default.blue('@autonomous-coder')} <task> Full autonomous coding agent`);
+        // File Selection & Tagging
+        console.log(chalk_1.default.white.bold('\n📁 File Selection & Tagging:'));
+        console.log(chalk_1.default.dim('💡 Tip: Use * for interactive file selection'));
+        console.log(`${chalk_1.default.magenta('*')} [pattern]        Interactive file picker and tagger`);
+        console.log(`${chalk_1.default.magenta('* *.ts')}           Find and select TypeScript files`);
+        console.log(`${chalk_1.default.magenta('* src/**')}         Browse and select from src directory`);
+        console.log(`${chalk_1.default.green('/ls')}              List files in current directory`);
+        console.log(`${chalk_1.default.green('/search')} <pattern> Search for files with pattern`);
         console.log(chalk_1.default.white.bold('\n💬 Natural Language Examples:'));
         console.log(chalk_1.default.dim('• "Create a React todo app with TypeScript and tests"'));
         console.log(chalk_1.default.dim('• "Fix all ESLint errors in this project"'));

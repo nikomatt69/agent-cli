@@ -5,11 +5,11 @@ set -euo pipefail
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --tag beta
-#   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --version 0.1.3-beta
+#   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --version 0.1.4-beta
 
 TAG="beta"
 VERSION=""
-PACKAGE="@cadcamfun/niko-cli"
+PACKAGE="@cadcamfun/nikcli"
 
 log() { echo -e "[NikCLI] $*"; }
 err() { echo -e "[NikCLI][ERROR] $*" >&2; }

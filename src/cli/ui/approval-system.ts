@@ -212,20 +212,24 @@ export class ApprovalSystem {
   }
 
   /**
-   * Display approval request to user
+   * Display approval request to user with improved formatting
    */
   private displayApprovalRequest(request: ApprovalRequest): void {
     const riskColor = this.getRiskColor(request.riskLevel);
     const riskIcon = this.getRiskIcon(request.riskLevel);
 
+    // Add clear visual separation
+    console.log(chalk.gray('─'.repeat(60)));
+    console.log();
+
     console.log(boxen(
-      `${riskIcon} ${chalk.bold(request.title)}\\n\\n` +
-      `${chalk.gray('Description:')} ${request.description}\\n` +
-      `${chalk.gray('Risk Level:')} ${riskColor(request.riskLevel.toUpperCase())}\\n` +
+      `${riskIcon} ${chalk.bold(request.title)}\n\n` +
+      `${chalk.gray('Description:')} ${request.description}\n` +
+      `${chalk.gray('Risk Level:')} ${riskColor(request.riskLevel.toUpperCase())}\n` +
       `${chalk.gray('Actions:')} ${request.actions.length}`,
       {
         padding: 1,
-        margin: { top: 1, bottom: 0, left: 0, right: 0 },
+        margin: { top: 0, bottom: 1, left: 0, right: 0 },
         borderStyle: 'round',
         borderColor: request.riskLevel === 'critical' ? 'red' :
           request.riskLevel === 'high' ? 'yellow' : 'blue',
@@ -234,7 +238,7 @@ export class ApprovalSystem {
 
     // Show detailed actions
     if (request.actions.length > 0) {
-      console.log(chalk.blue.bold('\\n📋 Planned Actions:'));
+      console.log(chalk.blue.bold('\n📋 Planned Actions:'));
       request.actions.forEach((action, index) => {
         const actionRisk = this.getRiskColor(action.riskLevel);
         const actionIcon = this.getActionIcon(action.type);
@@ -245,7 +249,7 @@ export class ApprovalSystem {
 
     // Show context if available
     if (request.context) {
-      console.log(chalk.blue.bold('\\n🔍 Context:'));
+      console.log(chalk.blue.bold('\n🔍 Context:'));
       if (request.context.workingDirectory) {
         console.log(`  📁 Working Directory: ${request.context.workingDirectory}`);
       }
@@ -265,15 +269,19 @@ export class ApprovalSystem {
   }
 
   /**
-   * Prompt user for approval
+   * Prompt user for approval with improved formatting
    */
   private async promptForApproval(request: ApprovalRequest): Promise<ApprovalResponse> {
+    // Add spacing before the prompt
+    console.log();
+
     const questions: any[] = [
       {
         type: 'confirm',
         name: 'approved',
-        message: chalk.cyan('Do you approve this operation?'),
+        message: chalk.cyan.bold('\n❓ Do you approve this operation?'),
         default: request.riskLevel === 'low',
+        prefix: '  ',
       },
     ];
 
@@ -282,8 +290,9 @@ export class ApprovalSystem {
       questions.push({
         type: 'confirm',
         name: 'confirmHighRisk',
-        message: chalk.red('This is a high-risk operation. Are you sure?'),
+        message: chalk.red.bold('⚠️  This is a high-risk operation. Are you absolutely sure?'),
         default: false,
+        prefix: '  ',
         when: (answers: any) => answers.approved,
       });
     }
@@ -303,11 +312,17 @@ export class ApprovalSystem {
 
       const approved = answers.approved && (answers.confirmHighRisk !== false);
 
+      // Add spacing and clear result
+      console.log();
+
       if (approved) {
-        console.log(chalk.green('✅ Operation approved'));
+        console.log(chalk.green.bold('✅ Operation approved'));
       } else {
-        console.log(chalk.yellow('❌ Operation cancelled'));
+        console.log(chalk.yellow.bold('❌ Operation cancelled'));
       }
+
+      // Add final spacing
+      console.log();
 
       return {
         approved,
@@ -316,7 +331,7 @@ export class ApprovalSystem {
       };
     } catch (error) {
       // Handle Ctrl+C or other interruption
-      console.log(chalk.red('\\n❌ Operation cancelled by user'));
+      console.log(chalk.red('\n❌ Operation cancelled by user'));
       return {
         approved: false,
         timestamp: new Date(),

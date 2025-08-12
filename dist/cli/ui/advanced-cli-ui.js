@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function () { return m[k]; } };
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function (o, m, k, k2) {
+}) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function (o, v) {
+}) : function(o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function (o) {
+    var ownKeys = function(o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -48,6 +48,7 @@ class AdvancedCliUI {
     constructor() {
         this.indicators = new Map();
         this.liveUpdates = [];
+        this.backgroundAgents = new Map();
         this.spinners = new Map();
         this.progressBars = new Map();
         this.isInteractiveMode = false;
@@ -67,8 +68,7 @@ class AdvancedCliUI {
      * Start interactive mode with live updates
      */
     startInteractiveMode() {
-        this.isInteractiveMode = false; // Keep disabled to avoid panels
-        // Don't clear console
+        this.isInteractiveMode = true;
     }
     /**
      * Stop interactive mode
@@ -81,7 +81,7 @@ class AdvancedCliUI {
      * Show application header
      */
     showHeader() {
-        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.3-beta')}\n` +
+        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.4-beta')}\n` +
             `${chalk_1.default.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk_1.default.blue('Status:')} ${this.getOverallStatus()}  ${chalk_1.default.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk_1.default.blue('Mode:')} Interactive  ${chalk_1.default.blue('Live Updates:')} Enabled`, {
@@ -313,10 +313,11 @@ class AdvancedCliUI {
         // In chat mode, just return default to avoid blocking
         // Log the question for user awareness but don't block execution
         const icon = defaultValue ? '✅' : '❓';
-        console.log(`${icon} ${chalk_1.default.cyan(question)} ${chalk_1.default.gray('(auto-approved)')}`);
+        console.log(`${icon} ${chalk_1.default.cyan(question)} ${chalk_1.default.yellow.bold(`(auto-${defaultValue ? 'approved' : 'rejected'})`)}`);
         if (details) {
             console.log(chalk_1.default.gray(`   ${details}`));
         }
+        console.log(chalk_1.default.gray(`   → Using default value: ${defaultValue}`));
         // Auto-approve to prevent blocking in chat mode
         return defaultValue;
     }
@@ -1086,6 +1087,107 @@ class AdvancedCliUI {
         this.progressBars.clear();
         // Clear panels
         this.panels.clear();
+    }
+    /**
+     * Background Agents Management
+     */
+    /**
+     * Register or update a background agent
+     */
+    updateBackgroundAgent(agentInfo) {
+        agentInfo.lastUpdate = new Date();
+        this.backgroundAgents.set(agentInfo.id, agentInfo);
+        // Update the agents panel
+        this.updateAgentsPanel();
+    }
+    /**
+     * Show background agents activity in real-time
+     */
+    showBackgroundAgentsActivity(agents) {
+        agents.forEach(agent => this.updateBackgroundAgent(agent));
+    }
+    /**
+     * Get agent status icon
+     */
+    getAgentStatusIcon(status) {
+        switch (status) {
+            case 'idle': return '⏸️';
+            case 'working': return '🔄';
+            case 'completed': return '✅';
+            case 'error': return '❌';
+            default: return '🤖';
+        }
+    }
+    /**
+     * Update the agents panel
+     */
+    updateAgentsPanel() {
+        const agents = Array.from(this.backgroundAgents.values());
+        if (agents.length === 0) {
+            this.panels.delete('agents');
+            return;
+        }
+        const content = agents.map(agent => {
+            const statusIcon = this.getAgentStatusIcon(agent.status);
+            const progressBar = agent.progress ?
+                `${'█'.repeat(Math.floor(agent.progress / 10))}${'░'.repeat(10 - Math.floor(agent.progress / 10))} ${agent.progress}%` :
+                '';
+            const timeInfo = agent.startTime ?
+                ` (${this.formatDuration(Date.now() - agent.startTime.getTime())})` : '';
+            let line = `${statusIcon} ${chalk_1.default.cyan(agent.name)}${timeInfo}`;
+            if (agent.currentTask) {
+                line += `\n    Task: ${agent.currentTask}`;
+            }
+            if (progressBar) {
+                line += `\n    Progress: [${progressBar}]`;
+            }
+            return line;
+        }).join('\n\n');
+        this.panels.set('agents', {
+            id: 'agents',
+            title: '🤖 Background Agents',
+            content,
+            type: 'agents',
+            visible: true,
+            borderColor: 'blue'
+        });
+        this.autoLayout();
+    }
+    /**
+     * Format duration for display
+     */
+    formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        if (seconds < 60) {
+            return `${seconds}s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds}s`;
+    }
+    /**
+     * Clear completed background agents
+     */
+    clearCompletedAgents() {
+        for (const [id, agent] of this.backgroundAgents.entries()) {
+            if (agent.status === 'completed' || agent.status === 'error') {
+                this.backgroundAgents.delete(id);
+            }
+        }
+        this.updateAgentsPanel();
+    }
+    /**
+     * Get background agents status summary
+     */
+    getAgentsStatusSummary() {
+        const agents = Array.from(this.backgroundAgents.values());
+        return {
+            total: agents.length,
+            working: agents.filter(a => a.status === 'working').length,
+            idle: agents.filter(a => a.status === 'idle').length,
+            completed: agents.filter(a => a.status === 'completed').length,
+            errors: agents.filter(a => a.status === 'error').length
+        };
     }
 }
 exports.AdvancedCliUI = AdvancedCliUI;

@@ -6,7 +6,7 @@
 - TypeScript: ^5.3
 - Binario: `nikcli` (pkg opzionale per distribuzioni standalone)
 - Config: `~/.nikcli/config.json`
-- Pacchetto: `@cadcamfun/niko-cli`
+- Pacchetto: `@cadcamfun/nikcli`
 
 ---
 
@@ -77,22 +77,22 @@ Esempi rapidi:
 
 ## 🤖 Modelli supportati (predefiniti)
 
-| Nome                     | Provider   | Modello                | Richiede API key |
-|--------------------------|------------|------------------------|------------------|
+| Nome                     | Provider   | Modello                  | Richiede API key |
+| ------------------------ | ---------- | ------------------------ | ---------------- |
 | claude-sonnet-4-20250514 | Anthrop ic | claude-sonnet-4-20250514 | Sì               |
 | claude-3-haiku-20240229  | Anthrop ic | claude-3-haiku-20240229  | Sì               |
-| gpt-4o-mini              | OpenAI     | gpt-4o-mini            | Sì               |
-| gpt-5                    | OpenAI     | gpt-5                  | Sì               |
-| gpt-4o                   | OpenAI     | gpt-4o                 | Sì               |
-| gpt-4.1                  | OpenAI     | gpt-4.1                | Sì               |
-| gpt-4                    | OpenAI     | gpt-4                  | Sì               |
-| gpt-3.5-turbo            | OpenAI     | gpt-3.5-turbo          | Sì               |
-| gpt-3.5-turbo-16k        | OpenAI     | gpt-3.5-turbo-16k      | Sì               |
-| gemini-pro               | Google     | gemini-pro             | Sì               |
-| gemini-1.5-pro           | Google     | gemini-1.5-pro         | Sì               |
-| llama3.1:8b              | Ollama     | llama3.1:8b            | No               |
-| codellama:7b             | Ollama     | codellama:7b           | No               |
-| mistral:7b               | Ollama     | mistral:7b             | No               |
+| gpt-4o-mini              | OpenAI     | gpt-4o-mini              | Sì               |
+| gpt-5                    | OpenAI     | gpt-5                    | Sì               |
+| gpt-4o                   | OpenAI     | gpt-4o                   | Sì               |
+| gpt-4.1                  | OpenAI     | gpt-4.1                  | Sì               |
+| gpt-4                    | OpenAI     | gpt-4                    | Sì               |
+| gpt-3.5-turbo            | OpenAI     | gpt-3.5-turbo            | Sì               |
+| gpt-3.5-turbo-16k        | OpenAI     | gpt-3.5-turbo-16k        | Sì               |
+| gemini-pro               | Google     | gemini-pro               | Sì               |
+| gemini-1.5-pro           | Google     | gemini-1.5-pro           | Sì               |
+| llama3.1:8b              | Ollama     | llama3.1:8b              | No               |
+| codellama:7b             | Ollama     | codellama:7b             | No               |
+| mistral:7b               | Ollama     | mistral:7b               | No               |
 
 - Cambio modello: `/model <name>` | Lista: `/models` | API key: `/set-key <model> <key>`
 - Ollama non richiede chiavi; assicurarsi che `ollama serve` sia attivo (host di default `127.0.0.1:11434`).
@@ -116,8 +116,10 @@ Esempio minimale:
   "systemPrompt": null,
   "autoAnalyzeWorkspace": true,
   "enableAutoApprove": false,
-  "models": { /* default inclusi */ },
-  "apiKeys": { },
+  "models": {
+    /* default inclusi */
+  },
+  "apiKeys": {},
   "mcpServers": {},
   "maxConcurrentAgents": 3,
   "enableGuidanceSystem": true,
@@ -149,50 +151,50 @@ export GOOGLE_GENERATIVE_AI_API_KEY="..."
 
 Dal file `src/cli/chat/nik-cli-commands.ts`.
 
-| Comando | Descrizione |
-|--------|-------------|
-| `/help` | Aiuto e panoramica comandi |
-| `/quit`, `/exit` | Esci dall’app |
-| `/clear` | Pulisci chat corrente |
-| `/new [titolo]` | Nuova sessione |
-| `/model <name>` | Seleziona modello corrente |
-| `/models` | Elenco modelli disponibili |
-| `/set-key <model> <key>` | Imposta API key per modello |
-| `/config` | Mostra configurazione corrente |
-| `/debug` | Informazioni diagnostiche chiavi/modelli |
-| `/temp <0.0-2.0>` | Imposta temperatura |
-| `/history <on|off>` | Abilita/disabilita cronologia |
-| `/system <prompt>` | Imposta system prompt sessione |
-| `/sessions` | Elenco sessioni |
-| `/export [id]` | Esporta sessione in Markdown |
-| `/stats` | Statistiche di utilizzo |
-| `/agents` | Elenco agenti |
-| `/agent <name> <task>` | Esegui agente specifico |
-| `/auto <descrizione>` | Esecuzione autonoma multi-step |
-| `/parallel <agents> <task>` | Esecuzione agenti in parallelo |
-| `/factory` | Dashboard factory agenti |
-| `/create-agent <spec>` | Crea blueprint agente specializzato |
-| `/launch-agent <blueprint-id>` | Avvia agente da blueprint |
-| `/context <paths>` | Seleziona path di contesto workspace |
-| `/stream` | Dashboard stream agenti |
-| `/read <file>` | Leggi file |
-| `/write <file> <content>` | Scrivi file |
-| `/edit <file>` | Editor interattivo |
-| `/ls [dir]` | Lista file/cartelle |
-| `/search <query>` | Ricerca (grep-like) |
-| `/grep <query>` | Alias ricerca |
-| `/run <cmd>` | Esegui comando shell |
-| `/install <pkgs>` | Installa pacchetti (npm/yarn) |
-| `/npm <args>` | Comandi npm |
-| `/yarn <args>` | Comandi yarn (sconsigliato) |
-| `/git <args>` | Comandi git |
-| `/docker <args>` | Comandi docker |
-| `/ps` | Processi attivi |
-| `/kill <pid>` | Termina processo |
-| `/build` | Build progetto |
-| `/test [pattern]` | Test (vitest) |
-| `/lint` | Linting |
-| `/create <type> <name>` | Scaffolding progetto |
+| Comando                        | Descrizione                              |
+| ------------------------------ | ---------------------------------------- | ----------------------------- |
+| `/help`                        | Aiuto e panoramica comandi               |
+| `/quit`, `/exit`               | Esci dall’app                            |
+| `/clear`                       | Pulisci chat corrente                    |
+| `/new [titolo]`                | Nuova sessione                           |
+| `/model <name>`                | Seleziona modello corrente               |
+| `/models`                      | Elenco modelli disponibili               |
+| `/set-key <model> <key>`       | Imposta API key per modello              |
+| `/config`                      | Mostra configurazione corrente           |
+| `/debug`                       | Informazioni diagnostiche chiavi/modelli |
+| `/temp <0.0-2.0>`              | Imposta temperatura                      |
+| `/history <on                  | off>`                                    | Abilita/disabilita cronologia |
+| `/system <prompt>`             | Imposta system prompt sessione           |
+| `/sessions`                    | Elenco sessioni                          |
+| `/export [id]`                 | Esporta sessione in Markdown             |
+| `/stats`                       | Statistiche di utilizzo                  |
+| `/agents`                      | Elenco agenti                            |
+| `/agent <name> <task>`         | Esegui agente specifico                  |
+| `/auto <descrizione>`          | Esecuzione autonoma multi-step           |
+| `/parallel <agents> <task>`    | Esecuzione agenti in parallelo           |
+| `/factory`                     | Dashboard factory agenti                 |
+| `/create-agent <spec>`         | Crea blueprint agente specializzato      |
+| `/launch-agent <blueprint-id>` | Avvia agente da blueprint                |
+| `/context <paths>`             | Seleziona path di contesto workspace     |
+| `/stream`                      | Dashboard stream agenti                  |
+| `/read <file>`                 | Leggi file                               |
+| `/write <file> <content>`      | Scrivi file                              |
+| `/edit <file>`                 | Editor interattivo                       |
+| `/ls [dir]`                    | Lista file/cartelle                      |
+| `/search <query>`              | Ricerca (grep-like)                      |
+| `/grep <query>`                | Alias ricerca                            |
+| `/run <cmd>`                   | Esegui comando shell                     |
+| `/install <pkgs>`              | Installa pacchetti (npm/yarn)            |
+| `/npm <args>`                  | Comandi npm                              |
+| `/yarn <args>`                 | Comandi yarn (sconsigliato)              |
+| `/git <args>`                  | Comandi git                              |
+| `/docker <args>`               | Comandi docker                           |
+| `/ps`                          | Processi attivi                          |
+| `/kill <pid>`                  | Termina processo                         |
+| `/build`                       | Build progetto                           |
+| `/test [pattern]`              | Test (vitest)                            |
+| `/lint`                        | Linting                                  |
+| `/create <type> <name>`        | Scaffolding progetto                     |
 
 > Nota: i comandi “sensibili” possono richiedere approvazione interattiva (UI `approval-system`).
 
@@ -202,9 +204,9 @@ Dal file `src/cli/chat/nik-cli-commands.ts`.
 
 Registrazione agenti in `src/cli/register-agents.ts`.
 
-| ID               | Nome             | Descrizione |
-|------------------|------------------|-------------|
-| `universal-agent`| Universal Agent  | Agente all‑in‑one con capacità di coding, analisi, review, ottimizzazione, testing, frontend, backend, DevOps, automazioni e file/terminal tools. |
+| ID                | Nome            | Descrizione                                                                                                                                       |
+| ----------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `universal-agent` | Universal Agent | Agente all‑in‑one con capacità di coding, analisi, review, ottimizzazione, testing, frontend, backend, DevOps, automazioni e file/terminal tools. |
 
 > Nel codice esistono più classi di agenti in `src/cli/automation/agents/`, ma di default viene registrato l’`UniversalAgent` (orientato all’uso enterprise).
 
@@ -214,19 +216,19 @@ Registrazione agenti in `src/cli/register-agents.ts`.
 
 Implementati in `src/cli/tools/` con registro e policy di sicurezza.
 
-| Tool | File | Funzionalità principali |
-|------|------|-------------------------|
-| read-file-tool | `read-file-tool.ts` | Lettura sicura, encoding configurabile, `maxLines`, streaming chunked |
-| write-file-tool | `write-file-tool.ts` | Scrittura sicura, creazione file se assente |
-| edit-tool | `edit-tool.ts` | Editing interattivo con diff |
-| multi-edit-tool | `multi-edit-tool.ts` | Modifiche multiple atomiche |
-| replace-in-file-tool | `replace-in-file-tool.ts` | Sostituzioni mirate con sicurezza |
-| find-files-tool | `find-files-tool.ts` | Ricerca file (glob) |
-| grep-tool | `grep-tool.ts` | Ricerca contenuti stile grep |
-| list-tool | `list-tool.ts` | Listing sicuro directory/metadata |
-| run-command-tool | `run-command-tool.ts` | Esecuzione comandi controllata |
-| secure-command-tool | `secure-command-tool.ts` | Policy avanzate/approvazioni |
-| tools-manager | `tools-manager.ts` | Orchestrazione/registry strumenti |
+| Tool                 | File                      | Funzionalità principali                                               |
+| -------------------- | ------------------------- | --------------------------------------------------------------------- |
+| read-file-tool       | `read-file-tool.ts`       | Lettura sicura, encoding configurabile, `maxLines`, streaming chunked |
+| write-file-tool      | `write-file-tool.ts`      | Scrittura sicura, creazione file se assente                           |
+| edit-tool            | `edit-tool.ts`            | Editing interattivo con diff                                          |
+| multi-edit-tool      | `multi-edit-tool.ts`      | Modifiche multiple atomiche                                           |
+| replace-in-file-tool | `replace-in-file-tool.ts` | Sostituzioni mirate con sicurezza                                     |
+| find-files-tool      | `find-files-tool.ts`      | Ricerca file (glob)                                                   |
+| grep-tool            | `grep-tool.ts`            | Ricerca contenuti stile grep                                          |
+| list-tool            | `list-tool.ts`            | Listing sicuro directory/metadata                                     |
+| run-command-tool     | `run-command-tool.ts`     | Esecuzione comandi controllata                                        |
+| secure-command-tool  | `secure-command-tool.ts`  | Policy avanzate/approvazioni                                          |
+| tools-manager        | `tools-manager.ts`        | Orchestrazione/registry strumenti                                     |
 
 > Modalità lettura “a step” per range di righe: attualmente supporto parziale tramite `maxLines` e `readStream()`; stepping interattivo a range è in pianificazione.
 
@@ -270,19 +272,19 @@ Componenti chiave:
 
 Script (`package.json`):
 
-| Script | Comando |
-|--------|---------|
-| start | `ts-node --project tsconfig.cli.json src/cli/index.ts` |
-| dev | `npm start` |
-| build | `tsc --project tsconfig.cli.json` |
-| build:start | `npm run build && node dist/cli/index.js` |
-| build:bin | `npm run build && pkg dist/cli/index.js --compress Brotli --output build/nikcli` |
-| build:bin:mac | `... --targets node18-macos-arm64,node18-macos-x64 ...` |
-| build:bin:linux | `... --targets node18-linux-x64 ...` |
-| test | `vitest` |
-| test:run | `vitest run` |
-| test:watch | `vitest --watch` |
-| lint | `eslint src --ext .ts,.tsx` |
+| Script          | Comando                                                                          |
+| --------------- | -------------------------------------------------------------------------------- |
+| start           | `ts-node --project tsconfig.cli.json src/cli/index.ts`                           |
+| dev             | `npm start`                                                                      |
+| build           | `tsc --project tsconfig.cli.json`                                                |
+| build:start     | `npm run build && node dist/cli/index.js`                                        |
+| build:bin       | `npm run build && pkg dist/cli/index.js --compress Brotli --output build/nikcli` |
+| build:bin:mac   | `... --targets node18-macos-arm64,node18-macos-x64 ...`                          |
+| build:bin:linux | `... --targets node18-linux-x64 ...`                                             |
+| test            | `vitest`                                                                         |
+| test:run        | `vitest run`                                                                     |
+| test:watch      | `vitest --watch`                                                                 |
+| lint            | `eslint src --ext .ts,.tsx`                                                      |
 
 Esecuzione test/lint:
 

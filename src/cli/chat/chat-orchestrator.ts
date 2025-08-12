@@ -29,7 +29,7 @@ export class ChatOrchestrator {
       message,
       ...(data && { data })
     };
-    
+
     const colorFn = level === 'error' ? chalk.red : level === 'warn' ? chalk.yellow : chalk.blue;
     console.log(colorFn(`[${timestamp}] ${level.toUpperCase()}: ${message}`), data ? data : '');
   }
@@ -92,161 +92,170 @@ export class ChatOrchestrator {
       }
 
       const agentId = nanoid();
-    const agentName = `agent-${agentId.slice(0, 5)}`;
+      const agentName = `agent-${agentId.slice(0, 5)}`;
 
-    // Get guidance context for this agent
-    const guidanceContext = this.guidanceManager.getContextForAgent('general', process.cwd());
+      // Get guidance context for this agent
+      const guidanceContext = this.guidanceManager.getContextForAgent('general', process.cwd());
 
-    const agent: Agent = {
-      id: agentId,
-      name: agentName,
-      status: 'planning' as AgentStatus,
-      description: 'Planned tasks',
-      specialization: 'general',
-      capabilities: [],
-      version: '1.0.0',
-      currentTasks: 0,
-      maxConcurrentTasks: 1,
-      initialize: async () => { },
-      cleanup: async () => { },
-      executeTodo: async (todo) => {
-        await this.delay(500);
-        console.log(chalk.cyan(`🤖 [${agentName}] executing: ${todo.title}`));
+      const agent: Agent = {
+        id: agentId,
+        name: agentName,
+        status: 'planning' as AgentStatus,
+        description: 'Planned tasks',
+        specialization: 'general',
+        capabilities: [],
+        version: '1.0.0',
+        currentTasks: 0,
+        maxConcurrentTasks: 1,
+        initialize: async () => { },
+        cleanup: async () => { },
+        executeTodo: async (todo) => {
+          try {
+            const INIT_DELAY = 500;
+            await this.delay(INIT_DELAY);
+            this.log('info', `Executing todo: ${todo.title}`, { agentName, todoId: todo.id });
 
-        // Add guidance context to todo execution if available
-        if (guidanceContext) {
-          console.log(chalk.blue(`📋 [${agentName}] applying guidance context`));
-        }
+            if (guidanceContext) {
+              this.log('info', 'Applying guidance context', { agentName });
+            }
 
-        const duration = (todo.estimatedDuration || 5) * 100;
-        await this.delay(duration);
-        console.log(chalk.green(`✅ [${agentName}] done: ${todo.title}`));
-      },
-      // Missing required methods
-      run: async (task) => {
-        const startTime = new Date();
-        return {
-          taskId: task.id,
-          agentId: agentId,
-          status: 'completed' as any,
-          result: `Task ${task.id} completed`,
-          startTime,
-          endTime: new Date(),
-          duration: 100
-        };
-      },
-      executeTask: async (task) => {
-        const startTime = new Date();
-        let status: 'completed' | 'failed' = 'completed';
-        let result = '';
-        
-        try {
-          // Actual task execution logic based on task data/description
-          const taskDescription = task.description || '';
-          
-          if (taskDescription.includes('analyz') || taskDescription.includes('review')) {
-            result = await this.executeAnalysisTask(task);
-          } else if (taskDescription.includes('file') || taskDescription.includes('read') || taskDescription.includes('write')) {
-            result = await this.executeFileOperation(task);
-          } else if (taskDescription.includes('command') || taskDescription.includes('execute') || taskDescription.includes('run')) {
-            result = await this.executeCommand(task);
-          } else {
-            result = `Executed ${task.type} task: ${task.description}`;
+            const duration = Math.max((todo.estimatedDuration || 5) * 100, 100);
+            await this.delay(duration);
+            this.log('info', `Todo completed: ${todo.title}`, { agentName, todoId: todo.id });
+          } catch (error) {
+            this.log('error', `Todo execution failed: ${todo.title}`, {
+              agentName,
+              todoId: todo.id,
+              error: error instanceof Error ? error.message : String(error)
+            });
+            throw error;
           }
-        } catch (error) {
-          status = 'failed';
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          result = `Task failed: ${errorMessage}`;
-          this.log('error', `Task execution failed`, { taskId: task.id, taskType: task.type, error: errorMessage });
+        },
+        // Missing required methods
+        run: async (task) => {
+          const startTime = new Date();
+          return {
+            taskId: task.id,
+            agentId: agentId,
+            status: 'completed' as any,
+            result: `Task ${task.id} completed`,
+            startTime,
+            endTime: new Date(),
+            duration: 100
+          };
+        },
+        executeTask: async (task) => {
+          const startTime = new Date();
+          let status: 'completed' | 'failed' = 'completed';
+          let result = '';
+
+          try {
+            // Actual task execution logic based on task data/description
+            const taskDescription = task.description || '';
+
+            if (taskDescription.includes('analyz') || taskDescription.includes('review')) {
+              result = await this.executeAnalysisTask(task);
+            } else if (taskDescription.includes('file') || taskDescription.includes('read') || taskDescription.includes('write')) {
+              result = await this.executeFileOperation(task);
+            } else if (taskDescription.includes('command') || taskDescription.includes('execute') || taskDescription.includes('run')) {
+              result = await this.executeCommand(task);
+            } else {
+              result = `Executed ${task.type} task: ${task.description}`;
+            }
+          } catch (error) {
+            status = 'failed';
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            result = `Task failed: ${errorMessage}`;
+            this.log('error', `Task execution failed`, { taskId: task.id, taskType: task.type, error: errorMessage });
+          }
+
+          const endTime = new Date();
+          const duration = endTime.getTime() - startTime.getTime();
+
+          // Log successful task completion
+          if (status === 'completed') {
+            this.log('info', `Task completed successfully`, {
+              taskId: task.id,
+              taskType: task.type,
+              duration: `${duration}ms`
+            });
+          }
+
+          return {
+            taskId: task.id,
+            agentId: agentId,
+            status,
+            result,
+            startTime,
+            endTime,
+            duration
+          };
+        },
+        getStatus: () => agent.status,
+        getMetrics: () => ({
+          tasksExecuted: 0,
+          tasksSucceeded: 0,
+          tasksFailed: 0,
+          tasksInProgress: agent.currentTasks,
+          averageExecutionTime: 0,
+          totalExecutionTime: 0,
+          successRate: 100,
+          tokensConsumed: 0,
+          apiCallsTotal: 0,
+          lastActive: new Date(),
+          uptime: 0,
+          productivity: 0,
+          accuracy: 100
+        }),
+        getCapabilities: () => agent.capabilities,
+        canHandle: (task) => true,
+        updateGuidance: (guidance) => {
+          console.log(`Updated guidance for ${agentName}`);
+        },
+        updateConfiguration: (config) => {
+          console.log(`Updated configuration for ${agentName}`);
         }
-
-        const endTime = new Date();
-        const duration = endTime.getTime() - startTime.getTime();
-
-        // Log successful task completion
-        if (status === 'completed') {
-          this.log('info', `Task completed successfully`, { 
-            taskId: task.id, 
-            taskType: task.type, 
-            duration: `${duration}ms` 
-          });
-        }
-
-        return {
-          taskId: task.id,
-          agentId: agentId,
-          status,
-          result,
-          startTime,
-          endTime,
-          duration
-        };
-      },
-      getStatus: () => agent.status,
-      getMetrics: () => ({
-        tasksExecuted: 0,
-        tasksSucceeded: 0,
-        tasksFailed: 0,
-        tasksInProgress: agent.currentTasks,
-        averageExecutionTime: 0,
-        totalExecutionTime: 0,
-        successRate: 100,
-        tokensConsumed: 0,
-        apiCallsTotal: 0,
-        lastActive: new Date(),
-        uptime: 0,
-        productivity: 0,
-        accuracy: 100
-      }),
-      getCapabilities: () => agent.capabilities,
-      canHandle: (task) => true,
-      updateGuidance: (guidance) => {
-        console.log(`Updated guidance for ${agentName}`);
-      },
-      updateConfiguration: (config) => {
-        console.log(`Updated configuration for ${agentName}`);
-      }
-    };
-
-    this.agentManager.registerAgent(agent);
-
-    // Create enhanced context for todo planning
-    const planningContext = {
-      userInput: input,
-      guidance: guidanceContext,
-      workingDirectory: process.cwd()
-    };
-
-    const todos = await this.todoManager.planTodos(agentId, input, planningContext);
-
-    if (todos.length === 0) {
-      session.messages.push({ role: 'assistant', content: `No tasks for: ${input}`, timestamp: new Date().toISOString() });
-      await this.sessionManager.saveSession(session);
-      return;
-    }
-
-    const summary = todos.map((t, i) => `${i + 1}. ${t.title} (${t.priority})`).join('\n');
-    session.messages.push({
-      role: 'assistant', content: `Planned ${todos.length} tasks:\n${summary}`, timestamp: new Date().toISOString()
-    });
-    await this.sessionManager.saveSession(session);
-
-    // Execute todos with agent manager
-    for (const todo of todos) {
-      const task = {
-        id: todo.id,
-        type: 'internal' as const,
-        title: todo.title,
-        description: todo.description,
-        priority: todo.priority as any,
-        status: 'pending' as const,
-        data: { todo },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        progress: 0
       };
-      await this.agentManager.executeTask(agentId, task);
-    }
+
+      this.agentManager.registerAgent(agent);
+
+      // Create enhanced context for todo planning
+      const planningContext = {
+        userInput: input,
+        guidance: guidanceContext,
+        workingDirectory: process.cwd()
+      };
+
+      const todos = await this.todoManager.planTodos(agentId, input, planningContext);
+
+      if (todos.length === 0) {
+        session.messages.push({ role: 'assistant', content: `No tasks for: ${input}`, timestamp: new Date().toISOString() });
+        await this.sessionManager.saveSession(session);
+        return;
+      }
+
+      const summary = todos.map((t, i) => `${i + 1}. ${t.title} (${t.priority})`).join('\n');
+      session.messages.push({
+        role: 'assistant', content: `Planned ${todos.length} tasks:\n${summary}`, timestamp: new Date().toISOString()
+      });
+      await this.sessionManager.saveSession(session);
+
+      // Execute todos with agent manager
+      for (const todo of todos) {
+        const task = {
+          id: todo.id,
+          type: 'internal' as const,
+          title: todo.title,
+          description: todo.description,
+          priority: todo.priority as any,
+          status: 'pending' as const,
+          data: { todo },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          progress: 0
+        };
+        await this.agentManager.executeTask(agentId, task);
+      }
 
       session.messages.push({ role: 'assistant', content: `All tasks complete.`, timestamp: new Date().toISOString() });
       await this.sessionManager.saveSession(session);
@@ -383,7 +392,7 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
       // Simulate analysis work with configurable delay
       const ANALYSIS_DELAY = 500; // Constant instead of magic number
       await this.delay(ANALYSIS_DELAY);
-      
+
       return `Analysis completed for: ${task.title}. Found ${Math.floor(Math.random() * 10)} items to review.`;
     } catch (error) {
       throw new Error(`Analysis task failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -394,18 +403,112 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
     try {
       const FILE_OP_DELAY = 300;
       await this.delay(FILE_OP_DELAY);
-      
+
       // Validate file operations for security
       const allowedOps = ['read', 'write', 'create', 'delete'];
       const operation = task.data?.operation || 'read';
-      
+
       if (!allowedOps.includes(operation)) {
         throw new Error(`Unauthorized file operation: ${operation}`);
       }
-      
+
       return `File operation '${operation}' completed successfully for: ${task.title}`;
     } catch (error) {
       throw new Error(`File operation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Strict command validation to prevent unsafe execution.
+   * Applies normalization, tokenization, operator rejection, allowlist checks,
+   * and absolute system binary path filtering.
+   */
+  private validateCommandStrict(originalCommand: string): void {
+    const normalize = (cmd: string): string => {
+      // Trim, strip common quotes used for simple obfuscation, and collapse whitespace
+      const strippedQuotes = cmd
+        .trim()
+        .replace(/["'\u2018\u2019\u201C\u201D]/g, '');
+      return strippedQuotes.replace(/\s+/g, ' ');
+    };
+
+    const containsShellOperators = (cmd: string): boolean => {
+      // Reject pipes, chains, substitutions, and redirections
+      if (/(\|\||&&|;|\| |`)/.test(cmd)) return true; // ||, &&, ;, |, backticks
+      if (/\$\([^)]*\)/.test(cmd)) return true; // $(...)
+      if (/(^|\s)(?:>>?|<<?)\s?/.test(cmd)) return true; // >, >>, <, <<
+      return false;
+    };
+
+    const tokenize = (cmd: string): string[] => {
+      // Split on whitespace and common shell metacharacters to isolate tokens
+      return cmd.split(/[\s|&;()`<>]+/).filter(Boolean);
+    };
+
+    const isAbsoluteSystemBinary = (execPath: string): boolean => {
+      if (!execPath.startsWith('/')) return false;
+      return /^(\/((usr\/)?(local\/)?){0,1}(s)?bin\/)/.test(execPath);
+    };
+
+    if (!originalCommand || typeof originalCommand !== 'string') {
+      throw new Error('No command provided');
+    }
+
+    const normalized = normalize(originalCommand);
+
+    // Reject use of shell operators and chaining
+    if (containsShellOperators(normalized)) {
+      throw new Error('Shell operators and command chaining are not allowed');
+    }
+
+    const tokens = tokenize(normalized);
+    if (tokens.length === 0) {
+      throw new Error('Unable to parse command');
+    }
+
+    const executable = tokens[0].toLowerCase();
+    const args = tokens.slice(1);
+
+    // Block absolute paths to system binaries (e.g., /bin/rm, /usr/bin/sudo)
+    if (isAbsoluteSystemBinary(tokens[0])) {
+      throw new Error('Absolute paths to system binaries are not allowed');
+    }
+
+    // Explicitly block dangerous executables using word-boundary semantics
+    const prohibitedExecutables = /^(rm|sudo|chmod|chown|curl|wget|dd|mkfs|fdisk|mount|umount|kill|killall|systemctl|service|crontab|at|batch|scp|ssh|rsync)$/i;
+    if (prohibitedExecutables.test(executable)) {
+      throw new Error(`Dangerous command blocked: ${executable}`);
+    }
+
+    // Additional rm safety: block recursive/force deletions even if obfuscated
+    if (executable === 'rm') {
+      const hasRecursive = args.some(a => /^-.*r/.test(a));
+      const hasForce = args.some(a => /^-.*f/.test(a));
+      if (hasRecursive || hasForce) {
+        throw new Error('Dangerous rm flags detected');
+      }
+    }
+
+    // Strict allowlist of safe commands
+    const allowedExecutables = new Set<string>([
+      'ls', 'dir', 'pwd', 'whoami', 'date', 'echo', 'cat', 'head', 'tail',
+      'grep', 'find', 'which', 'type', 'node', 'npm', 'yarn', 'pnpm', 'git'
+    ]);
+
+    if (!allowedExecutables.has(executable)) {
+      throw new Error(`Command not allowed by allowlist: ${executable}`);
+    }
+
+    // Subcommand allowlist for multi-tool CLIs
+    const allowedSubcommands: Record<string, Set<string>> = {
+      git: new Set(['status', 'log', 'diff', 'branch', 'remote', 'rev-parse', 'show', 'describe'])
+    };
+
+    if (executable in allowedSubcommands) {
+      const sub = (args[0] || '').toLowerCase();
+      if (!allowedSubcommands[executable].has(sub)) {
+        throw new Error(`Subcommand not allowed: ${executable} ${sub || '(none)'}`);
+      }
     }
   }
 
@@ -413,15 +516,11 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
     try {
       const COMMAND_DELAY = 800;
       await this.delay(COMMAND_DELAY);
-      
-      // Security check - don't execute dangerous commands
+
+      // Strict security validation before any execution
       const command = task.data?.command || '';
-      const dangerousCommands = ['rm -rf', 'sudo', 'chmod 777', 'curl', 'wget'];
-      
-      if (dangerousCommands.some(cmd => command.includes(cmd))) {
-        throw new Error(`Dangerous command blocked: ${command}`);
-      }
-      
+      this.validateCommandStrict(command);
+
       return `Command executed safely: ${task.title}`;
     } catch (error) {
       throw new Error(`Command execution failed: ${error instanceof Error ? error.message : String(error)}`);

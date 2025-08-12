@@ -401,7 +401,7 @@ class AdvancedAIProvider {
             generate_code: (0, ai_1.tool)({
                 description: 'Generate code with context awareness and best practices',
                 parameters: zod_1.z.object({
-                    type: zod_1.z.enum(['component', 'function', 'class', 'test', 'config']).describe('Code type'),
+                    type: zod_1.z.enum(['component', 'function', 'class', 'test', 'config', 'docs']).describe('Code type'),
                     description: zod_1.z.string().describe('What to generate'),
                     language: zod_1.z.string().default('typescript').describe('Programming language'),
                     framework: zod_1.z.string().optional().describe('Framework context (react, node, etc)'),
@@ -434,6 +434,9 @@ class AdvancedAIProvider {
     }
     // Claude Code style streaming with full autonomy
     async *streamChatWithFullAutonomy(messages, abortSignal) {
+        if (abortSignal && !(abortSignal instanceof AbortSignal)) {
+            throw new TypeError('Invalid AbortSignal provided');
+        }
         // Apply AGGRESSIVE truncation to prevent prompt length errors
         const truncatedMessages = this.truncateMessages(messages, 100000); // REDUCED: 100k tokens safety margin
         const model = this.getModel();
@@ -569,7 +572,7 @@ class AdvancedAIProvider {
                                     : Array.isArray(lastUserMessage.content)
                                         ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                                         : String(lastUserMessage.content);
-                                // Store in completion protocol cache (primary - most efficient)
+                                // Store in completion protocol cache (primary - most efficient) and full response cache once
                                 const cacheParams = this.getProviderParams();
                                 const completionRequest = {
                                     prefix: userContentStr,
@@ -578,20 +581,26 @@ class AdvancedAIProvider {
                                     temperature: cacheParams.temperature,
                                     model: this.currentModel
                                 };
-                                await completion_protocol_cache_1.completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
-                                // Store in full response cache (fallback)
-                                await token_cache_1.tokenCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 500), tokensUsed, ['chat', 'autonomous']);
-                            }
-                            yield {
-                                type: 'complete',
-                                content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
-                                metadata: {
-                                    finishReason: delta.finishReason,
-                                    usage: delta.usage,
-                                    totalText: accumulatedText.length,
-                                    capped: truncatedByCap
+                                try {
+                                    await completion_protocol_cache_1.completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+                                    // Store in full response cache (fallback)
+                                    await token_cache_1.tokenCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 500), tokensUsed, ['chat', 'autonomous']);
                                 }
-                            };
+                                catch (cacheError) {
+                                    console.warn('Failed to cache response:', cacheError.message);
+                                    // Continue without caching - don't fail the stream
+                                }
+                                yield {
+                                    type: 'complete',
+                                    content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
+                                    metadata: {
+                                        finishReason: delta.finishReason,
+                                        usage: delta.usage,
+                                        totalText: accumulatedText.length,
+                                        capped: truncatedByCap
+                                    }
+                                };
+                            }
                             break;
                         case 'error':
                             yield {
@@ -906,7 +915,15 @@ Execute task autonomously with tools. Be direct.`
             '.py': 'python',
             '.java': 'java',
             '.cpp': 'cpp',
+            '.cs': 'csharp',
             '.c': 'c',
+            '.toml': 'toml',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.ini': 'ini',
+            '.env': 'env',
+            '.sh': 'shell',
+            '.bash': 'shell',
             '.rs': 'rust',
             '.go': 'go',
             '.php': 'php',
@@ -932,6 +949,12 @@ Execute task autonomously with tools. Be direct.`
             return 'Express';
         if (deps.fastify)
             return 'Fastify';
+        if (deps.svelte)
+            return 'Svelte';
+        if (deps.astro)
+            return 'Astro';
+        if (deps.remix)
+            return 'Remix';
         return 'JavaScript/Node.js';
     }
     detectProjectLanguages(structure) {
@@ -1036,7 +1059,7 @@ Requirements:
         const allModels = config_manager_1.simpleConfigManager.get('models');
         const configData = allModels[model];
         if (!configData) {
-            return { maxTokens: 4000, temperature: 0.7 }; // REDUCED default
+            return { maxTokens: 8000, temperature: 0.7 }; // REDUCED default
         }
         // Provider-specific token limits and settings
         switch (configData.provider) {
@@ -1048,7 +1071,7 @@ Requirements:
                 else if (configData.model.includes('gpt-4')) {
                     return { maxTokens: 4096, temperature: 1 }; // REDUCED from 4096
                 }
-                return { maxTokens: 1000, temperature: 1 };
+                return { maxTokens: 3000, temperature: 1 };
             case 'anthropic':
                 // Claude models - REDUCED for lighter requests
                 if (configData.model.includes('claude-4') ||
@@ -1064,7 +1087,7 @@ Requirements:
                 // Local models, more conservative
                 return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 2048
             default:
-                return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 4000
+                return { maxTokens: 8000, temperature: 0.7 }; // REDUCED from 4000
         }
     }
     // Build provider-specific options to satisfy differing token parameter names

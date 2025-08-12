@@ -85,15 +85,25 @@ class ChatOrchestrator {
                 initialize: async () => { },
                 cleanup: async () => { },
                 executeTodo: async (todo) => {
-                    await this.delay(500);
-                    console.log(chalk_1.default.cyan(`🤖 [${agentName}] executing: ${todo.title}`));
-                    // Add guidance context to todo execution if available
-                    if (guidanceContext) {
-                        console.log(chalk_1.default.blue(`📋 [${agentName}] applying guidance context`));
+                    try {
+                        const INIT_DELAY = 500;
+                        await this.delay(INIT_DELAY);
+                        this.log('info', `Executing todo: ${todo.title}`, { agentName, todoId: todo.id });
+                        if (guidanceContext) {
+                            this.log('info', 'Applying guidance context', { agentName });
+                        }
+                        const duration = Math.max((todo.estimatedDuration || 5) * 100, 100);
+                        await this.delay(duration);
+                        this.log('info', `Todo completed: ${todo.title}`, { agentName, todoId: todo.id });
                     }
-                    const duration = (todo.estimatedDuration || 5) * 100;
-                    await this.delay(duration);
-                    console.log(chalk_1.default.green(`✅ [${agentName}] done: ${todo.title}`));
+                    catch (error) {
+                        this.log('error', `Todo execution failed: ${todo.title}`, {
+                            agentName,
+                            todoId: todo.id,
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                        throw error;
+                    }
                 },
                 // Missing required methods
                 run: async (task) => {
@@ -358,16 +368,95 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
             throw new Error(`File operation failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
+    /**
+     * Strict command validation to prevent unsafe execution.
+     * Applies normalization, tokenization, operator rejection, allowlist checks,
+     * and absolute system binary path filtering.
+     */
+    validateCommandStrict(originalCommand) {
+        const normalize = (cmd) => {
+            // Trim, strip common quotes used for simple obfuscation, and collapse whitespace
+            const strippedQuotes = cmd
+                .trim()
+                .replace(/["'\u2018\u2019\u201C\u201D]/g, '');
+            return strippedQuotes.replace(/\s+/g, ' ');
+        };
+        const containsShellOperators = (cmd) => {
+            // Reject pipes, chains, substitutions, and redirections
+            if (/(\|\||&&|;|\| |`)/.test(cmd))
+                return true; // ||, &&, ;, |, backticks
+            if (/\$\([^)]*\)/.test(cmd))
+                return true; // $(...)
+            if (/(^|\s)(?:>>?|<<?)\s?/.test(cmd))
+                return true; // >, >>, <, <<
+            return false;
+        };
+        const tokenize = (cmd) => {
+            // Split on whitespace and common shell metacharacters to isolate tokens
+            return cmd.split(/[\s|&;()`<>]+/).filter(Boolean);
+        };
+        const isAbsoluteSystemBinary = (execPath) => {
+            if (!execPath.startsWith('/'))
+                return false;
+            return /^(\/((usr\/)?(local\/)?){0,1}(s)?bin\/)/.test(execPath);
+        };
+        if (!originalCommand || typeof originalCommand !== 'string') {
+            throw new Error('No command provided');
+        }
+        const normalized = normalize(originalCommand);
+        // Reject use of shell operators and chaining
+        if (containsShellOperators(normalized)) {
+            throw new Error('Shell operators and command chaining are not allowed');
+        }
+        const tokens = tokenize(normalized);
+        if (tokens.length === 0) {
+            throw new Error('Unable to parse command');
+        }
+        const executable = tokens[0].toLowerCase();
+        const args = tokens.slice(1);
+        // Block absolute paths to system binaries (e.g., /bin/rm, /usr/bin/sudo)
+        if (isAbsoluteSystemBinary(tokens[0])) {
+            throw new Error('Absolute paths to system binaries are not allowed');
+        }
+        // Explicitly block dangerous executables using word-boundary semantics
+        const prohibitedExecutables = /^(rm|sudo|chmod|chown|curl|wget|dd|mkfs|fdisk|mount|umount|kill|killall|systemctl|service|crontab|at|batch|scp|ssh|rsync)$/i;
+        if (prohibitedExecutables.test(executable)) {
+            throw new Error(`Dangerous command blocked: ${executable}`);
+        }
+        // Additional rm safety: block recursive/force deletions even if obfuscated
+        if (executable === 'rm') {
+            const hasRecursive = args.some(a => /^-.*r/.test(a));
+            const hasForce = args.some(a => /^-.*f/.test(a));
+            if (hasRecursive || hasForce) {
+                throw new Error('Dangerous rm flags detected');
+            }
+        }
+        // Strict allowlist of safe commands
+        const allowedExecutables = new Set([
+            'ls', 'dir', 'pwd', 'whoami', 'date', 'echo', 'cat', 'head', 'tail',
+            'grep', 'find', 'which', 'type', 'node', 'npm', 'yarn', 'pnpm', 'git'
+        ]);
+        if (!allowedExecutables.has(executable)) {
+            throw new Error(`Command not allowed by allowlist: ${executable}`);
+        }
+        // Subcommand allowlist for multi-tool CLIs
+        const allowedSubcommands = {
+            git: new Set(['status', 'log', 'diff', 'branch', 'remote', 'rev-parse', 'show', 'describe'])
+        };
+        if (executable in allowedSubcommands) {
+            const sub = (args[0] || '').toLowerCase();
+            if (!allowedSubcommands[executable].has(sub)) {
+                throw new Error(`Subcommand not allowed: ${executable} ${sub || '(none)'}`);
+            }
+        }
+    }
     async executeCommand(task) {
         try {
             const COMMAND_DELAY = 800;
             await this.delay(COMMAND_DELAY);
-            // Security check - don't execute dangerous commands
+            // Strict security validation before any execution
             const command = task.data?.command || '';
-            const dangerousCommands = ['rm -rf', 'sudo', 'chmod 777', 'curl', 'wget'];
-            if (dangerousCommands.some(cmd => command.includes(cmd))) {
-                throw new Error(`Dangerous command blocked: ${command}`);
-            }
+            this.validateCommandStrict(command);
             return `Command executed safely: ${task.title}`;
         }
         catch (error) {

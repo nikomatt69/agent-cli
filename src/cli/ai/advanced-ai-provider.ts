@@ -10,7 +10,8 @@ import {
   CoreTool,
   ToolCallPart,
   ToolResultPart,
-  generateObject
+  generateObject,
+  experimental_StreamData
 } from 'ai';
 import { z } from 'zod';
 import { simpleConfigManager as configManager } from '../core/config-manager';
@@ -156,6 +157,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
   private currentModel: string;
   private workingDirectory: string = process.cwd();
   private executionContext: Map<string, any> = new Map();
+  private enhancedContext: Map<string, any> = new Map();
+  private conversationMemory: CoreMessage[] = [];
+  private analysisCache: Map<string, any> = new Map();
 
   constructor() {
     this.currentModel = configManager.get('currentModel') || 'claude-sonnet-4-20250514';
@@ -467,7 +471,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
       generate_code: tool({
         description: 'Generate code with context awareness and best practices',
         parameters: z.object({
-          type: z.enum(['component', 'function', 'class', 'test', 'config']).describe('Code type'),
+          type: z.enum(['component', 'function', 'class', 'test', 'config', 'docs']).describe('Code type'),
           description: z.string().describe('What to generate'),
           language: z.string().default('typescript').describe('Programming language'),
           framework: z.string().optional().describe('Framework context (react, node, etc)'),
@@ -503,6 +507,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Claude Code style streaming with full autonomy
   async *streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent> {
+    if (abortSignal && !(abortSignal instanceof AbortSignal)) {
+      throw new TypeError('Invalid AbortSignal provided');
+    }
     // Apply AGGRESSIVE truncation to prevent prompt length errors
     const truncatedMessages = this.truncateMessages(messages, 100000); // REDUCED: 100k tokens safety margin
 
@@ -515,42 +522,61 @@ export class AdvancedAIProvider implements AutonomousProvider {
       const systemContext = truncatedMessages.filter(m => m.role === 'system').map(m => m.content).join('\n');
 
       if (lastUserMessage) {
-        // Try completion protocol cache first (most efficient)
+        // Check if this is an analysis request (skip cache for fresh analysis)
         const userContent = typeof lastUserMessage.content === 'string'
           ? lastUserMessage.content
           : Array.isArray(lastUserMessage.content)
             ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
             : String(lastUserMessage.content);
 
-        const params = this.getProviderParams();
-        const completionRequest = {
-          prefix: userContent,
-          context: systemContext.substring(0, 200), // REDUCED context length
-          maxTokens: Math.min(500, params.maxTokens), // REDUCED: Cap at 500 for completion cache
-          temperature: params.temperature,
-          model: this.currentModel
-        };
+        const isAnalysisRequest = userContent.toLowerCase().includes('analizza') ||
+          userContent.toLowerCase().includes('analysis') ||
+          userContent.toLowerCase().includes('analisi') ||
+          userContent.toLowerCase().includes('scan') ||
+          userContent.toLowerCase().includes('esplora') ||
+          userContent.toLowerCase().includes('explore') ||
+          userContent.toLowerCase().includes('trova') ||
+          userContent.toLowerCase().includes('find') ||
+          userContent.toLowerCase().includes('cerca') ||
+          userContent.toLowerCase().includes('search');
 
-        const protocolCompletion = await completionCache.getCompletion(completionRequest);
-        if (protocolCompletion) {
-          yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
-          yield { type: 'text_delta', content: protocolCompletion.completion };
-          yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
-          return;
-        }
+        // Skip cache for analysis requests to ensure fresh data
+        if (!isAnalysisRequest) {
+          const params = this.getProviderParams();
+          const completionRequest = {
+            prefix: userContent,
+            context: systemContext.substring(0, 200), // REDUCED context length
+            maxTokens: Math.min(500, params.maxTokens), // REDUCED: Cap at 500 for completion cache
+            temperature: params.temperature,
+            model: this.currentModel
+          };
 
-        // Fallback to full response cache
-        const cachedResponse = await tokenCache.getCachedResponse(
-          userContent,
-          systemContext.substring(0, 200), // REDUCED context length  
-          ['chat', 'autonomous']
-        );
+          const protocolCompletion = await completionCache.getCompletion(completionRequest);
+          if (protocolCompletion) {
+            yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
+            yield { type: 'text_delta', content: protocolCompletion.completion };
+            yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
+            return;
+          }
 
-        if (cachedResponse) {
-          yield { type: 'start', content: '🎯 Using cached response...' };
-          yield { type: 'text_delta', content: cachedResponse.response };
-          yield { type: 'complete', content: 'Cache hit - tokens saved!' };
-          return;
+          // Fallback to full response cache
+          const cachedResponse = await tokenCache.getCachedResponse(
+            userContent,
+            systemContext.substring(0, 200), // REDUCED context length  
+            ['chat', 'autonomous']
+          );
+
+          if (cachedResponse) {
+            yield { type: 'start', content: '🎯 Using cached response...' };
+            // Show cached response as a single block instead of streaming
+            console.log(chalk.dim('📄 Cached response:'));
+            console.log(chalk.white(cachedResponse.response));
+            console.log(chalk.dim('')); // Add spacing after cached response
+            yield { type: 'complete', content: 'Cache hit - tokens saved!' };
+            return;
+          }
+        } else {
+          yield { type: 'start', content: '🔍 Starting fresh analysis (bypassing cache)...' };
         }
       }
 
@@ -560,15 +586,54 @@ export class AdvancedAIProvider implements AutonomousProvider {
       const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
       console.log(`📊 Message tokens: original=${originalTokens}, truncated=${truncatedTokens}, messages=${messages.length}→${truncatedMessages.length}`);
 
+      // Check if we're approaching token limits and need to create a summary
+      const tokenLimit = 150000; // Conservative limit
+      const isAnalysisRequest = lastUserMessage && typeof lastUserMessage.content === 'string' &&
+        (lastUserMessage.content.toLowerCase().includes('analizza') ||
+          lastUserMessage.content.toLowerCase().includes('analysis') ||
+          lastUserMessage.content.toLowerCase().includes('analisi') ||
+          lastUserMessage.content.toLowerCase().includes('scan') ||
+          lastUserMessage.content.toLowerCase().includes('esplora') ||
+          lastUserMessage.content.toLowerCase().includes('explore'));
+
+      if (isAnalysisRequest && originalTokens > tokenLimit * 0.8) {
+        yield { type: 'thinking', content: '📊 Large analysis detected - enabling chained file reading to avoid token limits...' };
+
+        console.log(chalk.yellow(`⚠️ Enabling chained file reading mode (${originalTokens} tokens detected)`));
+
+        // Add special instruction for chained file reading
+        const chainedInstruction = `IMPORTANT: For this analysis, use chained file reading approach:
+1. First, scan and list files/directories to understand structure
+2. Then read files in small batches (max 3-5 files per call)
+3. Process each batch before moving to the next
+4. Build analysis incrementally to avoid token limits
+5. Use find_files_tool first, then read_file_tool in small groups`;
+
+        // Add the instruction to the system context
+        const enhancedSystemContext = systemContext + '\n\n' + chainedInstruction;
+
+        // Update messages with enhanced context
+        const enhancedMessages = messages.map(msg =>
+          msg.role === 'system'
+            ? { ...msg, content: enhancedSystemContext }
+            : msg
+        );
+
+        // Use enhanced messages for the rest of the processing
+        messages = enhancedMessages;
+      }
+
       const params = this.getProviderParams();
       console.log(`🔧 Provider params for ${this.getCurrentModelInfo().config.provider}: maxTokens=${params.maxTokens}, temp=${params.temperature}`);
+      console.log(chalk.dim('')); // Add spacing with chalk
+
       const provider = this.getCurrentModelInfo().config.provider;
       const safeMessages = this.sanitizeMessagesForProvider(provider, truncatedMessages);
       const streamOpts: any = {
         model,
         messages: safeMessages,
         tools,
-        maxToolRoundtrips: 10,
+        maxToolRoundtrips: isAnalysisRequest ? 5 : 10, // Reduce tool calls for analysis
         temperature: params.temperature,
         abortSignal,
         onStepFinish: (_evt: any) => { },
@@ -580,6 +645,8 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
       let currentToolCalls: ToolCallPart[] = [];
       let accumulatedText = '';
+      let toolCallCount = 0;
+      const maxToolCallsForAnalysis = 8; // Limit tool calls for large analyses
 
       const approxCharLimit = provider === 'openai' ? params.maxTokens * 4 : Number.POSITIVE_INFINITY;
       let truncatedByCap = false;
@@ -615,12 +682,27 @@ export class AdvancedAIProvider implements AutonomousProvider {
               break;
 
             case 'tool-call':
+              toolCallCount++;
               currentToolCalls.push(delta);
+
+              // Check if we're hitting tool call limits for analysis
+              if (isAnalysisRequest && toolCallCount > maxToolCallsForAnalysis) {
+                yield {
+                  type: 'thinking',
+                  content: `📊 Tool call limit reached (${toolCallCount}). Providing summary of findings so far...`
+                };
+                yield {
+                  type: 'text_delta',
+                  content: `\n\n**Analysis Summary (Tool Call Limit Reached):**\nI've analyzed ${toolCallCount} operations and found the key patterns. Here's what I discovered:\n\n`
+                };
+                break;
+              }
+
               yield {
                 type: 'tool_call',
                 toolName: delta.toolName,
                 toolArgs: delta.args,
-                content: `Executing ${delta.toolName}...`,
+                content: `Executing ${delta.toolName}... (${toolCallCount}/${maxToolCallsForAnalysis})`,
                 metadata: { toolCallId: delta.toolCallId }
               };
               break;
@@ -660,7 +742,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
                     ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                     : String(lastUserMessage.content);
 
-                // Store in completion protocol cache (primary - most efficient)
+                // Store in completion protocol cache (primary - most efficient) and full response cache once
                 const cacheParams = this.getProviderParams();
                 const completionRequest = {
                   prefix: userContentStr,
@@ -669,28 +751,33 @@ export class AdvancedAIProvider implements AutonomousProvider {
                   temperature: cacheParams.temperature,
                   model: this.currentModel
                 };
-                await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
+                try {
+                  await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
 
-                // Store in full response cache (fallback)
-                await tokenCache.setCachedResponse(
-                  userContentStr,
-                  accumulatedText.trim(),
-                  systemContext.substring(0, 500),
-                  tokensUsed,
-                  ['chat', 'autonomous']
-                );
-              }
-
-              yield {
-                type: 'complete',
-                content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
-                metadata: {
-                  finishReason: delta.finishReason,
-                  usage: delta.usage,
-                  totalText: accumulatedText.length,
-                  capped: truncatedByCap
+                  // Store in full response cache (fallback)
+                  await tokenCache.setCachedResponse(
+                    userContentStr,
+                    accumulatedText.trim(),
+                    systemContext.substring(0, 500),
+                    tokensUsed,
+                    ['chat', 'autonomous']
+                  );
+                } catch (cacheError: any) {
+                  console.warn('Failed to cache response:', cacheError.message);
+                  // Continue without caching - don't fail the stream
                 }
-              };
+
+                yield {
+                  type: 'complete',
+                  content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
+                  metadata: {
+                    finishReason: delta.finishReason,
+                    usage: delta.usage,
+                    totalText: accumulatedText.length,
+                    capped: truncatedByCap
+                  }
+                };
+              }
               break;
 
             case 'error':
@@ -1037,7 +1124,15 @@ Execute task autonomously with tools. Be direct.`
       '.py': 'python',
       '.java': 'java',
       '.cpp': 'cpp',
+      '.cs': 'csharp',
       '.c': 'c',
+      '.toml': 'toml',
+      '.yaml': 'yaml',
+      '.yml': 'yaml',
+      '.ini': 'ini',
+      '.env': 'env',
+      '.sh': 'shell',
+      '.bash': 'shell',
       '.rs': 'rust',
       '.go': 'go',
       '.php': 'php',
@@ -1058,10 +1153,14 @@ Execute task autonomously with tools. Be direct.`
     if (deps.react) return 'React';
     if (deps.express) return 'Express';
     if (deps.fastify) return 'Fastify';
+    if (deps.svelte) return 'Svelte';
+    if (deps.astro) return 'Astro';
 
+
+
+    if (deps.remix) return 'Remix';
     return 'JavaScript/Node.js';
   }
-
   private detectProjectLanguages(structure: any): string[] {
     const languages = new Set<string>();
 
@@ -1170,7 +1269,7 @@ Requirements:
     const configData = allModels[model];
 
     if (!configData) {
-      return { maxTokens: 4000, temperature: 0.7 }; // REDUCED default
+      return { maxTokens: 8000, temperature: 0.7 }; // REDUCED default
     }
 
     // Provider-specific token limits and settings
@@ -1182,7 +1281,7 @@ Requirements:
         } else if (configData.model.includes('gpt-4')) {
           return { maxTokens: 4096, temperature: 1 }; // REDUCED from 4096
         }
-        return { maxTokens: 1000, temperature: 1 };
+        return { maxTokens: 3000, temperature: 1 };
 
       case 'anthropic':
         // Claude models - REDUCED for lighter requests
@@ -1202,7 +1301,7 @@ Requirements:
         return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 2048
 
       default:
-        return { maxTokens: 1000, temperature: 0.7 }; // REDUCED from 4000
+        return { maxTokens: 8000, temperature: 0.7 }; // REDUCED from 4000
     }
   }
 

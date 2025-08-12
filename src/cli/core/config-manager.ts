@@ -55,6 +55,33 @@ const ConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   requireApprovalForNetwork: z.boolean().default(true),
   approvalPolicy: z.enum(['strict', 'moderate', 'permissive']).default('moderate'),
+  // Security configuration for different modes
+  securityMode: z.enum(['safe', 'default', 'developer']).default('safe'),
+  toolApprovalPolicies: z.object({
+    fileOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    gitOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    packageOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    systemCommands: z.enum(['always', 'risky', 'never']).default('always'),
+    networkRequests: z.enum(['always', 'risky', 'never']).default('always'),
+  }).default({
+    fileOperations: 'risky',
+    gitOperations: 'risky', 
+    packageOperations: 'risky',
+    systemCommands: 'always',
+    networkRequests: 'always',
+  }),
+  // Session-based settings
+  sessionSettings: z.object({
+    approvalTimeoutMs: z.number().min(5000).max(300000).default(30000),
+    devModeTimeoutMs: z.number().min(60000).max(7200000).default(3600000),
+    batchApprovalEnabled: z.boolean().default(true),
+    autoApproveReadOnly: z.boolean().default(true),
+  }).default({
+    approvalTimeoutMs: 30000,
+    devModeTimeoutMs: 3600000,
+    batchApprovalEnabled: true,
+    autoApproveReadOnly: true,
+  }),
   sandbox: z.object({
     enabled: z.boolean().default(true),
     allowFileSystem: z.boolean().default(true),
@@ -154,6 +181,20 @@ export class SimpleConfigManager {
     logLevel: 'info' as const,
     requireApprovalForNetwork: true,
     approvalPolicy: 'moderate' as const,
+    securityMode: 'safe' as const,
+    toolApprovalPolicies: {
+      fileOperations: 'risky' as const,
+      gitOperations: 'risky' as const,
+      packageOperations: 'risky' as const,
+      systemCommands: 'always' as const,
+      networkRequests: 'always' as const,
+    },
+    sessionSettings: {
+      approvalTimeoutMs: 30000,
+      devModeTimeoutMs: 3600000,
+      batchApprovalEnabled: true,
+      autoApproveReadOnly: true,
+    },
     sandbox: {
       enabled: true,
       allowFileSystem: true,
@@ -211,6 +252,11 @@ export class SimpleConfigManager {
 
   getAll(): ConfigType {
     return { ...this.config };
+  }
+
+  setAll(newConfig: ConfigType): void {
+    this.config = { ...newConfig };
+    this.saveConfig();
   }
 
   // API Key management

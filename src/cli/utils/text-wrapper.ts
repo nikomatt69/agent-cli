@@ -154,7 +154,7 @@ export class TextWrapper {
      */
     static formatStatus(icon: string, message: string, details?: string): string {
         const fullText = details ? `${message} - ${details}` : message;
-        return `${icon} ${this.wrapBlueText(fullText)}`;
+        return `${icon} ${TextWrapper.wrapBlueText(fullText)}`;
     }
 
     /**
@@ -162,7 +162,7 @@ export class TextWrapper {
      */
     static formatCommand(command: string, args?: string[]): string {
         const fullCommand = args ? `${command} ${args.join(' ')}` : command;
-        return this.wrapBlueText(`⚡ Running: ${fullCommand}`);
+        return TextWrapper.wrapBlueText(`⚡ Running: ${fullCommand}`);
     }
 
     /**
@@ -170,14 +170,15 @@ export class TextWrapper {
      */
     static formatFileOperation(operation: string, filePath: string, details?: string): string {
         const message = details ? `${operation} ${filePath} - ${details}` : `${operation} ${filePath}`;
-        return this.wrapBlueText(message);
+        return TextWrapper.wrapBlueText(message);
     }
 
     /**
      * Format progress messages with proper wrapping
      */
     static formatProgress(current: number, total: number, operation?: string): string {
-        const baseMessage = `📊 Progress: ${current}/${total} (${Math.round((current / total) * 100)}%)`;
+        const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+        const baseMessage = `📊 Progress: ${current}/${total} (${percentage}%)`;
         const fullMessage = operation ? `${baseMessage} - ${operation}` : baseMessage;
         return this.wrapBlueText(fullMessage);
     }
@@ -194,7 +195,7 @@ export class TextWrapper {
             ? fullMessage.substring(0, 147) + '...'
             : fullMessage;
 
-        return this.wrapBlueText(truncatedMessage);
+        return TextWrapper.wrapBlueText(truncatedMessage);
     }
 
     /**
@@ -206,7 +207,7 @@ export class TextWrapper {
             ? `${baseMessage} (${results} results)`
             : baseMessage;
 
-        return this.wrapBlueText(fullMessage);
+        return TextWrapper.wrapBlueText(fullMessage);
     }
 }
 

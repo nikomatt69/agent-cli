@@ -46,9 +46,13 @@ export class DiffManager {
 
     this.pendingDiffs.set(filePath, fileDiff);
 
-    // Show diff in structured UI
-    advancedUI.showFileDiff(filePath, oldContent, newContent);
-
+    // Show diff in structured UI when interactive and not auto-accept; guard and swallow UI errors
+    if (!this.autoAccept && process.stdout.isTTY && typeof advancedUI?.showFileDiff === 'function') {
+      void Promise.resolve(advancedUI.showFileDiff(filePath, oldContent, newContent))
+        .catch((err: any) => {
+          console.log(chalk.yellow(`⚠ Advanced UI failed for ${filePath}: ${err?.message ?? String(err)}`));
+        });
+    }
     if (this.autoAccept) {
       this.applyDiff(filePath);
     }

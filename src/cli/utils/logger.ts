@@ -60,10 +60,10 @@ export class Logger {
       maxFiles: 10,
       format: 'json'
     };
-    
-    this.logDir = path.join(os.homedir(), '.ai-coder-cli', 'logs');
-    this.auditDir = path.join(os.homedir(), '.ai-coder-cli', 'audit');
-    
+
+    this.logDir = path.join(os.homedir(), '.nikcli', 'logs');
+    this.auditDir = path.join(os.homedir(), '.nikcli', 'audit');
+
     this.ensureDirectories();
     this.setupPeriodicFlush();
   }
@@ -80,14 +80,14 @@ export class Logger {
    */
   async configure(config: Partial<LoggerConfig>): Promise<void> {
     this.config = { ...this.config, ...config };
-    
+
     if (config.logDir) {
       this.logDir = config.logDir;
       this.auditDir = path.join(config.logDir, 'audit');
     }
-    
+
     this.ensureDirectories();
-    
+
     await this.info('Logger configured', { config: this.config });
   }
 
@@ -142,11 +142,11 @@ export class Logger {
     };
 
     this.auditBuffer.push(entry);
-    
+
     if (this.config.enableConsole) {
       console.log(chalk.magenta('🔍 AUDIT:'), chalk.yellow(action), context);
     }
-    
+
     // Force flush audit events immediately for security
     await this.flushAuditBuffer();
   }
@@ -230,10 +230,10 @@ export class Logger {
   private logToConsole(entry: LogEntry): void {
     const timestamp = entry.timestamp.toISOString();
     const level = entry.level.toUpperCase().padEnd(5);
-    
+
     let colorFunc: (str: string) => string;
     let icon: string;
-    
+
     switch (entry.level) {
       case 'error':
         colorFunc = chalk.red;
@@ -280,7 +280,7 @@ export class Logger {
     if (!fs.existsSync(this.logDir)) {
       fs.mkdirSync(this.logDir, { recursive: true });
     }
-    
+
     if (!fs.existsSync(this.auditDir)) {
       fs.mkdirSync(this.auditDir, { recursive: true });
     }
@@ -307,10 +307,10 @@ export class Logger {
     try {
       const logFile = await this.getCurrentLogFile();
       const logData = this.logBuffer.map(entry => this.formatLogEntry(entry)).join('\n') + '\n';
-      
+
       fs.appendFileSync(logFile, logData);
       this.logBuffer = [];
-      
+
       // Rotate log files if needed
       await this.rotateLogFiles();
     } catch (error: any) {
@@ -329,7 +329,7 @@ export class Logger {
     try {
       const auditFile = await this.getCurrentAuditFile();
       const auditData = this.auditBuffer.map(entry => this.formatLogEntry(entry)).join('\n') + '\n';
-      
+
       fs.appendFileSync(auditFile, auditData);
       this.auditBuffer = [];
     } catch (error: any) {
@@ -383,15 +383,15 @@ export class Logger {
       const timestamp = entry.timestamp.toISOString();
       const level = entry.level.toUpperCase().padEnd(5);
       let line = `${timestamp} ${level} ${entry.message}`;
-      
+
       if (entry.context) {
         line += ` | Context: ${JSON.stringify(entry.context)}`;
       }
-      
+
       if (entry.error) {
         line += ` | Error: ${entry.error.message}`;
       }
-      
+
       return line;
     }
   }
@@ -403,16 +403,16 @@ export class Logger {
     try {
       const logFile = await this.getCurrentLogFile();
       const stats = fs.statSync(logFile);
-      
+
       if (stats.size > this.config.maxFileSize!) {
         // Rotate current log file
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const rotatedFile = logFile.replace('.log', `-${timestamp}.log`);
         fs.renameSync(logFile, rotatedFile);
-        
+
         // Reset current log file
         this.currentLogFile = undefined;
-        
+
         // Clean up old log files
         await this.cleanupOldLogFiles();
       }
@@ -481,7 +481,7 @@ export class Logger {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
     }
-    
+
     await this.flush();
   }
 }

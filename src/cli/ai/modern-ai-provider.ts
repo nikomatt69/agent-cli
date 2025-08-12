@@ -387,7 +387,7 @@ export class ModernAIProvider {
         model,
         messages,
         tools,
-        maxTokens: 1000,
+        maxTokens: 4000,
         temperature: 1,
 
       });

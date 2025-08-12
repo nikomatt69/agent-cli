@@ -26,7 +26,7 @@ class StreamManager {
     }
     /** Export recorded events to a JSON file. */
     async exportEvents(agentId) {
-        const dir = path_1.default.join(os_1.default.homedir(), '.ai-coder-cli', 'streams');
+        const dir = path_1.default.join(os_1.default.homedir(), '.nikcli', 'streams');
         await fs_1.promises.mkdir(dir, { recursive: true });
         const file = path_1.default.join(dir, `${agentId}-stream.json`);
         await fs_1.promises.writeFile(file, JSON.stringify(this.events, null, 2), 'utf-8');

@@ -71,12 +71,7 @@ class PlanningManager extends events_1.EventEmitter {
             // Step 2: Generate execution plan
             const plan = await this.planGenerator.generatePlan(context);
             // Render real todos in structured UI (all modes)
-            try {
-                const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
-                const todoItems = (plan.todos || []).map(t => ({ content: t.title || t.description, status: t.status }));
-                advancedUI.showTodos?.(todoItems, plan.title || 'Update Todos');
-            }
-            catch { }
+            await this.renderTodosUI(plan);
             this.planHistory.set(plan.id, plan);
             // Step 3: Validate plan
             const validation = this.planGenerator.validatePlan(plan);
@@ -103,12 +98,7 @@ class PlanningManager extends events_1.EventEmitter {
         const context = await this.buildPlannerContext(userRequest, projectPath);
         const plan = await this.planGenerator.generatePlan(context);
         // Show todos panel in structured UI
-        try {
-            const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
-            const todoItems = (plan.todos || []).map(t => ({ content: t.title || t.description, status: t.status }));
-            advancedUI.showTodos?.(todoItems, plan.title || 'Update Todos');
-        }
-        catch { }
+        await this.renderTodosUI(plan);
         this.planHistory.set(plan.id, plan);
         this.displayPlan(plan);
         return plan;
@@ -316,6 +306,24 @@ class PlanningManager extends events_1.EventEmitter {
                 console.log(`     ${cli_ui_1.CliUI.dim(`Dependencies: ${step.dependencies.length} step(s)`)}`);
             }
         });
+    }
+    /**
+     * Render the plan todos in the Advanced CLI UI
+     */
+    async renderTodosUI(plan) {
+        try {
+            const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
+            const todoItems = (plan.todos || []).map(t => ({
+                content: t.title || t.description,
+                status: t.status
+            }));
+            advancedUI.showTodos?.(todoItems, plan.title || 'Update Todos');
+        }
+        catch (error) {
+            if (this.config.logLevel === 'debug') {
+                cli_ui_1.CliUI.logError(`Failed to render todos UI: ${error?.message || error}`);
+            }
+        }
     }
     /**
      * Display validation results

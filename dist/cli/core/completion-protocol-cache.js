@@ -154,7 +154,6 @@ class CompletionProtocolCache {
         this.updateIndexes(pattern);
         // Cleanup if needed
         await this.cleanupPatterns();
-        console.log(chalk_1.default.blue(`🔮 Stored completion pattern (${this.patterns.size} total)`));
     }
     /**
      * Generate completion from stored pattern

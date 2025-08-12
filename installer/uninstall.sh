@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/uninstall.sh | bash
 
-PACKAGE="@cadcamfun/niko-cli"
+PACKAGE="@cadcamfun/nikcli"
 
 log() { echo -e "[NikCLI] $*"; }
 err() { echo -e "[NikCLI][ERROR] $*" >&2; }

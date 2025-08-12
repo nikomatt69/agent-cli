@@ -68,13 +68,19 @@ export class ModelProvider {
 
     const model = this.getModel(currentModelConfig);
 
-    const baseOptions: any = {
+    const baseOptions: Parameters<typeof generateText>[0] = {
       model: model as any,
-      messages: options.messages.map(msg => ({ role: msg.role, content: msg.content })),
+      messages: options.messages.map((msg) => ({ role: msg.role, content: msg.content })),
     };
-    if (currentModelConfig.provider !== 'openai') {
-      baseOptions.maxTokens = options.maxTokens ?? 1000;
-      baseOptions.temperature = options.temperature ?? configManager.get('temperature');
+    // Always honor explicit user settings for all providers
+    if (options.maxTokens != null) {
+      baseOptions.maxTokens = options.maxTokens;
+    } else if (currentModelConfig.provider !== 'openai') {
+      baseOptions.maxTokens = 4000; // provider-specific default when not supplied
+    }
+    const resolvedTemp = options.temperature ?? configManager.get('temperature');
+    if (resolvedTemp != null) {
+      baseOptions.temperature = resolvedTemp;
     }
     const { text } = await generateText(baseOptions);
 

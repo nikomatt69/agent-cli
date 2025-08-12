@@ -14,7 +14,7 @@ export interface AgentExecution {
   id: string;
   agentName: string;
   task: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted';
   startTime: Date;
   endTime?: Date;
   result?: any;
@@ -190,7 +190,7 @@ Use available tools to read existing code, create components, and modify files.`
   },
 
   'backend-engineer': {
-    name: 'Backend Engineer', 
+    name: 'Backend Engineer',
     description: 'API development, database design, authentication, and server-side logic',
     systemPrompt: `You are a backend engineering expert specializing in:
 
@@ -392,7 +392,7 @@ export class ModernAgentOrchestrator {
 
     for await (const update of agent.executeStreaming(task)) {
       yield update;
-      
+
       // Store execution when complete
       if (update.type === 'complete' || update.type === 'error') {
         if (update.execution) {
@@ -415,9 +415,9 @@ export class ModernAgentOrchestrator {
     let interruptedCount = 0;
 
     activeExecs.forEach(exec => {
-      exec.status = 'failed';
+      exec.status = 'interrupted';
       exec.endTime = new Date();
-      exec.error = 'Interrupted by user';
+      exec.error = `Interrupted by user at ${new Date().toISOString()}`;
       interruptedCount++;
     });
 

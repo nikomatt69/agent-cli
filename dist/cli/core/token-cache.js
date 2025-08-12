@@ -166,7 +166,7 @@ class TokenCacheManager {
         if (this.cache.size % 10 === 0) {
             await this.saveCache();
         }
-        console.log(chalk_1.default.blue(`💾 Cached response (${this.cache.size} entries)`));
+        console.log(chalk_1.default.blue(`💾`));
     }
     /**
      * Estimate token count from text

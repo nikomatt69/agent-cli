@@ -10,8 +10,28 @@ class ContextManager {
     constructor() {
         this.MAX_TOKENS = 180000; // Leave buffer for response
         this.MIN_MESSAGES = 4; // Always keep recent messages
-        this.COMPRESSION_THRESHOLD = 150000; // Start compression
+        this.MAX_METRICS_SIZE = 1000; // Maximum cached metrics
         this.messageMetrics = new Map();
+    }
+    checkMetricsSize() {
+        const currentSize = this.messageMetrics.size;
+        if (currentSize <= this.MAX_METRICS_SIZE) {
+            return;
+        }
+        const numEntriesToRemove = currentSize - this.MAX_METRICS_SIZE;
+        let removedCount = 0;
+        const keysIterator = this.messageMetrics.keys();
+        while (removedCount < numEntriesToRemove) {
+            const nextKey = keysIterator.next();
+            if (nextKey.done) {
+                break;
+            }
+            this.messageMetrics.delete(nextKey.value);
+            removedCount += 1;
+        }
+        if (removedCount > 0) {
+            console.log(chalk_1.default.yellow(`⚠️ Trimmed ${removedCount} oldest message metrics to cap at ${this.MAX_METRICS_SIZE}`));
+        }
     }
     /**
      * Estimate tokens in a message (rough approximation)
@@ -19,6 +39,19 @@ class ContextManager {
      */
     estimateTokens(content) {
         return Math.ceil(content.length / 4);
+    }
+    hashMessage(message) {
+        const content = typeof message.content === 'string'
+            ? message.content
+            : JSON.stringify(message.content);
+        // Simple hash function - consider using crypto.createHash for production
+        let hash = 0;
+        for (let i = 0; i < content.length; i++) {
+            const char = content.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        return `msg-${message.role}-${hash}`;
     }
     /**
      * Calculate importance score for a message
@@ -50,6 +83,7 @@ class ContextManager {
      * Optimize message context to fit within token limits
      */
     optimizeContext(messages) {
+        this.checkMetricsSize();
         if (messages.length === 0) {
             return {
                 optimizedMessages: messages,
@@ -63,7 +97,9 @@ class ContextManager {
             const tokens = this.estimateTokens(content);
             const importance = this.calculateImportance(message, index, messages.length);
             totalTokens += tokens;
-            this.messageMetrics.set(`${index}-${Date.now()}`, {
+            // Use content hash for stable key generation
+            const contentHash = this.hashMessage(message);
+            this.messageMetrics.set(contentHash, {
                 estimatedTokens: tokens,
                 importance,
                 timestamp: new Date(),
@@ -215,7 +251,7 @@ class ContextManager {
             totalMessages: messages.length,
             estimatedTokens: totalTokens,
             tokenLimit: this.MAX_TOKENS,
-            compressionRatio: totalTokens > this.MAX_TOKENS ? (totalTokens - this.MAX_TOKENS) / totalTokens : 0
+            compressionRatio: 0 // No compression in this method, it only returns metrics
         };
     }
     /** Analyze workspace at cwd and return summary. */

@@ -7,8 +7,12 @@ class ExecutionPolicyManager {
         this.trustedCommands = new Set(['ls', 'cat', 'pwd', 'echo', 'which', 'whoami']);
         this.dangerousCommands = new Set(['rm -rf', 'sudo', 'su', 'chmod 777', 'dd', 'mkfs']);
         this.commandPolicies = new Map();
+        this.toolPolicies = new Map();
+        this.sessionApprovals = new Set();
+        this.devModeExpiry = null;
         this.configManager = configManager;
         this.initializeCommandPolicies();
+        this.initializeToolPolicies();
     }
     async getPolicy() {
         const cfg = this.configManager.getAll();
@@ -85,6 +89,63 @@ class ExecutionPolicyManager {
                 requiresApproval: true,
                 riskLevel: 'high',
                 sandbox: ['danger-full-access']
+            });
+        });
+    }
+    /**
+     * Initialize tool policies based on security requirements
+     */
+    initializeToolPolicies() {
+        // Low-risk tools (analysis, read-only)
+        const safePolicies = [
+            { category: 'analysis', riskLevel: 'low', requiresApproval: false, allowedInSafeMode: true, description: 'Project analysis and information gathering' },
+            { category: 'file', riskLevel: 'low', requiresApproval: false, allowedInSafeMode: true, description: 'Read-only file operations' },
+        ];
+        const safeTools = ['read_file', 'list_files', 'find_files', 'analyze_project', 'grep_search'];
+        safeTools.forEach(tool => {
+            this.toolPolicies.set(tool, {
+                toolName: tool,
+                ...safePolicies.find(p => tool.includes('file') ? p.category === 'file' : p.category === 'analysis')
+            });
+        });
+        // Medium-risk tools (file operations, git)
+        const riskyTools = [
+            { name: 'write_file', category: 'file', description: 'Write content to files', riskyOps: ['system files', 'config files'] },
+            { name: 'edit_file', category: 'file', description: 'Edit existing files', riskyOps: ['destructive edits', 'system files'] },
+            { name: 'multi_edit', category: 'file', description: 'Batch file editing', riskyOps: ['multiple files', 'batch operations'] },
+            { name: 'git_status', category: 'git', description: 'Git status check', riskyOps: [] },
+            { name: 'git_diff', category: 'git', description: 'Git diff display', riskyOps: [] },
+            { name: 'git_commit', category: 'git', description: 'Git commit operation', riskyOps: ['permanent changes', 'history modification'] },
+            { name: 'git_push', category: 'git', description: 'Push to remote repository', riskyOps: ['remote changes', 'public repositories'] },
+            { name: 'npm_install', category: 'package', description: 'Install npm packages', riskyOps: ['global installations', 'security vulnerabilities'] },
+        ];
+        riskyTools.forEach(tool => {
+            this.toolPolicies.set(tool.name, {
+                toolName: tool.name,
+                category: tool.category,
+                riskLevel: 'medium',
+                requiresApproval: tool.name.includes('git_status') || tool.name.includes('git_diff') ? false : true,
+                allowedInSafeMode: !tool.riskyOps.some(op => op.includes('permanent') || op.includes('destructive')),
+                description: tool.description,
+                riskyOperations: tool.riskyOps
+            });
+        });
+        // High-risk tools (system commands, dangerous operations)
+        const dangerousTools = [
+            { name: 'execute_command', category: 'system', description: 'Execute system commands', riskyOps: ['system modification', 'data loss', 'security bypass'] },
+            { name: 'delete_file', category: 'file', description: 'Delete files', riskyOps: ['data loss', 'irreversible'] },
+            { name: 'git_reset', category: 'git', description: 'Git reset operations', riskyOps: ['history loss', 'irreversible'] },
+            { name: 'network_request', category: 'network', description: 'Make network requests', riskyOps: ['data exfiltration', 'external communication'] },
+        ];
+        dangerousTools.forEach(tool => {
+            this.toolPolicies.set(tool.name, {
+                toolName: tool.name,
+                category: tool.category,
+                riskLevel: 'high',
+                requiresApproval: true,
+                allowedInSafeMode: false,
+                description: tool.description,
+                riskyOperations: tool.riskyOps
             });
         });
     }
@@ -166,6 +227,186 @@ class ExecutionPolicyManager {
             requiresApproval,
             allowed
         };
+    }
+    /**
+     * Get tool policy
+     */
+    getToolPolicy(toolName) {
+        return this.toolPolicies.get(toolName) || null;
+    }
+    /**
+     * Check if tool operation should require approval
+     */
+    async shouldApproveToolOperation(toolName, operation, args) {
+        const config = this.configManager.getAll();
+        const toolPolicy = this.getToolPolicy(toolName);
+        const securityMode = config.securityMode;
+        const toolApprovalPolicies = config.toolApprovalPolicies;
+        // Check developer mode bypass
+        if (this.isDevModeActive() && toolPolicy?.riskLevel !== 'high') {
+            return null; // Skip approval for non-high risk tools in dev mode
+        }
+        // Check session approvals
+        const sessionKey = `${toolName}:${operation}`;
+        if (this.sessionApprovals.has(sessionKey)) {
+            return null; // Already approved for this session
+        }
+        if (!toolPolicy) {
+            // Unknown tool - treat as medium risk
+            return {
+                toolName,
+                operation,
+                args,
+                riskAssessment: {
+                    level: 'medium',
+                    reasons: ['Unknown tool - requires approval for safety'],
+                    irreversible: false
+                }
+            };
+        }
+        const riskAssessment = this.assessToolRisk(toolName, operation, args, toolPolicy);
+        const categoryPolicy = this.getCategoryApprovalPolicy(toolPolicy.category, toolApprovalPolicies);
+        // Determine if approval is needed
+        let needsApproval = false;
+        switch (categoryPolicy) {
+            case 'always':
+                needsApproval = true;
+                break;
+            case 'risky':
+                needsApproval = riskAssessment.level === 'medium' || riskAssessment.level === 'high';
+                break;
+            case 'never':
+                needsApproval = false;
+                break;
+        }
+        // Override based on security mode
+        if (securityMode === 'safe') {
+            needsApproval = needsApproval || !toolPolicy.allowedInSafeMode;
+        }
+        else if (securityMode === 'developer') {
+            needsApproval = needsApproval && riskAssessment.level === 'high';
+        }
+        return needsApproval ? {
+            toolName,
+            operation,
+            args,
+            riskAssessment
+        } : null;
+    }
+    /**
+     * Assess risk level for a specific tool operation
+     */
+    assessToolRisk(toolName, operation, args, policy) {
+        const reasons = [];
+        let level = policy.riskLevel;
+        let affectedFiles = [];
+        let irreversible = false;
+        // File-specific risk assessment
+        if (policy.category === 'file') {
+            if (args.filePath || args.path) {
+                const filePath = args.filePath || args.path;
+                affectedFiles.push(filePath);
+                // System file detection
+                if (this.isSystemFile(filePath)) {
+                    level = 'high';
+                    reasons.push('Affects system files');
+                }
+                // Config file detection
+                if (this.isConfigFile(filePath)) {
+                    level = 'medium';
+                    reasons.push('Affects configuration files');
+                }
+            }
+            if (toolName === 'delete_file' || operation.includes('delete')) {
+                irreversible = true;
+                reasons.push('Irreversible file deletion');
+            }
+        }
+        // Git-specific risk assessment
+        if (policy.category === 'git') {
+            if (toolName.includes('push') || toolName.includes('commit')) {
+                irreversible = true;
+                reasons.push('Permanent git operation');
+            }
+            if (args.force || operation.includes('force')) {
+                level = 'high';
+                reasons.push('Force operation detected');
+            }
+        }
+        // System command risk assessment
+        if (policy.category === 'system') {
+            if (args.command) {
+                const command = args.command.toLowerCase();
+                if (this.dangerousCommands.has(command) || command.includes('sudo') || command.includes('rm')) {
+                    level = 'high';
+                    irreversible = true;
+                    reasons.push('Dangerous system command');
+                }
+            }
+        }
+        return { level, reasons, affectedFiles, irreversible };
+    }
+    /**
+     * Get approval policy for tool category
+     */
+    getCategoryApprovalPolicy(category, policies) {
+        switch (category) {
+            case 'file':
+                return policies.fileOperations;
+            case 'git':
+                return policies.gitOperations;
+            case 'package':
+                return policies.packageOperations;
+            case 'system':
+                return policies.systemCommands;
+            case 'network':
+                return policies.networkRequests;
+            default:
+                return 'risky'; // Safe default
+        }
+    }
+    /**
+     * Check if file is a system file
+     */
+    isSystemFile(filePath) {
+        const systemPaths = ['/etc', '/usr', '/var', '/bin', '/sbin', '/boot'];
+        return systemPaths.some(path => filePath.startsWith(path));
+    }
+    /**
+     * Check if file is a configuration file
+     */
+    isConfigFile(filePath) {
+        const configExtensions = ['.config', '.conf', '.ini', '.env', '.json', '.yaml', '.yml'];
+        const configNames = ['Dockerfile', 'Makefile', 'package.json', 'tsconfig.json'];
+        return configExtensions.some(ext => filePath.endsWith(ext)) ||
+            configNames.some(name => filePath.endsWith(name));
+    }
+    /**
+     * Enable developer mode for a session
+     */
+    enableDevMode(timeoutMs) {
+        const timeout = timeoutMs || this.configManager.getAll().sessionSettings.devModeTimeoutMs;
+        this.devModeExpiry = new Date(Date.now() + timeout);
+    }
+    /**
+     * Check if developer mode is currently active
+     */
+    isDevModeActive() {
+        if (!this.devModeExpiry)
+            return false;
+        return new Date() < this.devModeExpiry;
+    }
+    /**
+     * Add session approval (valid until session ends)
+     */
+    addSessionApproval(toolName, operation) {
+        this.sessionApprovals.add(`${toolName}:${operation}`);
+    }
+    /**
+     * Clear session approvals
+     */
+    clearSessionApprovals() {
+        this.sessionApprovals.clear();
     }
     /**
      * Log policy decision for audit trail
