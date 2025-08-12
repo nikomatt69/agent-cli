@@ -1,7 +1,7 @@
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import { BaseTool, ToolExecutionResult } from './base-tool';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 const execAsync = promisify(exec);
 

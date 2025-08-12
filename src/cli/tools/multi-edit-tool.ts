@@ -1,6 +1,6 @@
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { PromptManager } from '../prompts/prompt-manager';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 import { EditTool, EditToolParams } from './edit-tool';
 
 /**

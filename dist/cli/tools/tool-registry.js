@@ -7,7 +7,7 @@ const read_file_tool_1 = require("./read-file-tool");
 const write_file_tool_1 = require("./write-file-tool");
 const replace_in_file_tool_1 = require("./replace-in-file-tool");
 const run_command_tool_1 = require("./run-command-tool");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Tool Registry
  * Manages registration, discovery, and access to all available tools
@@ -27,7 +27,7 @@ class ToolRegistry {
      */
     registerTool(name, tool, metadata) {
         if (this.tools.has(name)) {
-            cli_ui_1.CliUI.logWarning(`Tool ${name} is already registered. Overwriting...`);
+            terminal_ui_1.CliUI.logWarning(`Tool ${name} is already registered. Overwriting...`);
         }
         this.tools.set(name, tool);
         this.toolMetadata.set(name, {
@@ -43,7 +43,7 @@ class ToolRegistry {
             author: metadata?.author || 'system',
             tags: metadata?.tags || []
         });
-        cli_ui_1.CliUI.logInfo(`Registered tool: ${cli_ui_1.CliUI.highlight(name)}`);
+        terminal_ui_1.CliUI.logInfo(`Registered tool: ${terminal_ui_1.CliUI.highlight(name)}`);
     }
     /**
      * Get a tool by name
@@ -166,30 +166,30 @@ class ToolRegistry {
     importConfig(config) {
         // Note: This would require dynamic tool instantiation
         // For now, we'll just log the import attempt
-        cli_ui_1.CliUI.logInfo(`Import config with ${config.tools.length} tools (not implemented)`);
+        terminal_ui_1.CliUI.logInfo(`Import config with ${config.tools.length} tools (not implemented)`);
     }
     /**
      * Display tool registry information
      */
     displayRegistry() {
-        cli_ui_1.CliUI.logSection('Tool Registry');
+        terminal_ui_1.CliUI.logSection('Tool Registry');
         const stats = this.getToolStats();
-        cli_ui_1.CliUI.logKeyValue('Total Tools', stats.totalTools.toString());
-        cli_ui_1.CliUI.logKeyValue('Categories', stats.categories.join(', '));
-        cli_ui_1.CliUI.logKeyValue('Reversible Tools', stats.reversibleTools.toString());
-        cli_ui_1.CliUI.logSubsection('Risk Distribution');
+        terminal_ui_1.CliUI.logKeyValue('Total Tools', stats.totalTools.toString());
+        terminal_ui_1.CliUI.logKeyValue('Categories', stats.categories.join(', '));
+        terminal_ui_1.CliUI.logKeyValue('Reversible Tools', stats.reversibleTools.toString());
+        terminal_ui_1.CliUI.logSubsection('Risk Distribution');
         Object.entries(stats.riskDistribution).forEach(([risk, count]) => {
             const icon = risk === 'high' ? '🔴' : risk === 'medium' ? '🟡' : '🟢';
-            cli_ui_1.CliUI.logKeyValue(`${icon} ${risk}`, count.toString());
+            terminal_ui_1.CliUI.logKeyValue(`${icon} ${risk}`, count.toString());
         });
-        cli_ui_1.CliUI.logSubsection('Available Tools');
+        terminal_ui_1.CliUI.logSubsection('Available Tools');
         Array.from(this.toolMetadata.entries()).forEach(([name, metadata]) => {
             const riskIcon = metadata.riskLevel === 'high' ? '🔴' :
                 metadata.riskLevel === 'medium' ? '🟡' : '🟢';
             const reversibleIcon = metadata.reversible ? '↩️' : '⚠️';
-            console.log(`  ${riskIcon} ${reversibleIcon} ${cli_ui_1.CliUI.bold(name)}`);
-            console.log(`    ${cli_ui_1.CliUI.dim(metadata.description)}`);
-            console.log(`    ${cli_ui_1.CliUI.dim(`Category: ${metadata.category} | Duration: ~${metadata.estimatedDuration}ms`)}`);
+            console.log(`  ${riskIcon} ${reversibleIcon} ${terminal_ui_1.CliUI.bold(name)}`);
+            console.log(`    ${terminal_ui_1.CliUI.dim(metadata.description)}`);
+            console.log(`    ${terminal_ui_1.CliUI.dim(`Category: ${metadata.category} | Duration: ~${metadata.estimatedDuration}ms`)}`);
         });
     }
     /**
@@ -259,7 +259,7 @@ class ToolRegistry {
             supportedFileTypes: ['*'],
             tags: ['delete', 'filesystem', 'destructive']
         });
-        cli_ui_1.CliUI.logInfo(`Initialized tool registry with ${this.tools.size} tools`);
+        terminal_ui_1.CliUI.logInfo(`Initialized tool registry with ${this.tools.size} tools`);
     }
 }
 exports.ToolRegistry = ToolRegistry;

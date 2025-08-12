@@ -1,6 +1,6 @@
 import { EventBus, EventTypes } from './agents/event-bus';
 import { ToolRegistry } from '../tools/tool-registry';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 /**
  * WorkflowOrchestrator - Sistema per eseguire catene di tool calls automatiche

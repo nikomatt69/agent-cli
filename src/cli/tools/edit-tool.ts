@@ -1,6 +1,6 @@
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { PromptManager } from '../prompts/prompt-manager';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI, DiffViewer, FileDiff, diffManager } from '../ui/terminal-ui';
 import { readFile, writeFile, stat } from 'fs/promises';
 import { join, relative, dirname, basename } from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -223,8 +223,25 @@ export class EditTool extends BaseTool {
       newContent = newLines.join('\n');
     }
 
-    // Genera diff
+    // Genera e mostra diff
     const diff = this.generateDiff(originalContent, newContent, filePath);
+    
+    // Mostra diff usando il DiffViewer se ci sono state modifiche
+    if (replacementsMade > 0 && !params.previewOnly) {
+      const fileDiff: FileDiff = {
+        filePath,
+        originalContent,
+        newContent,
+        isNew: !fileExists,
+        isDeleted: false
+      };
+      
+      console.log('\n');
+      DiffViewer.showFileDiff(fileDiff, { compact: true });
+      
+      // Aggiungi al diff manager per l'approval system
+      diffManager.addFileDiff(filePath, originalContent, newContent);
+    }
 
     // Validazione sintassi se richiesta
     let syntaxValid: boolean | undefined;

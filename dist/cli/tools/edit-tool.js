@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EditTool = void 0;
 const base_tool_1 = require("./base-tool");
 const prompt_manager_1 = require("../prompts/prompt-manager");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
@@ -19,7 +19,7 @@ class EditTool extends base_tool_1.BaseTool {
                 toolName: 'edit-tool',
                 parameters: params
             });
-            cli_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
+            terminal_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
             // Validazione parametri
             if (!params.filePath) {
                 throw new Error('filePath is required');
@@ -33,7 +33,7 @@ class EditTool extends base_tool_1.BaseTool {
             if (!this.isPathSafe(filePath)) {
                 throw new Error(`File path not safe or outside working directory: ${filePath}`);
             }
-            cli_ui_1.CliUI.logInfo(`✏️ Editing file: ${(0, path_1.relative)(this.workingDirectory, filePath)}`);
+            terminal_ui_1.CliUI.logInfo(`✏️ Editing file: ${(0, path_1.relative)(this.workingDirectory, filePath)}`);
             // Leggi contenuto file esistente
             let originalContent = '';
             let fileExists = false;
@@ -48,7 +48,7 @@ class EditTool extends base_tool_1.BaseTool {
             const editResult = await this.performEdit(filePath, originalContent, params, fileExists);
             // Preview mode - non scrivere file
             if (params.previewOnly) {
-                cli_ui_1.CliUI.logInfo('📋 Preview mode - no changes written to file');
+                terminal_ui_1.CliUI.logInfo('📋 Preview mode - no changes written to file');
                 return {
                     success: true,
                     data: editResult,
@@ -64,15 +64,15 @@ class EditTool extends base_tool_1.BaseTool {
                 const backupPath = await this.createBackup(filePath, originalContent);
                 editResult.backupCreated = true;
                 editResult.backupPath = backupPath;
-                cli_ui_1.CliUI.logInfo(`💾 Backup created: ${(0, path_1.relative)(this.workingDirectory, backupPath)}`);
+                terminal_ui_1.CliUI.logInfo(`💾 Backup created: ${(0, path_1.relative)(this.workingDirectory, backupPath)}`);
             }
             // Scrivi nuovo contenuto
             if (editResult.replacementsMade > 0) {
                 await this.writeFileWithValidation(filePath, editResult.changes, params);
-                cli_ui_1.CliUI.logSuccess(`✅ File edited successfully: ${editResult.replacementsMade} replacements made`);
+                terminal_ui_1.CliUI.logSuccess(`✅ File edited successfully: ${editResult.replacementsMade} replacements made`);
             }
             else {
-                cli_ui_1.CliUI.logWarning('⚠️ No replacements made - pattern not found');
+                terminal_ui_1.CliUI.logWarning('⚠️ No replacements made - pattern not found');
             }
             return {
                 success: true,
@@ -85,7 +85,7 @@ class EditTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Edit tool failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Edit tool failed: ${error.message}`);
             return {
                 success: false,
                 error: error.message,
@@ -160,8 +160,22 @@ class EditTool extends base_tool_1.BaseTool {
             }
             newContent = newLines.join('\n');
         }
-        // Genera diff
+        // Genera e mostra diff
         const diff = this.generateDiff(originalContent, newContent, filePath);
+        // Mostra diff usando il DiffViewer se ci sono state modifiche
+        if (replacementsMade > 0 && !params.previewOnly) {
+            const fileDiff = {
+                filePath,
+                originalContent,
+                newContent,
+                isNew: !fileExists,
+                isDeleted: false
+            };
+            console.log('\n');
+            terminal_ui_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
+            // Aggiungi al diff manager per l'approval system
+            terminal_ui_1.diffManager.addFileDiff(filePath, originalContent, newContent);
+        }
         // Validazione sintassi se richiesta
         let syntaxValid;
         if (params.validateSyntax) {
@@ -296,7 +310,7 @@ class EditTool extends base_tool_1.BaseTool {
             }
         }
         catch (error) {
-            cli_ui_1.CliUI.logWarning(`Syntax validation failed: ${error}`);
+            terminal_ui_1.CliUI.logWarning(`Syntax validation failed: ${error}`);
             return false;
         }
     }

@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GrepTool = void 0;
 const base_tool_1 = require("./base-tool");
 const prompt_manager_1 = require("../prompts/prompt-manager");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
@@ -23,7 +23,7 @@ class GrepTool extends base_tool_1.BaseTool {
                 toolName: 'grep-tool',
                 parameters: params
             });
-            cli_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
+            terminal_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
             if (!params.pattern) {
                 throw new Error('Pattern is required for grep search');
             }
@@ -37,13 +37,13 @@ class GrepTool extends base_tool_1.BaseTool {
             if (!(0, fs_1.existsSync)(searchPath)) {
                 throw new Error(`Search path does not exist: ${searchPath}`);
             }
-            cli_ui_1.CliUI.logInfo(`🔍 Searching for pattern: ${cli_ui_1.CliUI.highlight(params.pattern)}`);
+            terminal_ui_1.CliUI.logInfo(`🔍 Searching for pattern: ${terminal_ui_1.CliUI.highlight(params.pattern)}`);
             const startTime = Date.now();
             // Preparazione regex pattern
             const regex = this.buildRegexPattern(params);
             // Scansione file
             const filesToSearch = await this.findFilesToSearch(searchPath, params);
-            cli_ui_1.CliUI.logDebug(`Found ${filesToSearch.length} files to search`);
+            terminal_ui_1.CliUI.logDebug(`Found ${filesToSearch.length} files to search`);
             // Ricerca pattern nei file
             const matches = [];
             let filesScanned = 0;
@@ -65,7 +65,7 @@ class GrepTool extends base_tool_1.BaseTool {
                     }
                 }
                 catch (error) {
-                    cli_ui_1.CliUI.logDebug(`Skipping file ${filePath}: ${error.message}`);
+                    terminal_ui_1.CliUI.logDebug(`Skipping file ${filePath}: ${error.message}`);
                 }
             }
             const executionTime = Date.now() - startTime;
@@ -82,7 +82,11 @@ class GrepTool extends base_tool_1.BaseTool {
                     executionTime
                 }
             };
-            cli_ui_1.CliUI.logSuccess(`✅ Found ${result.totalMatches} matches in ${filesWithMatches} files`);
+            terminal_ui_1.CliUI.logSuccess(`✅ Found ${result.totalMatches} matches in ${filesWithMatches} files`);
+            // Show grep results in structured UI
+            if (result.matches.length > 0) {
+                terminal_ui_1.advancedUI.showGrepResults(params.pattern, result.matches);
+            }
             return {
                 success: true,
                 data: result,
@@ -94,7 +98,7 @@ class GrepTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Grep tool failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Grep tool failed: ${error.message}`);
             return {
                 success: false,
                 error: error.message,
@@ -158,7 +162,7 @@ class GrepTool extends base_tool_1.BaseTool {
                         else if (stats.isFile()) {
                             // Verifica dimensione file
                             if (stats.size > MAX_FILE_SIZE) {
-                                cli_ui_1.CliUI.logDebug(`Skipping large file: ${relativePath} (${stats.size} bytes)`);
+                                terminal_ui_1.CliUI.logDebug(`Skipping large file: ${relativePath} (${stats.size} bytes)`);
                                 continue;
                             }
                             // Verifica se è file binario
@@ -173,12 +177,12 @@ class GrepTool extends base_tool_1.BaseTool {
                         }
                     }
                     catch (statError) {
-                        cli_ui_1.CliUI.logDebug(`Skipping ${fullPath}: ${statError}`);
+                        terminal_ui_1.CliUI.logDebug(`Skipping ${fullPath}: ${statError}`);
                     }
                 }
             }
             catch (readdirError) {
-                cli_ui_1.CliUI.logDebug(`Cannot read directory ${currentPath}: ${readdirError}`);
+                terminal_ui_1.CliUI.logDebug(`Cannot read directory ${currentPath}: ${readdirError}`);
             }
         };
         const stats = await (0, promises_1.stat)(searchPath);

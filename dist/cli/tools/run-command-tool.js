@@ -37,7 +37,7 @@ exports.RunCommandTool = void 0;
 const child_process_1 = require("child_process");
 const util_1 = require("util");
 const base_tool_1 = require("./base-tool");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 /**
  * Production-ready Run Command Tool
@@ -76,10 +76,10 @@ class RunCommandTool extends base_tool_1.BaseTool {
                 }
             };
             if (result.exitCode === 0) {
-                cli_ui_1.CliUI.logSuccess(`Command executed successfully: ${command}`);
+                terminal_ui_1.CliUI.logSuccess(`Command executed successfully: ${command}`);
             }
             else {
-                cli_ui_1.CliUI.logWarning(`Command failed with exit code ${result.exitCode}: ${command}`);
+                terminal_ui_1.CliUI.logWarning(`Command failed with exit code ${result.exitCode}: ${command}`);
             }
             return {
                 success: result.exitCode === 0,
@@ -107,7 +107,7 @@ class RunCommandTool extends base_tool_1.BaseTool {
                     outputTruncated: false
                 }
             };
-            cli_ui_1.CliUI.logError(`Command execution failed: ${command} - ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Command execution failed: ${command} - ${error.message}`);
             return {
                 success: false,
                 data: errorResult,
@@ -136,7 +136,7 @@ class RunCommandTool extends base_tool_1.BaseTool {
                     successCount++;
                 }
                 else if (options.stopOnFirstError) {
-                    cli_ui_1.CliUI.logWarning(`Stopping sequence at command ${i + 1} due to failure`);
+                    terminal_ui_1.CliUI.logWarning(`Stopping sequence at command ${i + 1} due to failure`);
                     break;
                 }
             }
@@ -318,7 +318,7 @@ class RunCommandTool extends base_tool_1.BaseTool {
                 catch {
                     // If path validation fails, it might not be a file path
                     // Continue with execution but log warning
-                    cli_ui_1.CliUI.logWarning(`Could not validate path argument: ${arg}`);
+                    terminal_ui_1.CliUI.logWarning(`Could not validate path argument: ${arg}`);
                 }
             }
         }
@@ -406,14 +406,14 @@ class RunCommandTool extends base_tool_1.BaseTool {
      */
     addAllowedCommand(command) {
         this.allowedCommands.add(command);
-        cli_ui_1.CliUI.logInfo(`Added command to whitelist: ${command}`);
+        terminal_ui_1.CliUI.logInfo(`Added command to whitelist: ${command}`);
     }
     /**
      * Remove command from whitelist
      */
     removeAllowedCommand(command) {
         this.allowedCommands.delete(command);
-        cli_ui_1.CliUI.logInfo(`Removed command from whitelist: ${command}`);
+        terminal_ui_1.CliUI.logInfo(`Removed command from whitelist: ${command}`);
     }
     /**
      * Get current whitelist
@@ -426,7 +426,7 @@ class RunCommandTool extends base_tool_1.BaseTool {
      */
     addAllowedPath(path) {
         this.allowedPaths.add(path);
-        cli_ui_1.CliUI.logInfo(`Added path to whitelist: ${path}`);
+        terminal_ui_1.CliUI.logInfo(`Added path to whitelist: ${path}`);
     }
 }
 exports.RunCommandTool = RunCommandTool;

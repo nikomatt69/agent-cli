@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { diffManager } from '../ui/diff-manager';
+import { diffManager } from '../ui/terminal-ui';
 import { ExecutionPolicyManager } from '../policies/execution-policy';
 import { simpleConfigManager as configManager } from './config-manager';
 import { advancedAIProvider } from '../ai/advanced-ai-provider';

@@ -22,13 +22,11 @@ import { ModernAgentOrchestrator } from './automation/agents/modern-agent-system
 import { advancedAIProvider, AdvancedAIProvider } from './ai/advanced-ai-provider';
 import { SimpleConfigManager, simpleConfigManager } from './core/config-manager';
 import { enhancedPlanning } from './planning/enhanced-planning';
-import { approvalSystem } from './ui/approval-system';
-import { advancedUI } from './ui/advanced-cli-ui';
+import { approvalSystem, DiffViewer, advancedUI, wrapBlue, formatStatus, formatCommand, formatFileOp, formatProgress, formatAgent, formatSearch } from './ui/terminal-ui';
+
 import { tokenCache } from './core/token-cache';
 import { completionCache } from './core/completion-protocol-cache';
 import { mcpClient, McpServerConfig } from './core/mcp-client';
-import { wrapBlue, formatStatus, formatCommand, formatFileOp, formatProgress, formatAgent, formatSearch } from './utils/text-wrapper';
-import { DiffViewer } from './ui/diff-viewer';
 import { SlashCommandHandler } from './chat/nik-cli-commands';
 import { chatManager } from './chat/chat-manager';
 import { agentService } from './services/agent-service';
@@ -47,6 +45,7 @@ export interface NikCLIOptions {
     model?: string;
     auto?: boolean;
     plan?: boolean;
+    structuredUI?: boolean;
 }
 
 export interface TodoOptions {
@@ -124,6 +123,10 @@ export class NikCLI {
     private fileWatcher: any = null;
     private progressTracker: any = null;
     private assistantProcessing: boolean = false;
+    private shouldInterrupt: boolean = false;
+    private currentStreamController?: AbortController;
+    private lastGeneratedPlan?: ExecutionPlan;
+    private advancedUI: any;
 
     constructor() {
         this.workingDirectory = process.cwd();
@@ -134,6 +137,7 @@ export class NikCLI {
         this.agentManager = new AgentManager(this.configManager);
         this.planningManager = new PlanningManager(this.workingDirectory);
         this.slashHandler = new SlashCommandHandler();
+        this.advancedUI = advancedUI;
 
         // Register agents
         registerAgents(this.agentManager);
@@ -142,6 +146,10 @@ export class NikCLI {
         // Bridge orchestrator events into NikCLI output
         this.setupOrchestratorEventBridge();
         this.setupAdvancedUIFeatures();
+        this.setupPlanningEventListeners();
+
+        // Initialize structured UI system
+        this.initializeStructuredUI();
 
         // Initialize token cache system
         this.initializeTokenCache();
@@ -164,6 +172,109 @@ export class NikCLI {
                 console.log(chalk.dim(`Cache initialization warning: ${error.message}`));
             }
         }, 1000); // Delay to avoid interfering with startup
+    }
+
+    /**
+     * Initialize structured UI with panels and real-time updates
+     */
+    private initializeStructuredUI(): void {
+        // Enable interactive mode for structured panels
+        advancedUI.startInteractiveMode();
+
+        // Set up real-time event listeners for UI updates
+        this.setupUIEventListeners();
+    }
+
+    /**
+     * Setup UI event listeners for real-time panel updates using existing advanced UI
+     */
+    private setupUIEventListeners(): void {
+        // Hook into agent operations for live UI updates
+        this.setupAgentUIIntegration();
+
+        // Setup file change monitoring for diff display
+        this.setupFileChangeMonitoring();
+
+        // Todo panels are now driven by real plans via planning system
+    }
+
+    /**
+     * Integrate agent operations with UI panels
+     */
+    private setupAgentUIIntegration(): void {
+        // Listen for file operations to show content/diffs using advanced UI
+        agentService.on('file_read', (data) => {
+            if (data.path && data.content) {
+                advancedUI.showFileContent(data.path, data.content);
+                advancedUI.logInfo(`File Read: ${path.basename(data.path)}`, `Displayed ${data.content.split('\n').length} lines`);
+            }
+        });
+
+        agentService.on('file_written', (data) => {
+            if (data.path && data.content) {
+                if (data.originalContent) {
+                    // Show diff using advanced UI
+                    advancedUI.showFileDiff(data.path, data.originalContent, data.content);
+                    advancedUI.logSuccess(`File Updated: ${path.basename(data.path)}`, 'Diff displayed in panel');
+                } else {
+                    // Show new file content
+                    advancedUI.showFileContent(data.path, data.content);
+                    advancedUI.logSuccess(`File Created: ${path.basename(data.path)}`, 'Content displayed in panel');
+                }
+            }
+        });
+
+        agentService.on('file_list', (data) => {
+            if (data.files && Array.isArray(data.files)) {
+                advancedUI.showFileList(data.files, data.title || '📁 Files');
+                advancedUI.logInfo('File List', `Showing ${data.files.length} files`);
+            }
+        });
+
+        agentService.on('grep_results', (data) => {
+            if (data.pattern && data.matches) {
+                advancedUI.showGrepResults(data.pattern, data.matches);
+                advancedUI.logInfo(`Search: ${data.pattern}`, `Found ${data.matches.length} matches`);
+            }
+        });
+    }
+
+    /**
+     * Monitor file changes for automatic diff display
+     */
+    private setupFileChangeMonitoring(): void {
+        // Use existing file watcher to detect changes and show diffs
+        if (this.fileWatcher) {
+            this.fileWatcher.on('change', (filePath: string) => {
+                // Auto-show file content when files change during operations
+                if (this.assistantProcessing) {
+                    this.showFileIfRelevant(filePath);
+                }
+            });
+        }
+    }
+
+    /**
+     * Setup automatic todo panel updates
+     */
+    // Removed placeholder todo auto-updates and fallback rendering
+
+    /**
+     * Show file content if relevant to current operations
+     */
+    private showFileIfRelevant(filePath: string): void {
+        // Only show files that are being actively worked on
+        const relevantExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.md'];
+        const ext = path.extname(filePath);
+
+        if (relevantExtensions.includes(ext)) {
+            try {
+                const content = require('fs').readFileSync(filePath, 'utf8');
+                advancedUI.showFileContent(filePath, content);
+            } catch (error) {
+                // File might be in use, skip
+            }
+        }
     }
 
     private setupEventHandlers(): void {
@@ -225,6 +336,57 @@ export class NikCLI {
 
         // Setup progress tracking
         this.setupProgressTracking();
+
+        // Initialize structured panels
+        this.initializeStructuredPanels();
+    }
+
+    /**
+     * Setup event listeners for planning system to update todos panel in real-time
+     */
+    private setupPlanningEventListeners(): void {
+        // Listen for step progress events to update todos panel
+        this.planningManager.on('stepStart', (event: any) => {
+            this.advancedUI.updateTodos(event.todos.map((todo: any) => ({
+                content: todo.title || todo.description,
+                status: todo.status
+            })));
+        });
+
+        this.planningManager.on('stepProgress', (event: any) => {
+            this.advancedUI.updateTodos(event.todos.map((todo: any) => ({
+                content: todo.title || todo.description,
+                status: todo.status
+            })));
+        });
+
+        this.planningManager.on('stepComplete', (event: any) => {
+            this.advancedUI.updateTodos(event.todos.map((todo: any) => ({
+                content: todo.title || todo.description,
+                status: todo.status
+            })));
+        });
+
+        this.planningManager.on('planExecutionStart', (event) => {
+            console.log(chalk.blue(`🚀 Starting plan execution: ${event.title}`));
+        });
+
+        this.planningManager.on('planExecutionComplete', (event) => {
+            console.log(chalk.green(`✅ Plan execution completed: ${event.title}`));
+        });
+
+        this.planningManager.on('planExecutionError', (event) => {
+            console.log(chalk.red(`❌ Plan execution failed: ${event.error}`));
+        });
+    }
+
+    /**
+     * Initialize structured UI panels using existing advanced-cli-ui components
+     */
+    private initializeStructuredPanels(): void {
+        // Use the existing advanced UI system
+        advancedUI.startInteractiveMode();
+        console.log(chalk.dim('\n🎨 Structured UI panels ready - using advanced-cli-ui system'));
     }
 
     private setupFileWatching(): void {
@@ -630,7 +792,7 @@ export class NikCLI {
 
     private showAdvancedHeader(): void {
         const header = boxen(
-            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.2-beta')}\n` +
+            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.3-beta')}\n` +
             `${chalk.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk.blue('Mode:')} ${this.currentMode}  ${chalk.blue('Live Updates:')} Enabled`,
@@ -803,7 +965,18 @@ export class NikCLI {
 
         if (options.auto) {
             this.currentMode = 'auto';
-        } else if (options.plan) {
+        }
+
+        if (options.structuredUI) {
+            // Enable structured UI mode with enhanced panels
+            console.log(chalk.cyan('\n🎨 Activating Structured UI Mode...'));
+            advancedUI.startInteractiveMode();
+
+            // Show initial welcome in structured format
+            advancedUI.logInfo('NikCLI Structured UI Ready', 'Panels will appear automatically as operations are performed');
+        }
+
+        if (options.plan) {
             this.currentMode = 'plan';
         }
 
@@ -827,6 +1000,21 @@ export class NikCLI {
             output: process.stdout,
             historySize: 300,
         });
+
+        // Setup keypress events for ESC interruption
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.on('keypress', (chunk, key) => {
+                if (key && key.name === 'escape' && this.assistantProcessing) {
+                    this.interruptProcessing();
+                }
+                // Let other keypress events continue normally
+                if (key && key.ctrl && key.name === 'c') {
+                    process.exit(0);
+                }
+            });
+        }
 
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
@@ -862,6 +1050,62 @@ export class NikCLI {
 
         // Show initial prompt immediately
         this.showPrompt();
+    }
+
+    /**
+     * Interrupt current processing and stop all operations
+     */
+    private interruptProcessing(): void {
+        if (!this.assistantProcessing) return;
+
+        console.log(chalk.red('\n\n🛑 ESC pressed - Interrupting operation...'));
+
+        // Set interrupt flag
+        this.shouldInterrupt = true;
+
+        // Abort current stream if exists
+        if (this.currentStreamController) {
+            this.currentStreamController.abort();
+            this.currentStreamController = undefined;
+        }
+
+        // Stop all active spinners and operations
+        this.stopAllActiveOperations();
+
+        // Interrupt any active agent executions through the orchestrator
+        const orchestrator = new ModernAgentOrchestrator(this.workingDirectory);
+        const interruptedAgents = orchestrator.interruptActiveExecutions();
+        if (interruptedAgents > 0) {
+            console.log(chalk.yellow(`🤖 Stopped ${interruptedAgents} running agents`));
+        }
+
+        // Clean up processing state
+        this.assistantProcessing = false;
+
+        console.log(chalk.yellow('⏹️  Operation interrupted by user'));
+        console.log(chalk.cyan('✨ Ready for new commands\n'));
+
+        // Show prompt again
+        this.showPrompt();
+    }
+
+    /**
+     * Stop all active operations and cleanup
+     */
+    private stopAllActiveOperations(): void {
+        // Stop all spinners
+        for (const spinner of this.spinners.values()) {
+            if (spinner.isSpinning) {
+                spinner.stop();
+            }
+        }
+        this.spinners.clear();
+
+        // Stop all progress bars
+        for (const bar of this.progressBars.values()) {
+            bar.stop();
+        }
+        this.progressBars.clear();
     }
 
     /**
@@ -1042,7 +1286,7 @@ export class NikCLI {
         try {
             switch (cmd) {
                 case 'init':
-                    await this.initProject({ force: args.includes('--force') });
+                    await this.handleInitProject(args.includes('--force'));
                     break;
 
                 case 'plan':
@@ -1306,6 +1550,20 @@ export class NikCLI {
      * Default mode: Interactive chat with confirmations
      */
     private async handleDefaultMode(input: string): Promise<void> {
+        // Handle execute command for last generated plan
+        if (input.toLowerCase().trim() === 'execute' && this.lastGeneratedPlan) {
+            console.log(chalk.blue('🚀 Executing the generated plan...'));
+            try {
+                await this.planningManager.executePlan(this.lastGeneratedPlan.id);
+                console.log(chalk.green('✅ Plan execution completed!'));
+                this.lastGeneratedPlan = undefined; // Clear the stored plan
+                return;
+            } catch (error: any) {
+                console.log(chalk.red(`Plan execution failed: ${error?.message || error}`));
+                return;
+            }
+        }
+
         // Check if input mentions specific agent
         const agentMatch = input.match(/@(\w+)/);
 
@@ -3011,7 +3269,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
     }
 
     private async askForApproval(question: string): Promise<boolean> {
-        return await advancedUI.askConfirmation(question, undefined, false);
+        return await this.askAdvancedConfirmation(question, undefined, false);
     }
 
     private async askForInput(prompt: string): Promise<string> {
@@ -3419,9 +3677,9 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
      */
     private async listMcpServers(): Promise<void> {
         console.log(wrapBlue('📡 MCP Servers'));
-        
+
         const servers = await mcpClient.listServers();
-        
+
         if (servers.length === 0) {
             console.log(chalk.gray('No MCP servers configured'));
             console.log(chalk.gray('Use "/mcp add <name> <type> <endpoint>" to add a server'));
@@ -3431,7 +3689,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         for (const server of servers) {
             const healthIcon = server.healthy ? chalk.green('🟢') : chalk.red('🔴');
             const typeColor = server.type === 'http' ? chalk.blue : server.type === 'websocket' ? chalk.cyan : chalk.yellow;
-            
+
             console.log(`${healthIcon} ${chalk.bold(server.name)} ${typeColor(`[${server.type}]`)}`);
             if (server.endpoint) {
                 console.log(`   ${chalk.gray('Endpoint:')} ${server.endpoint}`);
@@ -3462,7 +3720,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         }
 
         const [name, type, endpointOrCommand] = args;
-        
+
         if (!['http', 'websocket', 'command', 'stdio'].includes(type)) {
             console.log(chalk.red(`Invalid server type: ${type}`));
             console.log(chalk.gray('Valid types: http, websocket, command, stdio'));
@@ -3498,7 +3756,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
 
         console.log(chalk.green(`✅ MCP server '${name}' added successfully`));
         console.log(chalk.gray(`Type: ${type} | Endpoint: ${endpointOrCommand}`));
-        
+
         // Test the connection
         console.log(chalk.gray('Testing connection...'));
         await this.testMcpServer(name);
@@ -3509,9 +3767,9 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
      */
     private async testMcpServer(serverName: string): Promise<void> {
         console.log(wrapBlue(`🧪 Testing MCP server: ${serverName}`));
-        
+
         const result = await mcpClient.testServer(serverName);
-        
+
         if (result.success) {
             console.log(chalk.green(`✅ Server '${serverName}' is healthy`));
             if (result.latency !== undefined) {
@@ -3530,7 +3788,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
      */
     private async callMcpServer(serverName: string, method: string, paramsJson?: string): Promise<void> {
         console.log(wrapBlue(`📡 Calling MCP server '${serverName}' method '${method}'`));
-        
+
         let params = {};
         if (paramsJson) {
             try {
@@ -3549,7 +3807,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
 
         try {
             const response = await mcpClient.call(serverName, request);
-            
+
             if (response.result) {
                 console.log(chalk.green('✅ MCP Call Successful'));
                 console.log(chalk.gray('Response:'));
@@ -3558,15 +3816,15 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
                 console.log(chalk.red('❌ MCP Call Failed'));
                 console.log(chalk.gray('Error:'), response.error.message);
             }
-            
+
             if (response.fromCache) {
                 console.log(chalk.cyan('📦 Result from cache'));
             }
-            
+
             if (response.executionTime) {
                 console.log(chalk.gray(`⏱️ Execution time: ${response.executionTime}ms`));
             }
-            
+
         } catch (error: any) {
             console.log(chalk.red(`❌ MCP call failed: ${error.message}`));
         }
@@ -3577,9 +3835,9 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
      */
     private async checkMcpHealth(): Promise<void> {
         console.log(wrapBlue('🏥 Checking MCP server health'));
-        
+
         const servers = mcpClient.getConfiguredServers();
-        
+
         if (servers.length === 0) {
             console.log(chalk.gray('No MCP servers configured'));
             return;
@@ -3597,7 +3855,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
      */
     private async removeMcpServer(serverName: string): Promise<void> {
         const mcpServers = this.configManager.get('mcpServers') as Record<string, McpServerConfig> || {};
-        
+
         if (!mcpServers[serverName]) {
             console.log(chalk.red(`Server '${serverName}' not found`));
             return;
@@ -3605,7 +3863,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
 
         delete mcpServers[serverName];
         this.configManager.set('mcpServers', mcpServers);
-        
+
         console.log(chalk.green(`✅ MCP server '${serverName}' removed`));
     }
 
@@ -3767,8 +4025,71 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         ));
     }
 
+    /**
+     * Initialize project context
+     */
+    private async handleInitProject(force: boolean = false): Promise<void> {
+        try {
+            console.log(chalk.blue('🚀 Initializing project context...'));
+
+            // Check if already initialized
+            const packageJson = path.join(this.workingDirectory, 'package.json');
+            const exists = require('fs').existsSync(packageJson);
+
+            if (exists && !force) {
+                console.log(chalk.yellow('⚠️ Project already appears to be initialized'));
+                console.log(chalk.gray('Use --force to reinitialize'));
+                return;
+            }
+
+            // Initialize workspace context
+            try {
+                console.log(chalk.green('✅ Workspace context initialized'));
+            } catch (error) {
+                console.log(chalk.yellow('⚠️ Workspace context initialization skipped'));
+            }
+
+            // Setup basic project structure if needed
+            if (!exists) {
+                console.log(chalk.blue('📁 Setting up basic project structure...'));
+
+                const basicPackageJson = {
+                    name: path.basename(this.workingDirectory),
+                    version: "1.0.0",
+                    description: "Project managed by NikCLI",
+                    scripts: {
+                        start: "node index.js",
+                        test: "echo \"No tests specified\" && exit 1"
+                    }
+                };
+
+                await fs.writeFile(packageJson, JSON.stringify(basicPackageJson, null, 2));
+                console.log(chalk.green('✅ Created package.json'));
+            }
+
+            // Initialize git if not present
+            const gitDir = path.join(this.workingDirectory, '.git');
+            if (!require('fs').existsSync(gitDir)) {
+                console.log(chalk.blue('🔧 Initializing git repository...'));
+                const { spawn } = require('child_process');
+                const child = spawn('git', ['init'], { cwd: this.workingDirectory });
+                await new Promise((resolve) => child.on('close', resolve));
+                console.log(chalk.green('✅ Git repository initialized'));
+            }
+
+            console.log(chalk.green.bold('\n🎉 Project initialization complete!'));
+            console.log(chalk.gray('You can now use NikCLI to manage your project'));
+
+        } catch (error: any) {
+            console.log(chalk.red(`❌ Failed to initialize project: ${error.message}`));
+        }
+    }
+
     private showPrompt(): void {
         if (!this.rl) return;
+
+        // Persistent todos panel disabled for chat mode to prevent blocking
+
 
         const workingDir = path.basename(this.workingDirectory);
         const modeIcon = this.currentMode === 'auto' ? '🚀' :
@@ -3779,6 +4100,38 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusDot}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
+    }
+
+    /**
+     * Detect if a user request is complex and needs automatic planning
+     */
+    private detectComplexRequest(input: string): boolean {
+        // Keywords that suggest complex multi-step tasks
+        const complexKeywords = [
+            'implement', 'create', 'build', 'develop', 'add feature', 'integrate',
+            'refactor', 'restructure', 'migrate', 'setup', 'configure', 'install',
+            'deploy', 'optimize', 'fix bug', 'add component', 'create api', 'database'
+        ];
+
+        // Check for multiple files/directories mentioned
+        const filePatterns = input.match(/\b\w+\.\w+\b/g) || [];
+        const pathPatterns = input.match(/\b[\w\/]+\/[\w\/]+/g) || [];
+
+        // Check length and complexity
+        const wordCount = input.split(/\s+/).length;
+        const hasComplexKeywords = complexKeywords.some(keyword =>
+            input.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+        // Determine if request needs planning
+        return (
+            hasComplexKeywords ||
+            wordCount > 20 ||
+            filePatterns.length > 2 ||
+            pathPatterns.length > 1 ||
+            input.includes(' and ') ||
+            input.includes(' then ')
+        );
     }
 
     private async analyzeProject(): Promise<any> {

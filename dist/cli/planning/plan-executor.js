@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlanExecutor = void 0;
 const inquirer_1 = __importDefault(require("inquirer"));
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Plan Executor
  * Handles plan approval, step execution, and rollback capabilities
@@ -27,7 +27,7 @@ class PlanExecutor {
      * Execute a plan with user approval and monitoring
      */
     async executePlan(plan) {
-        cli_ui_1.CliUI.logSection(`Executing Plan: ${plan.title}`);
+        terminal_ui_1.CliUI.logSection(`Executing Plan: ${plan.title}`);
         const startTime = new Date();
         const result = {
             planId: plan.id,
@@ -46,17 +46,17 @@ class PlanExecutor {
             const approval = await this.requestApproval(plan);
             if (!approval.approved) {
                 result.status = 'cancelled';
-                cli_ui_1.CliUI.logWarning('Plan execution cancelled by user');
+                terminal_ui_1.CliUI.logWarning('Plan execution cancelled by user');
                 return result;
             }
             // Filter steps based on approval
             const stepsToExecute = plan.steps.filter(step => !approval.modifiedSteps?.includes(step.id));
-            cli_ui_1.CliUI.logInfo(`Executing ${stepsToExecute.length} steps...`);
+            terminal_ui_1.CliUI.logInfo(`Executing ${stepsToExecute.length} steps...`);
             // Execute steps in dependency order
             const executionOrder = this.resolveDependencyOrder(stepsToExecute);
             for (let i = 0; i < executionOrder.length; i++) {
                 const step = executionOrder[i];
-                cli_ui_1.CliUI.logProgress(i + 1, executionOrder.length, `Executing: ${step.title}`);
+                terminal_ui_1.CliUI.logProgress(i + 1, executionOrder.length, `Executing: ${step.title}`);
                 const stepResult = await this.executeStep(step, plan);
                 result.stepResults.push(stepResult);
                 // Update summary
@@ -98,7 +98,7 @@ class PlanExecutor {
         catch (error) {
             result.status = 'failed';
             result.endTime = new Date();
-            cli_ui_1.CliUI.logError(`Plan execution failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Plan execution failed: ${error.message}`);
             return result;
         }
     }
@@ -162,7 +162,7 @@ class PlanExecutor {
             logs: []
         };
         try {
-            cli_ui_1.CliUI.startSpinner(`Executing: ${step.title}`);
+            terminal_ui_1.CliUI.startSpinner(`Executing: ${step.title}`);
             switch (step.type) {
                 case 'tool':
                     result.output = await this.executeTool(step);
@@ -180,14 +180,14 @@ class PlanExecutor {
                     throw new Error(`Unknown step type: ${step.type}`);
             }
             result.duration = Date.now() - startTime;
-            cli_ui_1.CliUI.succeedSpinner(`Completed: ${step.title} (${result.duration}ms)`);
+            terminal_ui_1.CliUI.succeedSpinner(`Completed: ${step.title} (${result.duration}ms)`);
         }
         catch (error) {
             result.status = 'failure';
             result.error = error;
             result.duration = Date.now() - startTime;
-            cli_ui_1.CliUI.failSpinner(`Failed: ${step.title}`);
-            cli_ui_1.CliUI.logError(`Step failed: ${error.message}`);
+            terminal_ui_1.CliUI.failSpinner(`Failed: ${step.title}`);
+            terminal_ui_1.CliUI.logError(`Step failed: ${error.message}`);
         }
         return result;
     }
@@ -214,7 +214,7 @@ class PlanExecutor {
      */
     async executeValidation(step, plan) {
         // Implement validation logic based on step requirements
-        cli_ui_1.CliUI.updateSpinner('Running validation checks...');
+        terminal_ui_1.CliUI.updateSpinner('Running validation checks...');
         // Simulate validation
         await new Promise(resolve => setTimeout(resolve, 1000));
         return { validated: true, checks: ['prerequisites', 'permissions', 'dependencies'] };
@@ -223,7 +223,7 @@ class PlanExecutor {
      * Execute a user input step
      */
     async executeUserInput(step) {
-        cli_ui_1.CliUI.stopSpinner();
+        terminal_ui_1.CliUI.stopSpinner();
         const answers = await inquirer_1.default.prompt([
             {
                 type: 'confirm',
@@ -239,7 +239,7 @@ class PlanExecutor {
      */
     async executeDecision(step, plan) {
         // Implement decision logic
-        cli_ui_1.CliUI.updateSpinner('Evaluating decision criteria...');
+        terminal_ui_1.CliUI.updateSpinner('Evaluating decision criteria...');
         // Simulate decision making
         await new Promise(resolve => setTimeout(resolve, 500));
         return { decision: 'proceed', reasoning: 'All criteria met' };
@@ -248,7 +248,7 @@ class PlanExecutor {
      * Handle step failure and determine if execution should continue
      */
     async handleStepFailure(step, result, plan) {
-        cli_ui_1.CliUI.logError(`Step "${step.title}" failed: ${result.error?.message}`);
+        terminal_ui_1.CliUI.logError(`Step "${step.title}" failed: ${result.error?.message}`);
         // For non-critical steps, offer to continue
         if (step.riskLevel === 'low') {
             const answers = await inquirer_1.default.prompt([
@@ -326,20 +326,20 @@ class PlanExecutor {
      * Display plan details for user approval
      */
     displayPlanForApproval(plan) {
-        cli_ui_1.CliUI.logSection('Plan Approval Required');
-        cli_ui_1.CliUI.logKeyValue('Plan Title', plan.title);
-        cli_ui_1.CliUI.logKeyValue('Description', plan.description);
-        cli_ui_1.CliUI.logKeyValue('Total Steps', plan.steps.length.toString());
-        cli_ui_1.CliUI.logKeyValue('Estimated Duration', `${Math.round(plan.estimatedTotalDuration / 1000)}s`);
-        cli_ui_1.CliUI.logKeyValue('Risk Level', plan.riskAssessment.overallRisk);
+        terminal_ui_1.CliUI.logSection('Plan Approval Required');
+        terminal_ui_1.CliUI.logKeyValue('Plan Title', plan.title);
+        terminal_ui_1.CliUI.logKeyValue('Description', plan.description);
+        terminal_ui_1.CliUI.logKeyValue('Total Steps', plan.steps.length.toString());
+        terminal_ui_1.CliUI.logKeyValue('Estimated Duration', `${Math.round(plan.estimatedTotalDuration / 1000)}s`);
+        terminal_ui_1.CliUI.logKeyValue('Risk Level', plan.riskAssessment.overallRisk);
         if (plan.riskAssessment.destructiveOperations > 0) {
-            cli_ui_1.CliUI.logWarning(`⚠️  ${plan.riskAssessment.destructiveOperations} potentially destructive operations`);
+            terminal_ui_1.CliUI.logWarning(`⚠️  ${plan.riskAssessment.destructiveOperations} potentially destructive operations`);
         }
-        cli_ui_1.CliUI.logSubsection('Execution Steps');
+        terminal_ui_1.CliUI.logSubsection('Execution Steps');
         plan.steps.forEach((step, index) => {
             const riskIcon = step.riskLevel === 'high' ? '🔴' : step.riskLevel === 'medium' ? '🟡' : '🟢';
             console.log(`  ${index + 1}. ${riskIcon} ${step.title}`);
-            console.log(`     ${cli_ui_1.CliUI.dim(step.description)}`);
+            console.log(`     ${terminal_ui_1.CliUI.dim(step.description)}`);
         });
     }
     /**
@@ -359,15 +359,15 @@ class PlanExecutor {
      * Log execution summary
      */
     logExecutionSummary(result) {
-        cli_ui_1.CliUI.logSection('Execution Summary');
+        terminal_ui_1.CliUI.logSection('Execution Summary');
         const duration = result.endTime ?
             result.endTime.getTime() - result.startTime.getTime() : 0;
-        cli_ui_1.CliUI.logKeyValue('Status', result.status.toUpperCase());
-        cli_ui_1.CliUI.logKeyValue('Duration', `${Math.round(duration / 1000)}s`);
-        cli_ui_1.CliUI.logKeyValue('Total Steps', result.summary.totalSteps.toString());
-        cli_ui_1.CliUI.logKeyValue('Successful', result.summary.successfulSteps.toString());
-        cli_ui_1.CliUI.logKeyValue('Failed', result.summary.failedSteps.toString());
-        cli_ui_1.CliUI.logKeyValue('Skipped', result.summary.skippedSteps.toString());
+        terminal_ui_1.CliUI.logKeyValue('Status', result.status.toUpperCase());
+        terminal_ui_1.CliUI.logKeyValue('Duration', `${Math.round(duration / 1000)}s`);
+        terminal_ui_1.CliUI.logKeyValue('Total Steps', result.summary.totalSteps.toString());
+        terminal_ui_1.CliUI.logKeyValue('Successful', result.summary.successfulSteps.toString());
+        terminal_ui_1.CliUI.logKeyValue('Failed', result.summary.failedSteps.toString());
+        terminal_ui_1.CliUI.logKeyValue('Skipped', result.summary.skippedSteps.toString());
         // Show status icon
         const statusIcon = result.status === 'completed' ? '✅' :
             result.status === 'partial' ? '⚠️' : '❌';

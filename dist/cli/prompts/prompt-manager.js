@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromptManager = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 class PromptManager {
     constructor(projectRoot) {
         this.promptCache = new Map();
@@ -22,16 +22,16 @@ class PromptManager {
     async loadPromptForContext(context) {
         const promptPath = this.resolvePromptPath(context);
         if (!promptPath) {
-            cli_ui_1.CliUI.logWarning(`No specific prompt found for context: ${JSON.stringify(context)}`);
+            terminal_ui_1.CliUI.logWarning(`No specific prompt found for context: ${JSON.stringify(context)}`);
             return this.getDefaultPrompt(context);
         }
         try {
             const prompt = await this.loadPrompt(promptPath);
-            cli_ui_1.CliUI.logDebug(`Loaded prompt: ${promptPath}`);
+            terminal_ui_1.CliUI.logDebug(`Loaded prompt: ${promptPath}`);
             return this.interpolatePrompt(prompt.content, context);
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Failed to load prompt ${promptPath}: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Failed to load prompt ${promptPath}: ${error.message}`);
             return this.getDefaultPrompt(context);
         }
     }
@@ -160,7 +160,7 @@ class PromptManager {
      * Pre-carica tutti i prompts per performance migliori
      */
     async preloadPrompts() {
-        cli_ui_1.CliUI.logInfo('🔄 Pre-loading system prompts...');
+        terminal_ui_1.CliUI.logInfo('🔄 Pre-loading system prompts...');
         const promptDirs = [
             'tools/atomic-tools',
             'tools/analysis-tools',
@@ -186,10 +186,10 @@ class PromptManager {
                 }
             }
             catch (error) {
-                cli_ui_1.CliUI.logWarning(`Failed to preload prompts from ${dir}: ${error.message}`);
+                terminal_ui_1.CliUI.logWarning(`Failed to preload prompts from ${dir}: ${error.message}`);
             }
         }
-        cli_ui_1.CliUI.logSuccess(`✅ Pre-loaded ${loadedCount} system prompts`);
+        terminal_ui_1.CliUI.logSuccess(`✅ Pre-loaded ${loadedCount} system prompts`);
     }
     /**
      * Lista tutti i prompts disponibili
@@ -213,7 +213,7 @@ class PromptManager {
      */
     clearCache() {
         this.promptCache.clear();
-        cli_ui_1.CliUI.logInfo('🗑️ Prompt cache cleared');
+        terminal_ui_1.CliUI.logInfo('🗑️ Prompt cache cleared');
     }
     /**
      * Ottiene statistiche sulla cache

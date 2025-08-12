@@ -8,8 +8,9 @@ import { modernAgentOrchestrator, AGENT_CAPABILITIES } from '../automation/agent
 import { simpleConfigManager as configManager } from '../core/config-manager';
 import { CoreMessage } from 'ai';
 import ora, { Ora } from 'ora';
-import { diffManager } from '../ui/diff-manager';
+import { diffManager, advancedUI } from '../ui/terminal-ui';
 import { ExecutionPolicyManager } from '../policies/execution-policy';
+import { contextManager } from '../core/context-manager';
 
 
 
@@ -49,6 +50,8 @@ export class AutonomousClaudeInterface {
   private lastStreamTime = Date.now();
   private initialized = false;
   private policyManager: ExecutionPolicyManager;
+  private shouldInterrupt = false;
+  private currentStreamController?: AbortController;
 
   constructor() {
     this.rl = readline.createInterface({
@@ -76,8 +79,13 @@ export class AutonomousClaudeInterface {
     // Initialize security policy manager
     this.policyManager = new ExecutionPolicyManager(configManager);
 
+    // Initialize structured UI
+    advancedUI.startInteractiveMode();
+    this.initializeStructuredPanels();
+
     this.setupEventHandlers();
     this.setupStreamOptimization();
+    this.setupTokenOptimization();
   }
 
   private setupEventHandlers(): void {
@@ -113,6 +121,11 @@ export class AutonomousClaudeInterface {
       if (key && key.name === 'a' && key.ctrl && !this.isProcessing) {
         this.toggleAutoAcceptEdits();
       }
+
+      // Handle ESC to interrupt processing
+      if (key && key.name === 'escape' && this.isProcessing) {
+        this.interruptProcessing();
+      }
     });
 
     // Handle line input
@@ -143,6 +156,73 @@ export class AutonomousClaudeInterface {
         this.streamBuffer = '';
       }
     }, 16); // ~60fps
+  }
+
+  private setupTokenOptimization(): void {
+    // Check token usage periodically and suggest cleanup
+    setInterval(() => {
+      const metrics = contextManager.getContextMetrics(this.session.messages);
+
+      // Warn if approaching limit
+      if (metrics.estimatedTokens > metrics.tokenLimit * 0.85) {
+        console.log(chalk.yellow('\n⚠️  Token usage high - consider using /clear or auto-optimization will apply'));
+      }
+
+      // Auto-optimize if way over limit (shouldn't happen but safety net)
+      if (metrics.estimatedTokens > metrics.tokenLimit * 1.1) {
+        console.log(chalk.red('\n🚨 Emergency token optimization - auto-compressing context...'));
+        const { optimizedMessages } = contextManager.optimizeContext(this.session.messages);
+        this.session.messages = optimizedMessages;
+      }
+    }, 30000); // Check every 30 seconds
+  }
+
+  /**
+   * Interrupt current processing and stop all streams
+   */
+  private interruptProcessing(): void {
+    if (!this.isProcessing) return;
+
+    console.log(chalk.red('\n\n🛑 ESC pressed - Interrupting operation...'));
+
+    // Set interrupt flag
+    this.shouldInterrupt = true;
+
+    // Abort current stream if exists
+    if (this.currentStreamController) {
+      this.currentStreamController.abort();
+      this.currentStreamController = undefined;
+    }
+
+    // Stop all active spinners
+    this.stopAllActiveOperations();
+
+    // Interrupt any active agent executions
+    const interruptedAgents = modernAgentOrchestrator.interruptActiveExecutions();
+    if (interruptedAgents > 0) {
+      console.log(chalk.yellow(`🤖 Stopped ${interruptedAgents} running agents`));
+    }
+
+    // Clean up processing state
+    this.isProcessing = false;
+
+    console.log(chalk.yellow('⏹️  Operation interrupted by user'));
+    console.log(chalk.cyan('✨ Ready for new commands\n'));
+
+    // Show prompt again
+    this.showPrompt();
+  }
+
+  /**
+   * Initialize structured UI panels
+   */
+  private initializeStructuredPanels(): void {
+    // Initialize structured UI mode
+
+
+    // Show welcome message
+    console.log(chalk.cyan('\n🤖 Autonomous Claude Assistant Ready - Structured UI Mode'));
+    console.log(chalk.gray('Type your request and panels will appear automatically as I work!'));
   }
 
   async start(): Promise<void> {
@@ -214,18 +294,18 @@ export class AutonomousClaudeInterface {
     const version = chalk.dim('v2.0.0 Advanced');
 
     console.log(boxen(
-      `${title}\\n${subtitle}\\n\\n${version}\\n\\n` +
-      `${chalk.blue('🎯 Autonomous Mode:')} Enabled\\n` +
-      `${chalk.blue('📁 Working Dir:')} ${chalk.cyan(this.session.workingDirectory)}\\n` +
-      `${chalk.blue('🧠 Model:')} ${chalk.green(advancedAIProvider.getCurrentModelInfo().name)}\\n\\n` +
-      `${chalk.gray('I operate with full autonomy:')}\\n` +
-      `• ${chalk.green('Read & write files automatically')}\\n` +
-      `• ${chalk.green('Execute commands when needed')}\\n` +
-      `• ${chalk.green('Analyze project structure')}\\n` +
-      `• ${chalk.green('Generate code and configurations')}\\n` +
-      `• ${chalk.green('Manage dependencies autonomously')}\\n\\n` +
-      `${chalk.yellow('Just tell me what you want - I handle everything')}\\n\\n` +
-      `${chalk.yellow('💡 Press TAB or / for command suggestions')}\\\\n` +
+      `${title}\n${subtitle}\n\n${version}\n\n` +
+      `${chalk.blue('🎯 Autonomous Mode:')} Enabled\n` +
+      `${chalk.blue('📁 Working Dir:')} ${chalk.cyan(this.session.workingDirectory)}\n` +
+      `${chalk.blue('🧠 Model:')} ${chalk.green(advancedAIProvider.getCurrentModelInfo().name)}\n\n` +
+      `${chalk.gray('I operate with full autonomy:')}\n` +
+      `• ${chalk.green('Read & write files automatically')}\n` +
+      `• ${chalk.green('Execute commands when needed')}\n` +
+      `• ${chalk.green('Analyze project structure')}\n` +
+      `• ${chalk.green('Generate code and configurations')}\n` +
+      `• ${chalk.green('Manage dependencies autonomously')}\n\n` +
+      `${chalk.yellow('Just tell me what you want - I handle everything')}\n\n` +
+      `${chalk.yellow('💡 Press TAB or / for command suggestions')}\n` +
       `${chalk.dim('Commands: /help /agents /auto /cd /model /exit')}`,
       {
         padding: 1,
@@ -237,7 +317,7 @@ export class AutonomousClaudeInterface {
     ));
 
     // Show initial command suggestions like Claude Code
-    console.log(chalk.cyan('\\n🚀 Quick Start - Try these commands:'));
+    console.log(chalk.cyan('\n🚀 Quick Start - Try these commands:'));
     console.log(`${chalk.green('/')}\t\t\tShow all available commands`);
     console.log(`${chalk.green('/help')}\t\t\tDetailed help and examples`);
     console.log(`${chalk.green('/agents')}\t\t\tList specialized AI agents`);
@@ -338,6 +418,9 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
       case 'context':
         await this.showExecutionContext();
         break;
+      case 'tokens':
+        this.showTokenMetrics();
+        break;
       case 'clear':
         await this.clearSession();
         break;
@@ -422,8 +505,35 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(chalk.red(`Unknown command: ${cmd}`));
         console.log(chalk.gray('Type /help for available commands'));
     }
+  }
 
-    this.showPrompt();
+  /**
+   * Show token usage metrics
+   */
+  private showTokenMetrics(): void {
+    const metrics = contextManager.getContextMetrics(this.session.messages);
+
+    console.log(boxen(
+      `${chalk.blue.bold('📊 Token Usage Metrics')}\n\n` +
+      `${chalk.green('Messages:')} ${metrics.totalMessages}\n` +
+      `${chalk.green('Estimated Tokens:')} ${metrics.estimatedTokens.toLocaleString()}\n` +
+      `${chalk.green('Token Limit:')} ${metrics.tokenLimit.toLocaleString()}\n` +
+      `${chalk.green('Usage:')} ${((metrics.estimatedTokens / metrics.tokenLimit) * 100).toFixed(1)}%\n\n` +
+      `${chalk.cyan('Status:')} ${metrics.estimatedTokens > metrics.tokenLimit
+        ? chalk.red('⚠️  Over Limit - Auto-compression active')
+        : metrics.estimatedTokens > metrics.tokenLimit * 0.8
+          ? chalk.yellow('⚠️  High Usage - Monitor closely')
+          : chalk.green('✅ Within Limits')
+      }\n\n` +
+      `${chalk.dim('Compression Ratio:')} ${(metrics.compressionRatio * 100).toFixed(1)}%`,
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: metrics.estimatedTokens > metrics.tokenLimit ? 'red' :
+          metrics.estimatedTokens > metrics.tokenLimit * 0.8 ? 'yellow' : 'green'
+      }
+    ));
   }
 
   private async handleAutonomousChat(input: string): Promise<void> {
@@ -453,6 +563,9 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
       content: input,
     });
 
+    // Update chat panel with user message
+    this.updateChatPanel();
+
     // Add auto-accept context if enabled
     if (this.session.autoAcceptEdits) {
       this.session.messages.push({
@@ -466,17 +579,39 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
 
   private async processAutonomousMessage(): Promise<void> {
     this.isProcessing = true;
+    this.shouldInterrupt = false;
+    this.currentStreamController = new AbortController();
 
     try {
       console.log(); // Add spacing
       console.log(chalk.blue('🤖 ') + chalk.dim('Autonomous assistant thinking...'));
+      console.log(chalk.dim('💡 Press ESC to interrupt operation'));
 
       let assistantMessage = '';
       let toolsExecuted = 0;
       const startTime = Date.now();
 
-      // Stream the autonomous response
-      for await (const event of advancedAIProvider.streamChatWithFullAutonomy(this.session.messages)) {
+      // Check for early interruption
+      if (this.shouldInterrupt) {
+        throw new Error('Operation interrupted by user');
+      }
+
+      // Optimize context to prevent token limit issues
+      const { optimizedMessages, metrics } = contextManager.optimizeContext(this.session.messages);
+
+      if (metrics.compressionRatio > 0) {
+        console.log(chalk.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
+        console.log(chalk.dim(`   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
+      }
+
+      // Stream the autonomous response with optimized context
+      for await (const event of advancedAIProvider.streamChatWithFullAutonomy(optimizedMessages, this.currentStreamController.signal)) {
+        // Check for interruption before processing each event
+        if (this.shouldInterrupt) {
+          console.log(chalk.yellow('\n⏹️  Stream interrupted'));
+          break;
+        }
+
         this.session.executionHistory.push(event);
 
         switch (event.type) {
@@ -530,15 +665,28 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
           role: 'assistant',
           content: assistantMessage.trim(),
         });
+
+        // Update chat panel with the conversation
+        this.updateChatPanel();
       }
 
     } catch (error: any) {
-      console.log(chalk.red(`\\n❌ Autonomous execution failed: ${error.message}`));
+      if (error.name === 'AbortError' || this.shouldInterrupt) {
+        console.log(chalk.yellow('⏹️  Operation was interrupted'));
+      } else {
+        console.log(chalk.red(`\\n❌ Autonomous execution failed: ${error.message}`));
+      }
     } finally {
       this.stopAllActiveOperations();
       this.isProcessing = false;
+      this.shouldInterrupt = false;
+      this.currentStreamController = undefined;
       console.log(); // Add spacing
-      this.showPrompt();
+
+      // Only show prompt if not already interrupted (interrupt handler shows it)
+      if (!this.shouldInterrupt) {
+        this.showPrompt();
+      }
     }
   }
 
@@ -590,9 +738,10 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
       }
     }
 
-    // Show tool result summary
+    // Show tool result summary and update structured panels
     if (toolResult && !toolResult.error) {
       this.showToolResultSummary(toolName, toolResult);
+      this.updateStructuredPanelsFromTool(toolName, toolResult);
     }
   }
 
@@ -656,6 +805,62 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         }
         break;
     }
+  }
+
+  /**
+   * Update structured panels based on tool results
+   */
+  private updateStructuredPanelsFromTool(toolName: string, toolResult: any): void {
+    switch (toolName) {
+      case 'read_file':
+        if (toolResult.path && toolResult.content) {
+          advancedUI.showFileContent(toolResult.path, toolResult.content);
+        }
+        break;
+
+      case 'write_file':
+        if (toolResult.path && toolResult.content) {
+          // Show diff if we have original content
+          if (toolResult.originalContent) {
+            advancedUI.showFileDiff(toolResult.path, toolResult.originalContent, toolResult.content);
+          } else {
+            advancedUI.showFileContent(toolResult.path, toolResult.content);
+          }
+        }
+        break;
+
+      case 'explore_directory':
+      case 'list_files':
+        if (toolResult.files && Array.isArray(toolResult.files)) {
+          const files = toolResult.files.map((f: any) => f.path || f.name || f);
+          advancedUI.showFileList(files, `📁 ${toolResult.path || 'Files'}`);
+        }
+        break;
+
+      case 'grep':
+      case 'search_files':
+        if (toolResult.matches && Array.isArray(toolResult.matches)) {
+          const pattern = toolResult.pattern || 'search';
+          advancedUI.showGrepResults(pattern, toolResult.matches);
+        }
+        break;
+
+      case 'execute_command':
+        if (toolResult.stdout) {
+          // Show command output as status update
+          advancedUI.logInfo(`Command: ${toolResult.command || 'unknown'}`, toolResult.stdout.slice(0, 200));
+        }
+        break;
+    }
+  }
+
+  /**
+   * Update chat panel with conversation history
+   */
+  private updateChatPanel(): void {
+    // Since we're in structured UI mode, the chat flows naturally in the terminal
+    // The panels will show file content, diffs, and results automatically
+    // This keeps the conversation in the main terminal for better readability
   }
 
   private async executeAgentTask(agentName: string, task: string): Promise<void> {
@@ -793,10 +998,18 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
 
   private async clearSession(): Promise<void> {
     console.clear();
+
+    // Show metrics before clearing
+    const metricsBefore = contextManager.getContextMetrics(this.session.messages);
+
     this.session.messages = this.session.messages.filter(m => m.role === 'system');
     this.session.executionHistory = [];
     advancedAIProvider.clearExecutionContext();
-    console.log(chalk.green('✅ Session cleared'));
+
+    const metricsAfter = contextManager.getContextMetrics(this.session.messages);
+    const tokensFreed = metricsBefore.estimatedTokens - metricsAfter.estimatedTokens;
+
+    console.log(chalk.green(`✅ Session cleared - freed ${tokensFreed.toLocaleString()} tokens`));
   }
 
   private showExecutionHistory(): void {
@@ -832,6 +1045,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     console.log(chalk.white.bold('\\n🔧 Commands:'));
     console.log(`${chalk.green('/autonomous [on|off]')} - Toggle autonomous mode`);
     console.log(`${chalk.green('/context')} - Show execution context`);
+    console.log(`${chalk.green('/tokens')} - Show token usage metrics`);
     console.log(`${chalk.green('/analyze')} - Quick project analysis`);
     console.log(`${chalk.green('/history')} - Show execution history`);
     console.log(`${chalk.green('/clear')} - Clear session and context`);
@@ -936,20 +1150,26 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
   }
 
   private showPrompt(): void {
-    if (!this.isProcessing) {
-      const workingDir = require('path').basename(this.session.workingDirectory);
-      const modelName = advancedAIProvider.getCurrentModelInfo().name.split('-')[0];
-      const autonomousIndicator = this.session.autonomous ? '🤖' : '👤';
+    if (!this.rl || this.isProcessing) return;
 
-      // Build mode indicators
-      const indicators = this.updatePromptIndicators();
-      const modeIndicator = indicators.length > 0 ? ` ${indicators.join(' ')} ` : '';
+    const workingDir = require('path').basename(this.session.workingDirectory);
+    const modeIcon = this.session.autonomous ? '🤖' :
+      this.session.planMode ? '🎯' :
+        this.session.autoAcceptEdits ? '🚀' : '💬';
 
-      const prompt = chalk.cyanBright(`\\n┌─[${autonomousIndicator}${modelName}:${workingDir}${modeIndicator}]\\n└─❯ `);
-      this.rl.setPrompt(prompt);
-      this.rl.prompt();
-    }
+    // Build mode indicators
+    const indicators = this.updatePromptIndicators();
+    const agentInfo = indicators.length > 0 ? `${indicators.join('')}:` : '';
+
+    const statusDot = this.isProcessing ?
+      chalk.green('●') + chalk.dim('….') :
+      chalk.red('●');
+
+    const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusDot}]\n└─❯ `;
+    this.rl.setPrompt(prompt);
+    this.rl.prompt();
   }
+
 
   /**
    * Auto-complete function for readline
@@ -1107,14 +1327,14 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     const summary = await this.policyManager.getPolicySummary();
 
     console.log(boxen(
-      `${chalk.blue.bold('🔒 Security Policy Status')}\\n\\n` +
-      `${chalk.green('Current Policy:')} ${summary.currentPolicy.approval}\\n` +
-      `${chalk.green('Sandbox Mode:')} ${summary.currentPolicy.sandbox}\\n` +
-      `${chalk.green('Timeout:')} ${summary.currentPolicy.timeoutMs}ms\\n\\n` +
-      `${chalk.cyan('Commands:')}\\n` +
-      `• ${chalk.green('Allowed:')} ${summary.allowedCommands}\\n` +
-      `• ${chalk.red('Blocked:')} ${summary.deniedCommands}\\n\\n` +
-      `${chalk.cyan('Trusted Commands:')} ${summary.trustedCommands.slice(0, 5).join(', ')}...\\n` +
+      `${chalk.blue.bold('🔒 Security Policy Status')}\n\n` +
+      `${chalk.green('Current Policy:')} ${summary.currentPolicy.approval}\n` +
+      `${chalk.green('Sandbox Mode:')} ${summary.currentPolicy.sandbox}\n` +
+      `${chalk.green('Timeout:')} ${summary.currentPolicy.timeoutMs}ms\n\n` +
+      `${chalk.cyan('Commands:')}\n` +
+      `• ${chalk.green('Allowed:')} ${summary.allowedCommands}\n` +
+      `• ${chalk.red('Blocked:')} ${summary.deniedCommands}\n\n` +
+      `${chalk.cyan('Trusted Commands:')} ${summary.trustedCommands.slice(0, 5).join(', ')}...\n` +
       `${chalk.red('Dangerous Commands:')} ${summary.dangerousCommands.slice(0, 3).join(', ')}...`,
       {
         padding: 1,
@@ -1124,7 +1344,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
       }
     ));
 
-    console.log(chalk.dim('\\n Use /policy <setting> <value> to change security settings'));
+    console.log(chalk.dim('\n Use /policy <setting> <value> to change security settings'));
     console.log(chalk.dim(' Available: approval [never|untrusted|always], sandbox [read-only|workspace-write|system-write]'));
   }
 

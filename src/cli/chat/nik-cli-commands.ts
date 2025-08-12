@@ -11,9 +11,7 @@ import { agentStream } from '../core/agent-stream';
 import { AgentTask } from '../types/types';
 import { workspaceContext } from '../context/workspace-context';
 import { enhancedPlanning } from '../planning/enhanced-planning';
-import { approvalSystem } from '../ui/approval-system';
-import { DiffViewer } from '../ui/diff-viewer';
-import { advancedUI } from '../ui/advanced-cli-ui';
+import { approvalSystem, DiffViewer, advancedUI } from '../ui/terminal-ui';
 
 
 export interface CommandResult {
@@ -386,23 +384,23 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
   private async debugCommand(): Promise<CommandResult> {
     console.log(chalk.blue.bold('\n🔍 Debug Information:'));
     console.log(chalk.gray('═'.repeat(40)));
-    
+
     try {
       // Test model configuration
       const currentModel = configManager.getCurrentModel();
       console.log(chalk.green(`Current Model: ${currentModel}`));
-      
+
       const models = configManager.get('models');
       const currentModelConfig = models[currentModel];
-      
+
       if (!currentModelConfig) {
         console.log(chalk.red(`❌ Model configuration missing for: ${currentModel}`));
         return { shouldExit: false, shouldUpdatePrompt: false };
       }
-      
+
       console.log(chalk.green(`Provider: ${currentModelConfig.provider}`));
       console.log(chalk.green(`Model: ${currentModelConfig.model}`));
-      
+
       // Test API key
       const apiKey = configManager.getApiKey(currentModel);
       if (apiKey) {
@@ -411,7 +409,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
         console.log(chalk.red(`❌ API Key: Not configured`));
         console.log(chalk.yellow(`   Set with: /set-key ${currentModel} <your-api-key>`));
       }
-      
+
       // Test model provider validation
       try {
         const isValid = modelProvider.validateApiKey();
@@ -419,7 +417,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       } catch (error: any) {
         console.log(chalk.red(`❌ Model Provider Validation Failed: ${error.message}`));
       }
-      
+
       // Test a simple generation
       try {
         console.log(chalk.blue('\n🧪 Testing AI Generation...'));
@@ -431,7 +429,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       } catch (error: any) {
         console.log(chalk.red(`❌ Test Generation Failed: ${error.message}`));
       }
-      
+
       // Environment variables
       console.log(chalk.blue('\n🌍 Environment Variables:'));
       const envVars = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'];
@@ -443,11 +441,11 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           console.log(chalk.gray(`❌ ${envVar}: Not set`));
         }
       });
-      
+
     } catch (error: any) {
       console.log(chalk.red(`❌ Debug error: ${error.message}`));
     }
-    
+
     return { shouldExit: false, shouldUpdatePrompt: false };
   }
 
@@ -671,7 +669,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       advancedUI.startSpinner(writeId, 'Writing file...');
 
       await toolsManager.writeFile(filePath, content);
-      
+
       advancedUI.stopSpinner(writeId, true, `File written: ${filePath}`);
       console.log(chalk.green(`✅ File written: ${filePath}`));
 
@@ -777,21 +775,21 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     try {
       const [command, ...commandArgs] = args;
       const fullCommand = `${command} ${commandArgs.join(' ')}`;
-      
+
       // Request approval for command execution
       const approved = await approvalSystem.requestCommandApproval(
         command,
         commandArgs,
         process.cwd()
       );
-      
+
       if (!approved) {
         console.log(chalk.yellow('❌ Command execution cancelled'));
         return { shouldExit: false, shouldUpdatePrompt: false };
       }
-      
+
       console.log(chalk.blue(`⚡ Running: ${fullCommand}`));
-      
+
       // Create progress indicator
       const cmdId = advancedUI.createIndicator('command', `Executing: ${command}`).id;
       advancedUI.startSpinner(cmdId, `Running: ${fullCommand}`);
@@ -834,14 +832,14 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
         manager,
         isGlobal
       );
-      
+
       if (!approved) {
         console.log(chalk.yellow('❌ Package installation cancelled'));
         return { shouldExit: false, shouldUpdatePrompt: false };
       }
 
       console.log(chalk.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
-      
+
       // Create progress indicator
       const installId = advancedUI.createIndicator('install', `Installing packages`).id;
       advancedUI.createProgressBar(installId, 'Installing packages', packages.length);
@@ -849,23 +847,23 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       for (let i = 0; i < packages.length; i++) {
         const pkg = packages[i];
         advancedUI.updateSpinner(installId, `Installing ${pkg}...`);
-        
-        const success = await toolsManager.installPackage(pkg, { 
-          global: isGlobal, 
-          dev: isDev, 
-          manager: manager as any 
+
+        const success = await toolsManager.installPackage(pkg, {
+          global: isGlobal,
+          dev: isDev,
+          manager: manager as any
         });
-        
+
         if (!success) {
           advancedUI.logWarning(`Failed to install ${pkg}`);
           console.log(chalk.yellow(`⚠️ Failed to install ${pkg}`));
         } else {
           advancedUI.logSuccess(`Installed ${pkg}`);
         }
-        
+
         advancedUI.updateProgress(installId, i + 1, packages.length);
       }
-      
+
       advancedUI.completeProgress(installId, `Completed installation of ${packages.length} packages`);
       console.log(chalk.green(`✅ Package installation completed`));
 
@@ -1156,23 +1154,23 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
             console.log(chalk.gray('Example: /plan create "Create a React todo app with backend"'));
             return { shouldExit: false, shouldUpdatePrompt: false };
           }
-          
+
           const goal = restArgs.join(' ');
           console.log(chalk.blue(`🎯 Creating plan for: ${goal}`));
-          
+
           const plan = await enhancedPlanning.generatePlan(goal, {
             maxTodos: 15,
             includeContext: true,
             showDetails: true,
             saveTodoFile: true,
           });
-          
+
           console.log(chalk.green(`✅ Plan created with ${plan.todos.length} todos`));
           console.log(chalk.cyan(`📝 Plan ID: ${plan.id}`));
           console.log(chalk.gray('Use /plan execute to run the plan or /plan approve to review it'));
           break;
         }
-        
+
         case 'execute':
         case 'run': {
           const planId = restArgs[0];
@@ -1180,12 +1178,12 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
             // Get the most recent plan
             const plans = enhancedPlanning.getActivePlans();
             const latestPlan = plans[plans.length - 1];
-            
+
             if (!latestPlan) {
               console.log(chalk.yellow('No active plans found. Create one with /plan create <goal>'));
               return { shouldExit: false, shouldUpdatePrompt: false };
             }
-            
+
             console.log(chalk.blue(`Executing latest plan: ${latestPlan.title}`));
             await enhancedPlanning.executePlan(latestPlan.id);
           } else {
@@ -1193,7 +1191,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           }
           break;
         }
-        
+
         case 'approve': {
           const planId = restArgs[0];
           if (!planId) {
@@ -1202,7 +1200,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
               console.log(chalk.yellow('No plans pending approval'));
               return { shouldExit: false, shouldUpdatePrompt: false };
             }
-            
+
             const latestPlan = plans[plans.length - 1];
             console.log(chalk.blue(`Reviewing latest plan: ${latestPlan.title}`));
             await enhancedPlanning.requestPlanApproval(latestPlan.id);
@@ -1211,14 +1209,14 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           }
           break;
         }
-        
+
         case 'show':
         case 'status': {
           const planId = restArgs[0];
           enhancedPlanning.showPlanStatus(planId);
           break;
         }
-        
+
         case 'list': {
           const plans = enhancedPlanning.getActivePlans();
           if (plans.length === 0) {
@@ -1227,16 +1225,16 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
             console.log(chalk.blue.bold('Active Plans:'));
             plans.forEach((plan, index) => {
               const statusIcon = plan.status === 'completed' ? '✅' :
-                               plan.status === 'executing' ? '🔄' :
-                               plan.status === 'approved' ? '🟢' :
-                               plan.status === 'failed' ? '❌' : '⏳';
+                plan.status === 'executing' ? '🔄' :
+                  plan.status === 'approved' ? '🟢' :
+                    plan.status === 'failed' ? '❌' : '⏳';
               console.log(`  ${index + 1}. ${statusIcon} ${plan.title} (${plan.todos.length} todos)`);
               console.log(`     Status: ${plan.status} | Created: ${plan.createdAt.toLocaleDateString()}`);
             });
           }
           break;
         }
-        
+
         default:
           console.log(chalk.red(`Unknown plan command: ${subcommand}`));
           console.log(chalk.gray('Available commands: create, execute, approve, show, list'));
@@ -1256,7 +1254,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     }
 
     const subcommand = args[0].toLowerCase();
-    
+
     try {
       switch (subcommand) {
         case 'list':
@@ -1266,38 +1264,53 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
             console.log(chalk.gray('No todo lists found'));
             return { shouldExit: false, shouldUpdatePrompt: false };
           }
-          
+
           console.log(chalk.blue.bold('Todo Lists:'));
           plans.forEach((plan, index) => {
             console.log(`\n${index + 1}. ${chalk.bold(plan.title)}`);
             console.log(`   Status: ${plan.status} | Todos: ${plan.todos.length}`);
-            
+
             const completed = plan.todos.filter(t => t.status === 'completed').length;
             const inProgress = plan.todos.filter(t => t.status === 'in_progress').length;
             const pending = plan.todos.filter(t => t.status === 'pending').length;
             const failed = plan.todos.filter(t => t.status === 'failed').length;
-            
+
             console.log(`   ✅ ${completed} | 🔄 ${inProgress} | ⏳ ${pending} | ❌ ${failed}`);
           });
           break;
         }
-        
+
         case 'show': {
           const planId = args[1];
           if (!planId) {
             const plans = enhancedPlanning.getActivePlans();
             const latestPlan = plans[plans.length - 1];
             if (latestPlan) {
+              // Render structured panel with real todos
+              try {
+                const { advancedUI } = await import('../ui/advanced-cli-ui');
+                const todoItems = latestPlan.todos.map((t: any) => ({ content: t.title || t.description, status: t.status }));
+                (advancedUI as any).showTodos?.(todoItems, latestPlan.title || 'Update Todos');
+              } catch { }
               enhancedPlanning.showPlanStatus(latestPlan.id);
             } else {
               console.log(chalk.yellow('No todo lists found'));
             }
           } else {
+            const plans = enhancedPlanning.getActivePlans();
+            const target = plans.find(p => p.id === planId);
+            if (target) {
+              try {
+                const { advancedUI } = await import('../ui/advanced-cli-ui');
+                const todoItems = target.todos.map((t: any) => ({ content: t.title || t.description, status: t.status }));
+                (advancedUI as any).showTodos?.(todoItems, target.title || 'Update Todos');
+              } catch { }
+            }
             enhancedPlanning.showPlanStatus(planId);
           }
           break;
         }
-        
+
         case 'open':
         case 'edit': {
           const todoPath = 'todo.md';
@@ -1313,7 +1326,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           }
           break;
         }
-        
+
         default:
           console.log(chalk.red(`Unknown todo command: ${subcommand}`));
           console.log(chalk.gray('Available commands: list, show, open, edit'));
@@ -1339,22 +1352,22 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
     }
 
     const subcommand = args[0].toLowerCase();
-    
+
     try {
       switch (subcommand) {
         case 'auto-approve': {
           const type = args[1];
           const enabled = args[2] === 'true' || args[2] === 'on';
-          
+
           if (!type) {
             console.log(chalk.red('Usage: /approval auto-approve <type> <on|off>'));
             console.log(chalk.gray('Types: low-risk, medium-risk, file-operations, package-installs'));
             return { shouldExit: false, shouldUpdatePrompt: false };
           }
-          
+
           const currentConfig = approvalSystem.getConfig();
           const newConfig = { ...currentConfig };
-          
+
           switch (type) {
             case 'low-risk':
               newConfig.autoApprove!.lowRisk = enabled;
@@ -1372,12 +1385,12 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
               console.log(chalk.red(`Unknown approval type: ${type}`));
               return { shouldExit: false, shouldUpdatePrompt: false };
           }
-          
+
           approvalSystem.updateConfig(newConfig);
           console.log(chalk.green(`✅ Auto-approval for ${type} ${enabled ? 'enabled' : 'disabled'}`));
           break;
         }
-        
+
         case 'test': {
           console.log(chalk.blue('Testing approval system...'));
           const approved = await approvalSystem.quickApproval(
@@ -1388,7 +1401,7 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
           console.log(approved ? chalk.green('Approved') : chalk.yellow('Cancelled'));
           break;
         }
-        
+
         default:
           console.log(chalk.red(`Unknown approval command: ${subcommand}`));
           console.log(chalk.gray('Available commands: auto-approve, test'));

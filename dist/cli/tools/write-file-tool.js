@@ -38,7 +38,7 @@ const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Write File Tool
  * Safely writes files with backup, validation, and rollback capabilities
@@ -63,6 +63,16 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     }
                 }
             }
+            // Read existing content for diff display
+            let existingContent = '';
+            let isNewFile = false;
+            try {
+                existingContent = await (0, promises_1.readFile)(sanitizedPath, 'utf8');
+            }
+            catch (error) {
+                // File doesn't exist, it's a new file
+                isNewFile = true;
+            }
             // Create backup if file exists and backup is enabled
             if (options.createBackup !== false) {
                 backupPath = await this.createBackup(sanitizedPath);
@@ -76,6 +86,31 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 for (const transformer of options.transformers) {
                     processedContent = await transformer(processedContent, sanitizedPath);
                 }
+            }
+            // Show diff before writing (unless disabled)
+            if (options.showDiff !== false && !isNewFile && existingContent !== processedContent) {
+                const fileDiff = {
+                    filePath: sanitizedPath,
+                    originalContent: existingContent,
+                    newContent: processedContent,
+                    isNew: false,
+                    isDeleted: false
+                };
+                console.log('\n');
+                terminal_ui_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
+                // Also add to diff manager for approval system
+                terminal_ui_1.diffManager.addFileDiff(sanitizedPath, existingContent, processedContent);
+            }
+            else if (isNewFile) {
+                const fileDiff = {
+                    filePath: sanitizedPath,
+                    originalContent: '',
+                    newContent: processedContent,
+                    isNew: true,
+                    isDeleted: false
+                };
+                console.log('\n');
+                terminal_ui_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
             }
             // Write file with specified encoding
             const encoding = options.encoding || 'utf8';
@@ -104,7 +139,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     mode: options.mode || 0o644
                 }
             };
-            cli_ui_1.CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
+            terminal_ui_1.CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
             return {
                 success: true,
                 data: writeFileResult,
@@ -120,10 +155,10 @@ class WriteFileTool extends base_tool_1.BaseTool {
             if (backupPath && options.autoRollback !== false) {
                 try {
                     await this.rollback(filePath, backupPath);
-                    cli_ui_1.CliUI.logInfo('Rolled back to backup due to error');
+                    terminal_ui_1.CliUI.logInfo('Rolled back to backup due to error');
                 }
                 catch (rollbackError) {
-                    cli_ui_1.CliUI.logWarning(`Rollback failed: ${rollbackError.message}`);
+                    terminal_ui_1.CliUI.logWarning(`Rollback failed: ${rollbackError.message}`);
                 }
             }
             const duration = Date.now() - startTime;
@@ -141,7 +176,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     mode: options.mode || 0o644
                 }
             };
-            cli_ui_1.CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
             return {
                 success: false,
                 data: errorResult,
@@ -194,7 +229,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
             // Phase 3: Handle partial failures
             if (successCount < files.length && options.rollbackOnPartialFailure) {
                 await this.rollbackMultiple(backups);
-                cli_ui_1.CliUI.logWarning('Rolled back all changes due to partial failure');
+                terminal_ui_1.CliUI.logWarning('Rolled back all changes due to partial failure');
             }
             return {
                 success: successCount === files.length,
@@ -265,7 +300,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
             await (0, promises_1.mkdir)((0, path_1.dirname)(backupPath), { recursive: true });
             // Copy file to backup location
             await (0, promises_1.copyFile)(filePath, backupPath);
-            cli_ui_1.CliUI.logInfo(`Backup created: ${backupPath}`);
+            terminal_ui_1.CliUI.logInfo(`Backup created: ${backupPath}`);
             return backupPath;
         }
         catch {
@@ -299,7 +334,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 await this.rollback(originalPath, backupPath);
             }
             catch (error) {
-                cli_ui_1.CliUI.logWarning(`Failed to rollback ${backupPath}: ${error.message}`);
+                terminal_ui_1.CliUI.logWarning(`Failed to rollback ${backupPath}: ${error.message}`);
             }
         }
     }
@@ -346,11 +381,11 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     }
                 }
             }
-            cli_ui_1.CliUI.logInfo(`Cleaned ${deletedCount} old backup files`);
+            terminal_ui_1.CliUI.logInfo(`Cleaned ${deletedCount} old backup files`);
             return deletedCount;
         }
         catch (error) {
-            cli_ui_1.CliUI.logWarning(`Failed to clean backups: ${error.message}`);
+            terminal_ui_1.CliUI.logWarning(`Failed to clean backups: ${error.message}`);
             return 0;
         }
     }

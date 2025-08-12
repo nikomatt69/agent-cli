@@ -45,7 +45,7 @@ const agent_service_1 = require("./agent-service");
 const tool_service_1 = require("./tool-service");
 const planning_service_1 = require("./planning-service");
 const lsp_service_1 = require("./lsp-service");
-const diff_manager_1 = require("../ui/diff-manager");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const execution_policy_1 = require("../policies/execution-policy");
 const config_manager_1 = require("../core/config-manager");
 const module_manager_1 = require("../core/module-manager");
@@ -304,7 +304,7 @@ class OrchestratorService extends events_1.EventEmitter {
     async showStatus() {
         const activeAgents = agent_service_1.agentService.getActiveAgents();
         const queuedTasks = agent_service_1.agentService.getQueuedTasks();
-        const pendingDiffs = diff_manager_1.diffManager.getPendingCount();
+        const pendingDiffs = terminal_ui_1.diffManager.getPendingCount();
         console.log((0, boxen_1.default)(`${chalk_1.default.blue.bold('🎛️  Orchestrator Status')}\\n\\n` +
             `${chalk_1.default.green('Working Directory:')} ${this.context.workingDirectory}\\n` +
             `${chalk_1.default.green('Mode:')} ${this.context.autonomous ? 'Autonomous' : 'Manual'}\\n` +
@@ -453,7 +453,7 @@ class OrchestratorService extends events_1.EventEmitter {
     }
     toggleAutoAccept() {
         this.context.autoAcceptEdits = !this.context.autoAcceptEdits;
-        diff_manager_1.diffManager.setAutoAccept(this.context.autoAcceptEdits);
+        terminal_ui_1.diffManager.setAutoAccept(this.context.autoAcceptEdits);
         if (this.context.autoAcceptEdits) {
             console.log(chalk_1.default.green('\\n✅ auto-accept edits on ') + chalk_1.default.dim('(ctrl+a to toggle)'));
         }
@@ -505,7 +505,7 @@ class OrchestratorService extends events_1.EventEmitter {
             indicators.push(chalk_1.default.green('auto-accept'));
         if (!this.context.autonomous)
             indicators.push(chalk_1.default.yellow('manual'));
-        const pendingCount = diff_manager_1.diffManager.getPendingCount();
+        const pendingCount = terminal_ui_1.diffManager.getPendingCount();
         if (pendingCount > 0) {
             indicators.push(chalk_1.default.yellow(`${pendingCount} diffs`));
         }

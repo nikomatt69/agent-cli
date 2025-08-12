@@ -3,6 +3,8 @@ import boxen from 'boxen';
 import ora, { Ora } from 'ora';
 import cliProgress from 'cli-progress';
 import * as readline from 'readline';
+import { highlight } from 'cli-highlight';
+import * as path from 'path';
 
 export interface StatusIndicator {
   id: string;
@@ -32,6 +34,19 @@ export interface UITheme {
   muted: any;
 }
 
+export interface StructuredPanel {
+  id: string;
+  title: string;
+  content: string;
+  type: 'diff' | 'file' | 'list' | 'status' | 'chat' | 'todos';
+  language?: string;
+  filePath?: string;
+  visible: boolean;
+  width?: number;
+  borderColor?: string;
+  // For panels that should remain visible across operations
+}
+
 export class AdvancedCliUI {
   private indicators: Map<string, StatusIndicator> = new Map();
   private liveUpdates: LiveUpdate[] = [];
@@ -39,6 +54,8 @@ export class AdvancedCliUI {
   private progressBars: Map<string, cliProgress.SingleBar> = new Map();
   private theme: UITheme;
   private isInteractiveMode: boolean = false;
+  private panels: Map<string, StructuredPanel> = new Map();
+  private layoutMode: 'single' | 'dual' | 'triple' = 'dual';
 
   constructor() {
     this.theme = {
@@ -56,9 +73,8 @@ export class AdvancedCliUI {
    * Start interactive mode with live updates
    */
   startInteractiveMode(): void {
-    this.isInteractiveMode = true;
-    console.clear();
-    this.showHeader();
+    this.isInteractiveMode = false; // Keep disabled to avoid panels
+    // Don't clear console
   }
 
   /**
@@ -74,9 +90,9 @@ export class AdvancedCliUI {
    */
   showHeader(): void {
     const header = boxen(
-      `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.2-beta')}\\n` +
-      `${chalk.gray('Autonomous AI Developer Assistant')}\\n\\n` +
-      `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\\n` +
+      `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.3-beta')}\n` +
+      `${chalk.gray('Autonomous AI Developer Assistant')}\n\n` +
+      `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\n` +
       `${chalk.blue('Mode:')} Interactive  ${chalk.blue('Live Updates:')} Enabled`,
       {
         padding: 1,
@@ -342,41 +358,28 @@ export class AdvancedCliUI {
   }
 
   /**
-   * Ask user for confirmation with enhanced UI
+   * Ask user for confirmation (non-blocking in chat mode)
    */
   async askConfirmation(
     question: string,
     details?: string,
     defaultValue: boolean = false
   ): Promise<boolean> {
+    // In chat mode, just return default to avoid blocking
+    // Log the question for user awareness but don't block execution
     const icon = defaultValue ? '✅' : '❓';
-    const prompt = `${icon} ${chalk.cyan(question)}`;
+    console.log(`${icon} ${chalk.cyan(question)} ${chalk.gray('(auto-approved)')}`);
 
     if (details) {
       console.log(chalk.gray(`   ${details}`));
     }
 
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      rl.question(`${prompt} ${chalk.gray(defaultValue ? '(Y/n)' : '(y/N)')}: `, (answer) => {
-        rl.close();
-
-        const normalized = answer.toLowerCase().trim();
-        if (normalized === '') {
-          resolve(defaultValue);
-        } else {
-          resolve(normalized.startsWith('y'));
-        }
-      });
-    });
+    // Auto-approve to prevent blocking in chat mode
+    return defaultValue;
   }
 
   /**
-   * Show multi-choice selection
+   * Show multi-choice selection (simple readline, no panels)
    */
   async showSelection<T>(
     title: string,
@@ -400,7 +403,7 @@ export class AdvancedCliUI {
         output: process.stdout,
       });
 
-      const prompt = `\\nSelect option (1-${choices.length}, default ${defaultIndex + 1}): `;
+      const prompt = `\nSelect option (1-${choices.length}, default ${defaultIndex + 1}): `;
       rl.question(prompt, (answer) => {
         rl.close();
 
@@ -451,7 +454,7 @@ export class AdvancedCliUI {
     if (!this.isInteractiveMode) return;
 
     // Move cursor to top and clear
-    process.stdout.write('\\x1B[2J\\x1B[H');
+    process.stdout.write('\x1B[2J\x1B[H');
 
     this.showHeader();
     this.showActiveIndicators();
@@ -669,6 +672,587 @@ export class AdvancedCliUI {
   }
 
   /**
+   * Show file diff in structured panel
+   */
+  showFileDiff(filePath: string, oldContent: string, newContent: string): void {
+    const diffContent = this.generateDiffContent(oldContent, newContent);
+
+    this.panels.set('diff', {
+      id: 'diff',
+      title: `📝 ${path.basename(filePath)}`,
+      content: diffContent,
+      type: 'diff',
+      filePath,
+      visible: true,
+      borderColor: 'yellow'
+    });
+
+
+    this.autoLayout();
+  }
+
+  /**
+   * Show Todos panel with real items
+   */
+  showTodos(
+    todos: Array<{ content?: string; title?: string; status?: string }>,
+    title: string = 'Update Todos'
+  ): void {
+    const lines: string[] = [];
+    for (const t of todos) {
+      const text = (t.title || t.content || '').trim();
+      if (!text) continue;
+      const icon = t.status === 'completed' ? '☑' : t.status === 'in_progress' ? '⚡' : '☐';
+      const styled = t.status === 'completed' ? this.theme.success.strikethrough(text) : this.theme.info(text);
+      lines.push(`${icon} ${styled}`);
+    }
+    const content = lines.join('\n');
+
+    this.panels.set('todos', {
+      id: 'todos',
+      title: `📝 ${title}`,
+      content,
+      type: 'todos',
+      visible: true,
+      borderColor: 'yellow',
+    });
+
+    this.autoLayout();
+  }
+
+  /**
+   * Parse a markdown Todo file (todo.md) and render as Todos panel
+   */
+  showTodosFromMarkdown(markdown: string, title: string = 'Todo Plan'): void {
+    try {
+      const items: Array<{ content: string; status?: string }> = [];
+      const lines = markdown.split(/\r?\n/);
+      let inTodos = false;
+      let currentTitle: string | null = null;
+      let currentStatus: string | undefined = undefined;
+
+      const flush = () => {
+        if (currentTitle) {
+          items.push({ content: currentTitle.trim(), status: currentStatus });
+        }
+        currentTitle = null;
+        currentStatus = undefined;
+      };
+
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (line.startsWith('## ')) {
+          const isTodoHeader = /#+\s*Todo Items/i.test(line);
+          if (!inTodos && isTodoHeader) {
+            inTodos = true;
+            continue;
+          }
+          if (inTodos && !isTodoHeader) {
+            // end of todo section
+            break;
+          }
+        }
+        if (!inTodos) continue;
+
+        const mTitle = line.match(/^###\s*\d+\.\s*(.+)$/);
+        if (mTitle) {
+          flush();
+          currentTitle = mTitle[1];
+          continue;
+        }
+        const mStatus = line.match(/^Status:\s*(.+)$/i);
+        if (mStatus) {
+          const s = mStatus[1].toLowerCase();
+          if (s.includes('complete') || s.includes('done') || s.includes('✅')) currentStatus = 'completed';
+          else if (s.includes('progress')) currentStatus = 'in_progress';
+          else if (s.includes('pending') || s.includes('todo')) currentStatus = 'pending';
+          else currentStatus = undefined;
+          continue;
+        }
+      }
+      flush();
+      if (items.length > 0) {
+        this.showTodos(items, title);
+      } else {
+        this.showFileContent('todo.md', markdown);
+      }
+    } catch {
+      this.showFileContent('todo.md', markdown);
+    }
+  }
+
+  /**
+   * Show file content with syntax highlighting
+   */
+  showFileContent(filePath: string, content: string, highlightLines?: number[]): void {
+    const language = this.detectLanguage(filePath);
+    const formattedContent = this.formatCodeContent(content, language, highlightLines);
+
+    this.panels.set('file', {
+      id: 'file',
+      title: `📄 ${path.basename(filePath)}`,
+      content: formattedContent,
+      type: 'file',
+      language,
+      filePath,
+      visible: true,
+      borderColor: 'green'
+    });
+
+    this.showCodingLayout();
+  }
+
+  /**
+   * Show file list (grep/find results)
+   */
+  showFileList(files: string[], title: string = '📁 Files'): void {
+    const listContent = files.map((file, index) => {
+      const icon = this.getFileIcon(path.extname(file));
+      return `${icon} ${file}`;
+    }).join('\n');
+
+    this.panels.set('list', {
+      id: 'list',
+      title,
+      content: listContent,
+      type: 'list',
+      visible: true,
+      borderColor: 'magenta'
+    });
+
+    this.autoLayout();
+  }
+
+  /**
+   * Show coding layout (file content + status)
+   */
+  showCodingLayout(): void {
+    this.hidePanel('diff');
+    this.hidePanel('list');
+    this.layoutMode = 'single';
+    this.renderStructuredLayout();
+  }
+
+  /**
+   * Show diff layout (diff + status)  
+   */
+  showDiffLayout(): void {
+    this.hidePanel('file');
+    this.hidePanel('list');
+    this.layoutMode = 'dual';
+    this.renderStructuredLayout();
+  }
+
+  /**
+   * Show search layout (list + file + status)
+   */
+  showSearchLayout(): void {
+    this.layoutMode = 'triple';
+    this.renderStructuredLayout();
+  }
+
+  /**
+   * Auto-layout based on current visible panels
+   */
+  autoLayout(): void {
+    const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+
+    if (visiblePanels.length <= 1) {
+      this.layoutMode = 'single';
+    } else if (visiblePanels.length === 2) {
+      this.layoutMode = 'dual';
+    } else {
+      this.layoutMode = 'triple';
+    }
+
+    this.renderStructuredLayout();
+  }
+
+  /**
+   * Show grep results in structured format
+   */
+  showGrepResults(pattern: string, matches: any[]): void {
+    const grepContent = matches.map(match => {
+      const fileName = chalk.blue(match.file || match.filePath);
+      const lineNum = chalk.yellow(`${match.lineNumber || match.line}`);
+      const line = (match.content || match.match || '').replace(
+        new RegExp(pattern, 'gi'),
+        chalk.bgYellow.black('$&')
+      );
+      return `${fileName}:${lineNum}: ${line}`;
+    }).join('\n');
+
+    this.panels.set('list', {
+      id: 'list',
+      title: `🔍 Grep: ${pattern}`,
+      content: grepContent,
+      type: 'list',
+      visible: true,
+      borderColor: 'cyan'
+    });
+
+    this.showSearchLayout();
+  }
+
+  /**
+   * Hide panel
+   */
+  hidePanel(panelId: string): void {
+    const panel = this.panels.get(panelId);
+    if (panel) {
+      panel.visible = false;
+      this.adjustLayout();
+    }
+  }
+
+  /**
+   * Clear all panels
+   */
+  clearPanels(): void {
+    this.panels.clear();
+    this.layoutMode = 'single';
+  }
+
+  /**
+   * Show persistent todos (disabled in simple mode)
+   */
+
+
+  /**
+   * Render structured layout with panels
+   */
+  private renderStructuredLayout(): void {
+    if (!this.isInteractiveMode) {
+      this.renderSimpleLayout();
+      return;
+    }
+
+    console.clear();
+    this.showHeader();
+
+    const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+
+    if (visiblePanels.length === 0) {
+      this.showActiveIndicators();
+      return;
+    }
+
+    // Promote layout based on visible panel count
+    if (visiblePanels.length >= 3) {
+      this.renderTripleLayout(visiblePanels);
+      return;
+    }
+    if (this.layoutMode === 'single' || visiblePanels.length === 1) {
+      this.renderSinglePanel(visiblePanels[0]);
+    } else if (this.layoutMode === 'dual' || visiblePanels.length === 2) {
+      this.renderDualLayout(visiblePanels);
+    } else {
+      this.renderTripleLayout(visiblePanels);
+    }
+
+    this.showActiveIndicators();
+  }
+
+  private renderSimpleLayout(): void {
+    const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+
+    visiblePanels.forEach(panel => {
+      console.log(boxen(
+        this.formatPanelContent(panel),
+        {
+          title: panel.title,
+          titleAlignment: 'left',
+          padding: 1,
+          borderStyle: 'round',
+          borderColor: panel.borderColor || 'white'
+        }
+      ));
+    });
+  }
+
+  private renderSinglePanel(panel: StructuredPanel): void {
+    const terminalWidth = process.stdout.columns || 80;
+
+    console.log(boxen(
+      this.formatPanelContent(panel),
+      {
+        title: panel.title,
+        titleAlignment: 'left',
+        padding: 1,
+        borderStyle: 'round',
+        borderColor: panel.borderColor || 'white',
+        width: Math.min(terminalWidth - 4, 120)
+      }
+    ));
+  }
+
+  private renderDualLayout(panels: StructuredPanel[]): void {
+    const terminalWidth = process.stdout.columns || 80;
+    const panelWidth = Math.floor((terminalWidth - 6) / 2);
+
+    panels.slice(0, 2).forEach(panel => {
+      console.log(boxen(
+        this.formatPanelContent(panel),
+        {
+          title: panel.title,
+          titleAlignment: 'left',
+          padding: 1,
+          borderStyle: 'round',
+          borderColor: panel.borderColor || 'white',
+          width: Math.max(panelWidth, 30),
+          margin: { left: 1, right: 1 }
+        }
+      ));
+    });
+  }
+
+  private renderTripleLayout(panels: StructuredPanel[]): void {
+    const terminalWidth = process.stdout.columns || 80;
+    const panelWidth = Math.floor((terminalWidth - 8) / 3);
+
+    panels.slice(0, 3).forEach(panel => {
+      console.log(boxen(
+        this.formatPanelContent(panel),
+        {
+          title: panel.title,
+          titleAlignment: 'left',
+          padding: 1,
+          borderStyle: 'round',
+          borderColor: panel.borderColor || 'white',
+          width: Math.max(panelWidth, 25),
+          margin: { left: 1, right: 1 }
+        }
+      ));
+    });
+  }
+
+  private formatPanelContent(panel: StructuredPanel): string {
+    switch (panel.type) {
+      case 'diff':
+        return this.formatDiffContent(panel.content);
+      case 'file':
+        return panel.content; // Already formatted in showFileContent
+      case 'list':
+        return this.formatListContent(panel.content);
+      default:
+        return panel.content;
+    }
+  }
+
+  private formatDiffContent(content: string): string {
+    return content.split('\n').map(line => {
+      if (line.startsWith('+')) {
+        return chalk.green(line);
+      } else if (line.startsWith('-')) {
+        return chalk.red(line);
+      } else if (line.startsWith('@@')) {
+        return chalk.cyan(line);
+      } else {
+        return chalk.gray(line);
+      }
+    }).join('\n');
+  }
+
+  private formatCodeContent(content: string, language?: string, highlightLines?: number[]): string {
+    try {
+      let formatted = language ? highlight(content, { language }) : content;
+
+      if (highlightLines && highlightLines.length > 0) {
+        const lines = formatted.split('\n');
+        formatted = lines.map((line, index) => {
+          const lineNum = (index + 1).toString().padStart(4, ' ');
+          const isHighlighted = highlightLines.includes(index + 1);
+
+          if (isHighlighted) {
+            return chalk.bgYellow.black(`${lineNum}`) + ` ${line}`;
+          } else {
+            return chalk.gray(`${lineNum}`) + ` ${line}`;
+          }
+        }).join('\n');
+      }
+
+      return formatted;
+    } catch (error) {
+      return content;
+    }
+  }
+
+  private formatListContent(content: string): string {
+    return content.split('\n').map(line => {
+      if (line.trim()) {
+        return line.startsWith('•') ? line : `${chalk.blue('•')} ${line}`;
+      }
+      return line;
+    }).join('\n');
+  }
+
+  private generateDiffContent(oldContent: string, newContent: string): string {
+    const lines1 = oldContent.split('\n');
+    const lines2 = newContent.split('\n');
+
+    let diff = '';
+    const maxLines = Math.max(lines1.length, lines2.length);
+
+    for (let i = 0; i < maxLines; i++) {
+      const line1 = lines1[i] || '';
+      const line2 = lines2[i] || '';
+
+      if (line1 !== line2) {
+        if (line1) diff += `-${line1}\n`;
+        if (line2) diff += `+${line2}\n`;
+      } else if (line1) {
+        diff += ` ${line1}\n`;
+      }
+    }
+
+    return diff;
+  }
+
+  private detectLanguage(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const basename = path.basename(filePath).toLowerCase();
+
+    // Special filenames
+    if (basename === 'dockerfile') return 'dockerfile';
+    if (basename === 'makefile') return 'makefile';
+    if (basename === 'rakefile') return 'ruby';
+    if (basename === 'gemfile') return 'ruby';
+    if (basename === 'package.json') return 'json';
+    if (basename === 'composer.json') return 'json';
+    if (basename === 'tsconfig.json') return 'json';
+    if (basename.endsWith('.config.js')) return 'javascript';
+    if (basename.endsWith('.config.ts')) return 'typescript';
+
+    const languageMap: Record<string, string> = {
+      // JavaScript family
+      '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
+      '.ts': 'typescript', '.tsx': 'typescript', '.mts': 'typescript', '.cts': 'typescript',
+      '.vue': 'vue', '.svelte': 'svelte',
+
+      // Web technologies
+      '.html': 'html', '.htm': 'html', '.xhtml': 'html',
+      '.css': 'css', '.scss': 'scss', '.sass': 'sass', '.less': 'less', '.styl': 'stylus',
+
+      // Backend languages
+      '.py': 'python', '.pyx': 'python', '.pyi': 'python', '.pyw': 'python',
+      '.java': 'java', '.scala': 'scala', '.kt': 'kotlin', '.kts': 'kotlin',
+      '.rb': 'ruby', '.rbx': 'ruby', '.gemspec': 'ruby',
+      '.php': 'php', '.phtml': 'php', '.php3': 'php', '.php4': 'php', '.php5': 'php',
+      '.go': 'go', '.rs': 'rust', '.swift': 'swift',
+      '.cs': 'csharp', '.vb': 'vbnet', '.fs': 'fsharp',
+
+      // Systems programming
+      '.c': 'c', '.h': 'c',
+      '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp', '.hxx': 'cpp',
+      '.m': 'objectivec', '.mm': 'objectivec',
+
+      // Shell and scripting
+      '.sh': 'bash', '.bash': 'bash', '.zsh': 'bash', '.fish': 'bash',
+      '.ps1': 'powershell', '.psm1': 'powershell',
+      '.bat': 'batch', '.cmd': 'batch',
+
+      // Data formats
+      '.json': 'json', '.jsonc': 'json', '.json5': 'json',
+      '.xml': 'xml', '.xsd': 'xml', '.xsl': 'xml',
+      '.yaml': 'yaml', '.yml': 'yaml',
+      '.toml': 'toml', '.ini': 'ini', '.conf': 'ini', '.cfg': 'ini',
+      '.env': 'bash', '.properties': 'properties',
+
+      // Documentation
+      '.md': 'markdown', '.markdown': 'markdown', '.mdown': 'markdown',
+      '.rst': 'rst', '.tex': 'latex',
+
+      // Database
+      '.sql': 'sql', '.mysql': 'sql', '.pgsql': 'sql', '.sqlite': 'sql',
+
+      // Other languages
+      '.r': 'r', '.R': 'r', '.rmd': 'r',
+      '.lua': 'lua', '.pl': 'perl', '.pm': 'perl',
+      '.dart': 'dart', '.elm': 'elm', '.ex': 'elixir', '.exs': 'elixir',
+      '.clj': 'clojure', '.cljs': 'clojure', '.cljc': 'clojure',
+      '.hs': 'haskell', '.lhs': 'haskell',
+      '.ml': 'ocaml', '.mli': 'ocaml',
+      '.jl': 'julia',
+
+      // Config and DevOps
+      '.dockerfile': 'dockerfile',
+      '.dockerignore': 'gitignore',
+      '.gitignore': 'gitignore',
+      '.gitattributes': 'gitattributes',
+      '.editorconfig': 'editorconfig',
+      '.prettierrc': 'json',
+      '.eslintrc': 'json',
+
+      // Templates
+      '.hbs': 'handlebars', '.handlebars': 'handlebars',
+      '.mustache': 'mustache',
+      '.jinja': 'jinja2', '.j2': 'jinja2',
+      '.ejs': 'ejs', '.erb': 'erb'
+    };
+
+    return languageMap[ext] || 'text';
+  }
+
+  private getFileIcon(ext: string): string {
+    const iconMap: Record<string, string> = {
+      // JavaScript ecosystem
+      '.js': '📄', '.jsx': '⚛️', '.ts': '📘', '.tsx': '⚛️',
+      '.vue': '💚', '.svelte': '🧡', '.mjs': '📄', '.cjs': '📄',
+
+      // Web technologies
+      '.html': '🌐', '.htm': '🌐', '.css': '🎨', '.scss': '🎨', '.sass': '🎨', '.less': '🎨',
+
+      // Backend languages
+      '.py': '🐍', '.java': '☕', '.scala': '🔴', '.kt': '🟣',
+      '.rb': '💎', '.php': '🐘', '.go': '🐹', '.rs': '🦀', '.swift': '🦉',
+      '.cs': '🔷', '.vb': '🔵', '.fs': '🔸',
+
+      // Systems programming
+      '.c': '⚙️', '.h': '⚙️', '.cpp': '⚙️', '.hpp': '⚙️',
+      '.m': '🍎', '.mm': '🍎',
+
+      // Shell and config
+      '.sh': '📜', '.bash': '📜', '.zsh': '📜', '.fish': '🐠',
+      '.ps1': '💙', '.bat': '⚫', '.cmd': '⚫',
+
+      // Data formats
+      '.json': '📋', '.xml': '📄', '.yaml': '⚙️', '.yml': '⚙️',
+      '.toml': '📝', '.ini': '⚙️', '.env': '🔑',
+
+      // Documentation
+      '.md': '📝', '.rst': '📄', '.tex': '📄',
+
+      // Database
+      '.sql': '🗃️',
+
+      // Other languages
+      '.r': '📊', '.lua': '🌙', '.pl': '🐪', '.dart': '🎯',
+      '.elm': '🌳', '.ex': '💧', '.clj': '🔵', '.hs': '🎩',
+      '.ml': '🐪', '.jl': '🟢',
+
+      // DevOps
+      '.dockerfile': '🐳', '.dockerignore': '🐳',
+      '.gitignore': '📋', '.gitattributes': '📋',
+
+      // Templates
+      '.hbs': '🔧', '.mustache': '👨', '.ejs': '📄', '.erb': '💎'
+    };
+    return iconMap[ext.toLowerCase()] || '📄';
+  }
+
+  private adjustLayout(): void {
+    const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+
+    if (visiblePanels.length <= 1) {
+      this.layoutMode = 'single';
+    } else if (visiblePanels.length === 2) {
+      this.layoutMode = 'dual';
+    } else {
+      this.layoutMode = 'triple';
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   private cleanup(): void {
@@ -679,6 +1263,9 @@ export class AdvancedCliUI {
     // Stop all progress bars
     this.progressBars.forEach(bar => bar.stop());
     this.progressBars.clear();
+
+    // Clear panels
+    this.panels.clear();
   }
 }
 

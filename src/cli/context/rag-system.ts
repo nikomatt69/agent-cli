@@ -2,7 +2,7 @@ import { ChromaClient, EmbeddingFunction } from "chromadb";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 import { configManager } from '../core/config-manager';
 import chalk from "chalk";
 

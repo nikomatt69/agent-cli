@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkflowOrchestrator = void 0;
 const event_bus_1 = require("./agents/event-bus");
 const tool_registry_1 = require("../tools/tool-registry");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 class WorkflowOrchestrator {
     constructor(workingDirectory) {
         this.activeChains = new Map();
@@ -20,8 +20,8 @@ class WorkflowOrchestrator {
         if (!chain) {
             throw new Error(`Workflow chain '${chainId}' not found`);
         }
-        cli_ui_1.CliUI.logSection(`🔗 Executing Workflow Chain: ${chain.name}`);
-        cli_ui_1.CliUI.logInfo(`Goal: ${chain.goal}`);
+        terminal_ui_1.CliUI.logSection(`🔗 Executing Workflow Chain: ${chain.name}`);
+        terminal_ui_1.CliUI.logInfo(`Goal: ${chain.goal}`);
         const context = {
             workingDirectory: this.toolRegistry.getWorkingDirectory(),
             previousResults: [],
@@ -50,7 +50,7 @@ class WorkflowOrchestrator {
             return result;
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Workflow chain failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Workflow chain failed: ${error.message}`);
             await this.eventBus.publish(event_bus_1.EventTypes.TASK_FAILED, {
                 taskId: chainId,
                 agentId: 'workflow-orchestrator',
@@ -73,10 +73,10 @@ class WorkflowOrchestrator {
             const step = chain.steps[i];
             context.currentStep = i + 1;
             try {
-                cli_ui_1.CliUI.logInfo(`📋 Step ${context.currentStep}/${context.totalSteps}: ${step.toolName}`);
+                terminal_ui_1.CliUI.logInfo(`📋 Step ${context.currentStep}/${context.totalSteps}: ${step.toolName}`);
                 // Verifica condizioni
                 if (step.condition && !step.condition(context.previousResults)) {
-                    cli_ui_1.CliUI.logWarning(`⏭️ Skipping step ${step.id} - condition not met`);
+                    terminal_ui_1.CliUI.logWarning(`⏭️ Skipping step ${step.id} - condition not met`);
                     continue;
                 }
                 // Safety checks
@@ -94,24 +94,24 @@ class WorkflowOrchestrator {
                 results.push(result);
                 context.previousResults.push(result);
                 logs.push(`✅ Step ${step.id} completed successfully`);
-                cli_ui_1.CliUI.logSuccess(`✅ Step completed: ${step.toolName}`);
+                terminal_ui_1.CliUI.logSuccess(`✅ Step completed: ${step.toolName}`);
                 // Handle dynamic step generation
                 if (step.onSuccess) {
                     const additionalSteps = step.onSuccess(result);
                     if (additionalSteps.length > 0) {
                         chain.steps.splice(i + 1, 0, ...additionalSteps);
                         context.totalSteps += additionalSteps.length;
-                        cli_ui_1.CliUI.logInfo(`📈 Added ${additionalSteps.length} dynamic steps`);
+                        terminal_ui_1.CliUI.logInfo(`📈 Added ${additionalSteps.length} dynamic steps`);
                     }
                 }
             }
             catch (error) {
-                cli_ui_1.CliUI.logError(`❌ Step ${step.id} failed: ${error.message}`);
+                terminal_ui_1.CliUI.logError(`❌ Step ${step.id} failed: ${error.message}`);
                 errors.push({ step: step.id, error: error.message });
                 // Handle retry logic
                 const retryCount = step.retryCount || 0;
                 if (retryCount > 0) {
-                    cli_ui_1.CliUI.logWarning(`🔄 Retrying step ${step.id} (${retryCount} attempts remaining)`);
+                    terminal_ui_1.CliUI.logWarning(`🔄 Retrying step ${step.id} (${retryCount} attempts remaining)`);
                     step.retryCount = retryCount - 1;
                     i--; // Retry current step
                     continue;
@@ -122,7 +122,7 @@ class WorkflowOrchestrator {
                     if (recoverySteps.length > 0) {
                         chain.steps.splice(i + 1, 0, ...recoverySteps);
                         context.totalSteps += recoverySteps.length;
-                        cli_ui_1.CliUI.logInfo(`🔧 Added ${recoverySteps.length} recovery steps`);
+                        terminal_ui_1.CliUI.logInfo(`🔧 Added ${recoverySteps.length} recovery steps`);
                         continue;
                     }
                 }
@@ -249,9 +249,9 @@ class WorkflowOrchestrator {
      * Richiede approvazione umana per step critici
      */
     async requestHumanApproval(step, context) {
-        cli_ui_1.CliUI.logWarning(`🚨 Human approval required for step: ${step.id}`);
-        cli_ui_1.CliUI.logInfo(`Tool: ${step.toolName}`);
-        cli_ui_1.CliUI.logInfo(`Parameters: ${JSON.stringify(step.parameters, null, 2)}`);
+        terminal_ui_1.CliUI.logWarning(`🚨 Human approval required for step: ${step.id}`);
+        terminal_ui_1.CliUI.logInfo(`Tool: ${step.toolName}`);
+        terminal_ui_1.CliUI.logInfo(`Parameters: ${JSON.stringify(step.parameters, null, 2)}`);
         // In un'implementazione reale, questo dovrebbe aspettare input umano
         // Per ora, assumiamo approvazione automatica per step sicuri
         const safeTools = ['read-file-tool', 'grep-search', 'find-files-tool'];
@@ -327,14 +327,14 @@ class WorkflowOrchestrator {
                 }
             ]
         });
-        cli_ui_1.CliUI.logInfo(`🔗 Initialized ${this.chainDefinitions.size} workflow chains`);
+        terminal_ui_1.CliUI.logInfo(`🔗 Initialized ${this.chainDefinitions.size} workflow chains`);
     }
     /**
      * Registra una nuova catena di workflow
      */
     registerChain(chain) {
         this.chainDefinitions.set(chain.id, chain);
-        cli_ui_1.CliUI.logInfo(`📝 Registered workflow chain: ${chain.name}`);
+        terminal_ui_1.CliUI.logInfo(`📝 Registered workflow chain: ${chain.name}`);
     }
     /**
      * Lista tutte le catene disponibili

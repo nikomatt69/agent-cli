@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI, advancedUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Read File Tool
@@ -85,6 +85,11 @@ export class ReadFileTool extends BaseTool {
                     extension: this.getFileExtension(filePath)
                 }
             };
+
+            // Show file content in structured UI if not binary and not too large
+            if (!result.metadata?.isBinary && typeof processedContent === 'string' && processedContent.length < 50000) {
+                advancedUI.showFileContent(sanitizedPath, processedContent);
+            }
 
             return result;
 

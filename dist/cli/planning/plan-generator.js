@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlanGenerator = void 0;
 const nanoid_1 = require("nanoid");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 /**
  * Production-ready Plan Generator
  * Analyzes user requests and generates detailed, executable plans
@@ -16,7 +16,7 @@ class PlanGenerator {
      * Generate an execution plan from user request and context
      */
     async generatePlan(context) {
-        cli_ui_1.CliUI.startSpinner('Analyzing request and generating execution plan...');
+        terminal_ui_1.CliUI.startSpinner('Analyzing request and generating execution plan...');
         try {
             // Parse and analyze the user request
             const requestAnalysis = this.analyzeUserRequest(context.userRequest);
@@ -43,11 +43,11 @@ class PlanGenerator {
                     relevantFiles: context.projectAnalysis ? [] : undefined
                 }
             };
-            cli_ui_1.CliUI.succeedSpinner('Execution plan generated successfully');
+            terminal_ui_1.CliUI.succeedSpinner('Execution plan generated successfully');
             return plan;
         }
         catch (error) {
-            cli_ui_1.CliUI.failSpinner('Failed to generate execution plan');
+            terminal_ui_1.CliUI.failSpinner('Failed to generate execution plan');
             throw new Error(`Plan generation failed: ${error.message}`);
         }
     }

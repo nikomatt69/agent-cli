@@ -8,7 +8,7 @@ import {
     PlanApprovalResponse,
     PlannerConfig
 } from './types';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 import { ToolRegistry } from '../tools/tool-registry';
 
 /**

@@ -9,7 +9,7 @@ import { GrepTool } from './grep-tool';
 import { EditTool } from './edit-tool';
 import { BashTool } from './bash-tool';
 import { MultiEditTool } from './multi-edit-tool';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI } from '../ui/terminal-ui';
 
 /**
  * Production-ready Tool Registry

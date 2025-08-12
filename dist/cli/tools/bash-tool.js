@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BashTool = void 0;
 const base_tool_1 = require("./base-tool");
 const prompt_manager_1 = require("../prompts/prompt-manager");
-const cli_ui_1 = require("../utils/cli-ui");
+const terminal_ui_1 = require("../ui/terminal-ui");
 const child_process_1 = require("child_process");
 // Whitelist comandi sicuri
 const SAFE_COMMANDS = [
@@ -50,7 +50,7 @@ class BashTool extends base_tool_1.BaseTool {
                 toolName: 'bash-tool',
                 parameters: params
             });
-            cli_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
+            terminal_ui_1.CliUI.logDebug(`Using system prompt: ${systemPrompt.substring(0, 100)}...`);
             if (!params.command) {
                 throw new Error('Command is required');
             }
@@ -62,9 +62,9 @@ class BashTool extends base_tool_1.BaseTool {
             if (!this.isPathSafe(workingDir)) {
                 throw new Error(`Working directory not safe: ${workingDir}`);
             }
-            cli_ui_1.CliUI.logInfo(`🔧 Executing command: ${cli_ui_1.CliUI.highlight(params.command)}`);
+            terminal_ui_1.CliUI.logInfo(`🔧 Executing command: ${terminal_ui_1.CliUI.highlight(params.command)}`);
             if (params.description) {
-                cli_ui_1.CliUI.logInfo(`📝 Description: ${params.description}`);
+                terminal_ui_1.CliUI.logInfo(`📝 Description: ${params.description}`);
             }
             const result = await this.executeCommand(params.command, {
                 timeout,
@@ -72,10 +72,10 @@ class BashTool extends base_tool_1.BaseTool {
                 environment: params.environment
             });
             if (result.exitCode === 0) {
-                cli_ui_1.CliUI.logSuccess(`✅ Command completed successfully (${result.executionTime}ms)`);
+                terminal_ui_1.CliUI.logSuccess(`✅ Command completed successfully (${result.executionTime}ms)`);
             }
             else {
-                cli_ui_1.CliUI.logWarning(`⚠️ Command exited with code ${result.exitCode}`);
+                terminal_ui_1.CliUI.logWarning(`⚠️ Command exited with code ${result.exitCode}`);
             }
             return {
                 success: result.exitCode === 0,
@@ -88,7 +88,7 @@ class BashTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            cli_ui_1.CliUI.logError(`Bash tool failed: ${error.message}`);
+            terminal_ui_1.CliUI.logError(`Bash tool failed: ${error.message}`);
             return {
                 success: false,
                 error: error.message,
@@ -114,7 +114,7 @@ class BashTool extends base_tool_1.BaseTool {
             if (!allowDangerous) {
                 throw new Error(`Dangerous command not allowed: ${commandWithoutPath}. Use allowDangerous=true to override.`);
             }
-            cli_ui_1.CliUI.logWarning(`⚠️ Executing dangerous command: ${commandWithoutPath}`);
+            terminal_ui_1.CliUI.logWarning(`⚠️ Executing dangerous command: ${commandWithoutPath}`);
         }
         // Verifica pattern pericolosi
         for (const pattern of DANGEROUS_PATTERNS) {
@@ -122,12 +122,12 @@ class BashTool extends base_tool_1.BaseTool {
                 if (!allowDangerous) {
                     throw new Error(`Dangerous pattern detected in command: ${pattern}. Use allowDangerous=true to override.`);
                 }
-                cli_ui_1.CliUI.logWarning(`⚠️ Dangerous pattern detected: ${pattern}`);
+                terminal_ui_1.CliUI.logWarning(`⚠️ Dangerous pattern detected: ${pattern}`);
             }
         }
         // Verifica se comando è in whitelist (solo se non pericoloso)
         if (!SAFE_COMMANDS.includes(commandWithoutPath) && !allowDangerous) {
-            cli_ui_1.CliUI.logWarning(`Command '${commandWithoutPath}' not in safe whitelist. Consider adding to SAFE_COMMANDS if appropriate.`);
+            terminal_ui_1.CliUI.logWarning(`Command '${commandWithoutPath}' not in safe whitelist. Consider adding to SAFE_COMMANDS if appropriate.`);
         }
         // Validazioni aggiuntive
         if (command.includes('..')) {
@@ -215,7 +215,7 @@ class BashTool extends base_tool_1.BaseTool {
                 reject(new Error(`Failed to execute command: ${error.message}`));
             });
             // Log processo avviato
-            cli_ui_1.CliUI.logDebug(`Started process PID: ${child.pid}`);
+            terminal_ui_1.CliUI.logDebug(`Started process PID: ${child.pid}`);
         });
     }
     /**

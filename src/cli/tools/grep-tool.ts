@@ -1,6 +1,6 @@
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { PromptManager } from '../prompts/prompt-manager';
-import { CliUI } from '../utils/cli-ui';
+import { CliUI, advancedUI } from '../ui/terminal-ui';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative, extname } from 'path';
 import { existsSync } from 'fs';
@@ -139,6 +139,11 @@ export class GrepTool extends BaseTool {
       };
 
       CliUI.logSuccess(`✅ Found ${result.totalMatches} matches in ${filesWithMatches} files`);
+
+      // Show grep results in structured UI
+      if (result.matches.length > 0) {
+        advancedUI.showGrepResults(params.pattern, result.matches);
+      }
 
       return {
         success: true,
@@ -315,7 +320,7 @@ export class GrepTool extends BaseTool {
    */
   private shouldIgnoreForGrep(relativePath: string, excludePatterns: string[]): boolean {
     const pathLower = relativePath.toLowerCase();
-    
+
     // Applica ignore patterns standard
     if (IGNORE_PATTERNS.some(pattern => {
       if (pattern.endsWith('/')) {
@@ -357,7 +362,7 @@ export class GrepTool extends BaseTool {
       // Pattern con multiple estensioni: *.{js,ts,tsx}
       const basePattern = includePattern.split('{')[0];
       const extensions = includePattern.match(/\{([^}]+)\}/)?.[1].split(',') || [];
-      
+
       return extensions.some(ext => {
         const fullPattern = basePattern + ext.trim();
         return this.matchesGlobPattern(filename, fullPattern);
