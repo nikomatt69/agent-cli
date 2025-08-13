@@ -19,6 +19,17 @@ export interface FeedbackEntry {
     sources?: string[];
     sessionId?: string;
     agentType?: string;
+    duration?: number;
+    toolName?: string;
+    searchQuery?: string;
+    resultCount?: string;
+    requestedConcept?: string;
+    urgency?: string;
+    errorType?: string;
+    qualityScore?: string;
+    frequency?: number;
+    operation?: string;
+    [key: string]: any; // Permettere proprietà aggiuntive
   };
   status: 'pending' | 'resolved' | 'acknowledged';
   anonymized: boolean;
@@ -117,6 +128,17 @@ export class FeedbackSystem {
       sources?: string[];
       agentType?: string;
       sessionId?: string;
+      toolName?: string;
+      searchQuery?: string;
+      resultCount?: string;
+      requestedConcept?: string;
+      urgency?: string;
+      errorType?: string;
+      qualityScore?: string;
+      frequency?: number;
+      operation?: string;
+      duration?: number;
+      [key: string]: any;
     } = {}
   ): Promise<void> {
     if (!this.config.enabled) return;

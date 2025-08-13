@@ -41,7 +41,7 @@ export class IntelligentFeedbackWrapper {
     agentType?: string
   ): Promise<T> {
     const startTime = Date.now();
-    
+
     try {
       // Esecuzione silenziosa - niente output per utente
       const result = await toolFunction();
@@ -63,7 +63,7 @@ export class IntelligentFeedbackWrapper {
       return result;
     } catch (error: any) {
       const executionTime = Date.now() - startTime;
-      
+
       const executionResult: ToolExecutionResult = {
         success: false,
         toolName,
@@ -114,10 +114,9 @@ export class IntelligentFeedbackWrapper {
         toolName,
         context,
         `Successfully executed ${toolName} with positive outcome`,
-        { 
+        {
           agentType,
-          duration: executionTime,
-          toolName
+          sessionId: execution.context
         }
       );
     }
@@ -132,8 +131,10 @@ export class IntelligentFeedbackWrapper {
         'occasional',
         {
           agentType,
-          toolName,
-          qualityScore: qualityScore.toString()
+          sessionId: execution.context,
+          toolName: execution.toolName,
+          errorType: 'quality_score',
+          operation: execution.parameters.operation || 'unknown'
         }
       );
     }
@@ -153,9 +154,10 @@ export class IntelligentFeedbackWrapper {
       'occasional',
       {
         agentType,
-        toolName,
-        errorType,
-        parameters: JSON.stringify(parameters, null, 2).substring(0, 500)
+        sessionId: execution.context,
+        toolName: execution.toolName,
+        errorType: errorType,
+        operation: execution.parameters.operation || 'unknown'
       }
     );
 
@@ -191,7 +193,7 @@ export class IntelligentFeedbackWrapper {
 
   private async handleDocsSearchFeedback(execution: ToolExecutionResult): Promise<void> {
     const { result, parameters, context } = execution;
-    
+
     if (execution.success && result) {
       const foundResults = result.totalResults || 0;
       const query = parameters.query || 'unknown';
@@ -205,8 +207,7 @@ export class IntelligentFeedbackWrapper {
           'frequent',
           {
             agentType: execution.agentType,
-            searchQuery: query,
-            context: context
+            sessionId: context
           }
         );
       } else if (foundResults < 3) {
@@ -218,8 +219,7 @@ export class IntelligentFeedbackWrapper {
           'occasional',
           {
             agentType: execution.agentType,
-            searchQuery: query,
-            resultCount: foundResults.toString()
+            sessionId: execution.context
           }
         );
       }
@@ -228,11 +228,11 @@ export class IntelligentFeedbackWrapper {
 
   private async handleDocsRequestFeedback(execution: ToolExecutionResult): Promise<void> {
     const { result, parameters, context } = execution;
-    
+
     if (execution.success && result) {
       const concept = parameters.concept || 'unknown';
       const found = result.found || false;
-      
+
       if (!found) {
         // Concetto completamente mancante
         await feedbackSystem.reportDocGap(
@@ -242,8 +242,10 @@ export class IntelligentFeedbackWrapper {
           'frequent',
           {
             agentType: execution.agentType,
-            requestedConcept: concept,
-            urgency: parameters.urgency
+            sessionId: execution.context,
+            toolName: execution.toolName,
+            errorType: 'not_found',
+            operation: execution.parameters.operation || 'unknown'
           }
         );
       }
@@ -255,7 +257,7 @@ export class IntelligentFeedbackWrapper {
     if (!execution.success && execution.error) {
       const isPermissionError = execution.error.includes('permission') || execution.error.includes('EACCES');
       const isNotFoundError = execution.error.includes('ENOENT') || execution.error.includes('not found');
-      
+
       if (isPermissionError || isNotFoundError) {
         await feedbackSystem.reportDocGap(
           'file operations troubleshooting',
@@ -264,7 +266,9 @@ export class IntelligentFeedbackWrapper {
           'occasional',
           {
             agentType: execution.agentType,
-            errorType: isPermissionError ? 'permission' : 'not_found',
+            sessionId: execution.context,
+            toolName: execution.toolName,
+            errorType: 'not_found',
             operation: execution.parameters.operation || 'unknown'
           }
         );
@@ -284,7 +288,10 @@ export class IntelligentFeedbackWrapper {
           'occasional',
           {
             agentType: execution.agentType,
-            qualityScore: analysisQuality.toString()
+            sessionId: execution.context,
+            toolName: execution.toolName,
+            errorType: 'quality_score',
+            operation: execution.parameters.operation || 'unknown'
           }
         );
       }
@@ -294,7 +301,7 @@ export class IntelligentFeedbackWrapper {
   private async handleGenericToolFeedback(execution: ToolExecutionResult): Promise<void> {
     // Pattern analysis per tools generici
     const { toolName, success, executionTime } = execution;
-    
+
     // Feedback per performance
     if (executionTime > 10000) { // > 10 secondi
       await feedbackSystem.reportUsage(
@@ -302,7 +309,7 @@ export class IntelligentFeedbackWrapper {
         `Tool ${toolName} took ${executionTime}ms to execute`,
         {
           agentType: execution.agentType,
-          toolName,
+          sessionId: execution.context,
           duration: executionTime
         }
       );
@@ -316,8 +323,8 @@ export class IntelligentFeedbackWrapper {
         `Tool ${toolName} used frequently (${recentUsage} times recently)`,
         {
           agentType: execution.agentType,
-          toolName,
-          frequency: recentUsage
+          sessionId: execution.context,
+          duration: executionTime
         }
       );
     }
@@ -326,7 +333,7 @@ export class IntelligentFeedbackWrapper {
   private updateLearningPatterns(execution: ToolExecutionResult): void {
     const { toolName, success, parameters, context } = execution;
     const patternKey = `${toolName}_${this.extractConceptFromContext(context)}`;
-    
+
     let pattern = this.learningPatterns.get(patternKey);
     if (!pattern) {
       pattern = {
@@ -340,7 +347,7 @@ export class IntelligentFeedbackWrapper {
     }
 
     const approach = JSON.stringify(parameters);
-    
+
     if (success) {
       if (!pattern.successfulApproaches.includes(approach)) {
         pattern.successfulApproaches.push(approach);
@@ -356,7 +363,7 @@ export class IntelligentFeedbackWrapper {
     // Mantieni solo i pattern più recenti
     pattern.successfulApproaches = pattern.successfulApproaches.slice(-10);
     pattern.failedApproaches = pattern.failedApproaches.slice(-10);
-    
+
     if (!pattern.contextPatterns.includes(context)) {
       pattern.contextPatterns.push(context);
       pattern.contextPatterns = pattern.contextPatterns.slice(-5);
@@ -364,7 +371,7 @@ export class IntelligentFeedbackWrapper {
 
     pattern.lastUpdated = new Date().toISOString();
     this.learningPatterns.set(patternKey, pattern);
-    
+
     // Salva pattern periodicamente
     if (this.learningPatterns.size % 10 === 0) {
       this.saveLearningPatterns();
@@ -373,18 +380,18 @@ export class IntelligentFeedbackWrapper {
 
   private isSignificantSuccess(execution: ToolExecutionResult): boolean {
     const { toolName, result, executionTime } = execution;
-    
+
     // Successo significativo se:
     // 1. Tool di documentazione trova risultati utili
     if (toolName.includes('docs') && result && result.found && result.totalResults > 0) {
       return true;
     }
-    
+
     // 2. Operazione complessa completata velocemente
     if (executionTime < 1000 && ['code_analysis', 'file_operations', 'git_workflow'].includes(toolName)) {
       return true;
     }
-    
+
     // 3. Prima volta che un tool riesce in un contesto specifico
     const recentFailures = this.getRecentFailures(toolName, execution.context);
     return recentFailures > 2;
@@ -392,9 +399,9 @@ export class IntelligentFeedbackWrapper {
 
   private assessResultQuality(execution: ToolExecutionResult): number {
     const { result, toolName } = execution;
-    
+
     if (!result) return 0;
-    
+
     // Criteri specifici per tipo di tool
     switch (toolName) {
       case 'smart_docs_search':
@@ -408,22 +415,22 @@ export class IntelligentFeedbackWrapper {
 
   private assessDocsSearchQuality(result: any): number {
     let score = 0.5;
-    
+
     if (result.found) score += 0.3;
     if (result.totalResults > 0) score += 0.2;
     if (result.totalResults > 3) score += 0.1;
     if (result.contextUpdated) score += 0.2;
-    
+
     return Math.min(score, 1.0);
   }
 
   private assessCodeAnalysisQuality(result: any): number {
     let score = 0.5;
-    
+
     if (result.suggestions && result.suggestions.length > 0) score += 0.2;
     if (result.issues && result.issues.length > 0) score += 0.2;
     if (result.complexity !== undefined) score += 0.1;
-    
+
     return Math.min(score, 1.0);
   }
 
@@ -438,29 +445,29 @@ export class IntelligentFeedbackWrapper {
 
   private determineErrorImpact(execution: ToolExecutionResult): 'low' | 'medium' | 'high' {
     const { toolName, error } = execution;
-    
+
     // Tool critici hanno impatto alto
     if (['file_operations', 'git_workflow', 'docs_request'].includes(toolName)) {
       return 'high';
     }
-    
+
     // Errori di permesso/accesso sono sempre significativi
     if (error && (error.includes('permission') || error.includes('EACCES'))) {
       return 'high';
     }
-    
+
     return 'medium';
   }
 
   private suggestAlternatives(execution: ToolExecutionResult): string[] {
     const { toolName } = execution;
     const alternatives: string[] = [];
-    
+
     const pattern = this.learningPatterns.get(`${toolName}_${this.extractConceptFromContext(execution.context)}`);
     if (pattern && pattern.successfulApproaches.length > 0) {
       alternatives.push(`Try successful approach: ${pattern.successfulApproaches[0]}`);
     }
-    
+
     // Suggerimenti specifici per tool
     switch (toolName) {
       case 'smart_docs_search':
@@ -470,21 +477,21 @@ export class IntelligentFeedbackWrapper {
         alternatives.push('Check file permissions', 'Verify file path exists', 'Try relative path instead');
         break;
     }
-    
+
     return alternatives;
   }
 
   private analyzePerformance(execution: ToolExecutionResult): void {
     const { toolName, executionTime } = execution;
-    
+
     // Calcola performance media per questo tool
     const recentExecutions = this.executionHistory
       .filter(e => e.toolName === toolName)
       .slice(-10);
-    
+
     if (recentExecutions.length > 5) {
       const avgTime = recentExecutions.reduce((sum, e) => sum + e.executionTime, 0) / recentExecutions.length;
-      
+
       if (executionTime > avgTime * 2) {
         console.log(chalk.yellow(`⚠️ ${toolName} performance degradation detected (${executionTime}ms vs ${avgTime.toFixed(0)}ms avg)`));
       }
@@ -493,7 +500,7 @@ export class IntelligentFeedbackWrapper {
 
   private addToHistory(execution: ToolExecutionResult): void {
     this.executionHistory.push(execution);
-    
+
     // Mantieni solo gli ultimi N esecuzioni
     if (this.executionHistory.length > this.maxHistorySize) {
       this.executionHistory = this.executionHistory.slice(-this.maxHistorySize);
@@ -502,16 +509,16 @@ export class IntelligentFeedbackWrapper {
 
   private getRecentToolUsage(toolName: string): number {
     const recent = Date.now() - (60 * 60 * 1000); // ultima ora
-    return this.executionHistory.filter(e => 
+    return this.executionHistory.filter(e =>
       e.toolName === toolName && new Date(e.context).getTime() > recent
     ).length;
   }
 
   private getRecentFailures(toolName: string, context: string): number {
     const recent = Date.now() - (24 * 60 * 60 * 1000); // ultimo giorno
-    return this.executionHistory.filter(e => 
-      e.toolName === toolName && 
-      !e.success && 
+    return this.executionHistory.filter(e =>
+      e.toolName === toolName &&
+      !e.success &&
       new Date(e.context).getTime() > recent
     ).length;
   }
@@ -520,13 +527,13 @@ export class IntelligentFeedbackWrapper {
     // Estrae concetti chiave dal contesto usando parole chiave
     const keywords = ['react', 'node', 'typescript', 'git', 'file', 'api', 'database'];
     const lowercaseContext = context.toLowerCase();
-    
+
     for (const keyword of keywords) {
       if (lowercaseContext.includes(keyword)) {
         return keyword;
       }
     }
-    
+
     return 'general';
   }
 
@@ -551,23 +558,23 @@ export class IntelligentFeedbackWrapper {
   } {
     const patterns = Array.from(this.learningPatterns.values());
     const avgConfidence = patterns.reduce((sum, p) => sum + p.confidenceScore, 0) / patterns.length || 0;
-    
+
     const conceptCounts = new Map<string, number>();
     patterns.forEach(p => {
       const concept = p.concept.split('_')[1] || 'unknown';
       conceptCounts.set(concept, (conceptCounts.get(concept) || 0) + 1);
     });
-    
+
     const topConcepts = Array.from(conceptCounts.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([concept]) => concept);
-    
+
     const recent = Date.now() - (24 * 60 * 60 * 1000);
-    const recentActivity = this.executionHistory.filter(e => 
+    const recentActivity = this.executionHistory.filter(e =>
       new Date(e.context).getTime() > recent
     ).length;
-    
+
     return {
       totalPatterns: patterns.length,
       avgConfidence: Number(avgConfidence.toFixed(2)),

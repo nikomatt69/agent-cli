@@ -235,7 +235,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
     try {
       // Get documentation context if available
       const docsContext = this.getDocumentationContext();
-      
+
       // Try to load base agent prompt first
       const basePrompt = await this.promptManager.loadPromptForContext({
         agentId: 'base-agent',
@@ -313,7 +313,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
   private getDocumentationContext(): string | null {
     try {
       const stats = docsContextManager.getContextStats();
-      
+
       if (stats.loadedCount === 0) {
         return null;
       }
@@ -321,7 +321,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
       // Get context summary and full context
       const contextSummary = docsContextManager.getContextSummary();
       const fullContext = docsContextManager.getFullContext();
-      
+
       // Limit context size to prevent token overflow
       const maxContextLength = 30000; // ~20K words
       if (fullContext.length <= maxContextLength) {
@@ -741,7 +741,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
       smart_docs_search: smartDocsTools.search,
       smart_docs_load: smartDocsTools.load,
       smart_docs_context: smartDocsTools.context,
-      
+
       // AI documentation request tools
       docs_request: aiDocsTools.request,
       docs_gap_report: aiDocsTools.gapReport,
@@ -1102,7 +1102,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
 
       // Show only essential info: tokens used and context remaining  
       if (truncatedTokens > 0) {
-        console.log(chalk.dim(`💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
+        console.log(chalk.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
       }
 
     } catch (error: any) {

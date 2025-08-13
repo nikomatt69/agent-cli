@@ -16,12 +16,12 @@ export class FeedbackAwareTools {
       ...originalTool,
       execute: async (parameters: any) => {
         const context = this.extractContextFromParameters(parameters);
-        
+
         return await intelligentFeedbackWrapper.executeToolWithFeedback(
           toolName,
           async () => {
             // Esegui il tool originale
-            return await originalTool.execute(parameters);
+            return await originalTool?.execute?.(parameters, {});
           },
           parameters,
           context,
@@ -38,7 +38,7 @@ export class FeedbackAwareTools {
     if (parameters.filePath) return `File: ${parameters.filePath}`;
     if (parameters.command) return `Command: ${parameters.command}`;
     if (parameters.code) return `Code analysis`;
-    
+
     return `Tool execution: ${Object.keys(parameters).join(', ')}`;
   }
 
@@ -51,11 +51,11 @@ export class FeedbackAwareTools {
       smart_docs_search: this.wrapTool('smart_docs_search', smartDocsTools.search, agentType),
       smart_docs_load: this.wrapTool('smart_docs_load', smartDocsTools.load, agentType),
       smart_docs_context: this.wrapTool('smart_docs_context', smartDocsTools.context, agentType),
-      
+
       // AI docs tools con feedback
       docs_request: this.wrapTool('docs_request', aiDocsTools.request, agentType),
       docs_gap_report: this.wrapTool('docs_gap_report', aiDocsTools.gapReport, agentType),
-      
+
       // Documentation tools standard con feedback
       doc_search: this.wrapTool('doc_search', documentationTools.search, agentType),
       doc_add: this.wrapTool('doc_add', documentationTools.add, agentType),
@@ -68,20 +68,20 @@ export class FeedbackAwareTools {
    */
   static enhanceAllTools(tools: Record<string, CoreTool>, agentType?: string): Record<string, CoreTool> {
     const enhancedTools: Record<string, CoreTool> = {};
-    
+
     for (const [toolName, tool] of Object.entries(tools)) {
       // Non wrappare due volte i tools già enhanced
       if (toolName.includes('enhanced_')) {
         enhancedTools[toolName] = tool;
         continue;
       }
-      
+
       enhancedTools[`enhanced_${toolName}`] = this.wrapTool(toolName, tool, agentType);
-      
+
       // Mantieni anche la versione originale per compatibility
       enhancedTools[toolName] = tool;
     }
-    
+
     return enhancedTools;
   }
 
@@ -89,16 +89,16 @@ export class FeedbackAwareTools {
    * Analizza pattern di feedback per suggerimenti di miglioramento
    */
   static async generateImprovementSuggestions(): Promise<{
-    gapAnalysis: Array<{concept: string; priority: string; suggestions: string[]}>;
-    performanceIssues: Array<{tool: string; issue: string; solution: string}>;
-    learningInsights: Array<{pattern: string; confidence: number; recommendation: string}>;
+    gapAnalysis: Array<{ concept: string; priority: string; suggestions: string[] }>;
+    performanceIssues: Array<{ tool: string; issue: string; solution: string }>;
+    learningInsights: Array<{ pattern: string; confidence: number; recommendation: string }>;
   }> {
     // Ottieni statistiche di apprendimento
     const learningStats = intelligentFeedbackWrapper.getLearningStats();
-    
+
     // Ottieni top gaps dal feedback system
     const topGaps = (global as any).feedbackSystem?.getTopGaps?.(10) || [];
-    
+
     const gapAnalysis = topGaps.map((gap: any) => ({
       concept: gap.concept,
       priority: gap.avgImpact,
@@ -170,7 +170,7 @@ export class FeedbackAwareTools {
   } {
     // Analizza il contesto e suggerisci tools più appropriati
     const contextLower = context.toLowerCase();
-    
+
     let recommendedTools: string[] = [];
     let alternativeApproaches: string[] = [];
     let preventiveActions: string[] = [];
@@ -227,10 +227,10 @@ export class FeedbackAwareTools {
 export function withFeedbackTracking(toolName: string, agentType?: string) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
-    
+
     descriptor.value = async function (...args: any[]) {
       const context = `${toolName} execution`;
-      
+
       return await intelligentFeedbackWrapper.executeToolWithFeedback(
         toolName,
         async () => {
@@ -241,7 +241,7 @@ export function withFeedbackTracking(toolName: string, agentType?: string) {
         agentType
       );
     };
-    
+
     return descriptor;
   };
 }

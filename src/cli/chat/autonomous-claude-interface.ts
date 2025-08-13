@@ -602,7 +602,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
 
       if (metrics.compressionRatio > 0) {
         console.log(chalk.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
-        console.log(chalk.dim(`   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
+        console.log(chalk.dim(`\n   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
         console.log(); // Add spacing after token info
       }
 

@@ -929,7 +929,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
             });
             // Show only essential info: tokens used and context remaining  
             if (truncatedTokens > 0) {
-                console.log(chalk_1.default.dim(`💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
+                console.log(chalk_1.default.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
             }
         }
         catch (error) {

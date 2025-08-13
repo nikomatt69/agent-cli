@@ -1,6 +1,6 @@
 {
     "name": "@cadcamfun/nikcli",
-    "version": "0.1.4-beta",
+    "version": "0.1.5-beta",
     "description": "Unified Claude Code Clone - Context-Aware AI Development Assistant",
     "main": "dist/cli/index.js",
     "bin": "dist/cli/index.js",
