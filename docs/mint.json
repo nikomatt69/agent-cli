@@ -43,23 +43,6 @@
       "url": "examples"
     }
   ],
-  "anchors": [
-    {
-      "name": "Documentation",
-      "icon": "book-open-cover",
-      "url": "https://docs.nikcli.cadcamfun.xyz"
-    },
-    {
-      "name": "Community",
-      "icon": "slack",
-      "url": "https://github.com/nikomatt69/agent-cli/discussions"
-    },
-    {
-      "name": "Blog",
-      "icon": "newspaper",
-      "url": "https://blog.nikcli.cadcamfun.xyz"
-    }
-  ],
   "navigation": [
     {
       "group": "Get Started",
