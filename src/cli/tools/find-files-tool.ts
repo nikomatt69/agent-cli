@@ -1,4 +1,4 @@
-import { glob } from 'glob';
+import { globby } from 'globby';
 import { BaseTool, ToolExecutionResult } from './base-tool';
 import { logger as cliLogger } from '../utils/logger';
 import { sanitizePath } from './secure-file-tools';
@@ -14,7 +14,7 @@ export class FindFilesTool extends BaseTool {
 
     try {
       const sanitizedCwd = sanitizePath(options.cwd || '.', this.workingDirectory);
-      const files = glob.sync(pattern, { cwd: sanitizedCwd, nodir: true });
+      const files = await globby(pattern, { cwd: sanitizedCwd, onlyFiles: true });
 
       // Show file list in structured UI (optional; safe in headless envs)
       if (

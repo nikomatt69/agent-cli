@@ -9,10 +9,10 @@ build/
 .nikcli/    
 build-single-binary.js
 .cursor/
-dist/
+
 docs/supabase-schema.sql
 CLAUDE.md
-dist
+
 .nikcli
 
 .cursor/
