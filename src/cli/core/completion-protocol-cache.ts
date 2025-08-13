@@ -30,6 +30,7 @@ export interface CompletionResponse {
     confidence: number;
     tokensSaved: number;
     patternId?: string;
+    exactMatch?: boolean;
 }
 
 /**
@@ -41,10 +42,10 @@ export class CompletionProtocolCache {
     private prefixIndex: Map<string, string[]> = new Map(); // prefix -> pattern IDs
     private contextIndex: Map<string, string[]> = new Map(); // context -> pattern IDs
     private cacheFile: string;
-    private maxPatterns: number = 5000;
-    private minConfidence: number = 0.7;
-    private prefixMinLength: number = 10;
-    private maxAge: number = 30 * 24 * 60 * 60 * 1000; // 30 days
+    private maxPatterns: number = 1000; // Ridotto da 5000
+    private minConfidence: number = 0.6; // Più permissivo
+    private prefixMinLength: number = 8; // Ridotto
+    private maxAge: number = 7 * 24 * 60 * 60 * 1000; // 7 giorni (ridotto)
 
     constructor(cacheDir: string = './.nikcli') {
         this.cacheFile = path.join(cacheDir, 'completion-cache.json');
@@ -80,13 +81,13 @@ export class CompletionProtocolCache {
             const age = Date.now() - new Date(pattern.lastUsed).getTime();
             if (age > this.maxAge) continue;
 
-            // Calculate context similarity
+            // Calculate context similarity (molto più restrittivo)
             const contextSimilarity = this.calculateContextSimilarity(context, pattern.contextHash);
-            if (contextSimilarity < 0.5) continue;
+            if (contextSimilarity < 0.95) continue; // Molto più restrittivo
 
-            // Calculate prefix match quality
+            // Calculate prefix match quality (molto più restrittivo)
             const prefixMatch = this.calculatePrefixMatch(prefix, pattern.prefix);
-            if (prefixMatch < 0.8) continue;
+            if (prefixMatch < 0.98) continue; // Molto più restrittivo
 
             const overallConfidence = (contextSimilarity * 0.4 + prefixMatch * 0.6) * pattern.confidence;
 
@@ -123,12 +124,15 @@ export class CompletionProtocolCache {
 
         console.log(chalk.green(`🔮 Protocol Cache HIT (${Math.round(bestPattern.confidence * 100)}%): saved ~${tokensSaved} tokens`));
 
+        const exactMatch = bestPattern.confidence >= 0.99;
+        
         return {
             completion,
             fromCache: true,
             confidence: bestPattern.confidence,
             tokensSaved,
-            patternId: bestPattern.id
+            patternId: bestPattern.id,
+            exactMatch
         };
     }
 

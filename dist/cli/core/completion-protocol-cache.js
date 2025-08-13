@@ -50,10 +50,10 @@ class CompletionProtocolCache {
         this.patterns = new Map();
         this.prefixIndex = new Map(); // prefix -> pattern IDs
         this.contextIndex = new Map(); // context -> pattern IDs
-        this.maxPatterns = 5000;
-        this.minConfidence = 0.7;
-        this.prefixMinLength = 10;
-        this.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+        this.maxPatterns = 1000; // Ridotto da 5000
+        this.minConfidence = 0.6; // Più permissivo
+        this.prefixMinLength = 8; // Ridotto
+        this.maxAge = 7 * 24 * 60 * 60 * 1000; // 7 giorni (ridotto)
         this.cacheFile = path.join(cacheDir, 'completion-cache.json');
         this.loadCache();
     }
@@ -82,14 +82,14 @@ class CompletionProtocolCache {
             const age = Date.now() - new Date(pattern.lastUsed).getTime();
             if (age > this.maxAge)
                 continue;
-            // Calculate context similarity
+            // Calculate context similarity (molto più restrittivo)
             const contextSimilarity = this.calculateContextSimilarity(context, pattern.contextHash);
-            if (contextSimilarity < 0.5)
-                continue;
-            // Calculate prefix match quality
+            if (contextSimilarity < 0.95)
+                continue; // Molto più restrittivo
+            // Calculate prefix match quality (molto più restrittivo)
             const prefixMatch = this.calculatePrefixMatch(prefix, pattern.prefix);
-            if (prefixMatch < 0.8)
-                continue;
+            if (prefixMatch < 0.98)
+                continue; // Molto più restrittivo
             const overallConfidence = (contextSimilarity * 0.4 + prefixMatch * 0.6) * pattern.confidence;
             if (overallConfidence >= this.minConfidence) {
                 candidates.push({
@@ -116,12 +116,14 @@ class CompletionProtocolCache {
         this.patterns.set(bestPattern.id, bestPattern);
         const tokensSaved = this.estimateTokens(prefix + completion);
         console.log(chalk_1.default.green(`🔮 Protocol Cache HIT (${Math.round(bestPattern.confidence * 100)}%): saved ~${tokensSaved} tokens`));
+        const exactMatch = bestPattern.confidence >= 0.99;
         return {
             completion,
             fromCache: true,
             confidence: bestPattern.confidence,
             tokensSaved,
-            patternId: bestPattern.id
+            patternId: bestPattern.id,
+            exactMatch
         };
     }
     /**

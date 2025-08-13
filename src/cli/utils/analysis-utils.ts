@@ -6,21 +6,21 @@ export interface CompactOptions {
   maxChars?: number;
 }
 
-export function truncateForPrompt(s: string, maxChars: number = 2000): string {
+export function truncateForPrompt(s: string, maxChars: number = 60000): string {
   if (!s) return '';
   return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
 }
 
-export function safeStringifyContext(ctx: any, maxChars: number = 4000): string {
+export function safeStringifyContext(ctx: any, maxChars: number = 32000): string {
   if (!ctx) return '{}';
   try {
     const str = JSON.stringify(ctx, (key, value) => {
       if (typeof value === 'string') {
-        return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+        return value.length > 4000 ? value.slice(0, 4000) + '…[truncated]' : value;
       }
       if (Array.isArray(value)) {
-        const limited = value.slice(0, 20);
-        if (value.length > 20) limited.push(`…[+${value.length - 20} more]`);
+        const limited = value.slice(0, 100);
+        if (value.length > 100) limited.push(`…[+${value.length - 100} more]`);
         return limited;
       }
       return value;
@@ -42,9 +42,9 @@ export function chunkArray<T>(arr: T[], size: number): T[][] {
 
 // Compact a potentially large analysis object into a safe, chunkable summary
 export function compactAnalysis(analysis: any, opts: CompactOptions = {}) {
-  const maxDirs = opts.maxDirs ?? 40;
-  const maxFiles = opts.maxFiles ?? 150;
-  const maxChars = opts.maxChars ?? 8000;
+  const maxDirs = opts.maxDirs ?? 500;
+  const maxFiles = opts.maxFiles ?? 1000;
+  const maxChars = opts.maxChars ?? 80000;
 
   const header: any = {
     name: analysis?.name,

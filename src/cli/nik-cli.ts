@@ -183,7 +183,7 @@ export class NikCLI {
                 const stats = tokenCache.getStats();
                 if (stats.totalEntries > 0) {
                     console.log(chalk.dim(`💾 Loaded ${stats.totalEntries} cached responses (${stats.totalHits} hits, ~${stats.totalTokensSaved.toLocaleString()} tokens saved)`));
-                    console.log(); // Add spacing after cache info
+                    console.log(chalk.dim('\n')); // Add spacing after cache info with chalk
                 }
             } catch (error: any) {
                 console.log(chalk.dim(`Cache initialization warning: ${error.message}`));

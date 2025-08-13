@@ -141,6 +141,7 @@ class NikCLI {
                 const stats = token_cache_1.tokenCache.getStats();
                 if (stats.totalEntries > 0) {
                     console.log(chalk_1.default.dim(`💾 Loaded ${stats.totalEntries} cached responses (${stats.totalHits} hits, ~${stats.totalTokensSaved.toLocaleString()} tokens saved)`));
+                    console.log(chalk_1.default.dim('\n')); // Add spacing after cache info with chalk
                 }
             }
             catch (error) {
@@ -2448,6 +2449,7 @@ class NikCLI {
             if (this.currentAgent) {
                 console.log(chalk_1.default.dim('Current Agent:'), chalk_1.default.cyan(this.currentAgent));
             }
+            console.log(); // Add spacing after config info
         }
         if (options.model) {
             this.switchModel(options.model);

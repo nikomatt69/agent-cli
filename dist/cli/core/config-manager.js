@@ -52,7 +52,7 @@ const ModelConfigSchema = zod_1.z.object({
 const ConfigSchema = zod_1.z.object({
     currentModel: zod_1.z.string(),
     temperature: zod_1.z.number().min(0).max(2).default(0.7),
-    maxTokens: zod_1.z.number().min(1).max(8000).default(4000),
+    maxTokens: zod_1.z.number().min(1).max(16000).default(12000),
     chatHistory: zod_1.z.boolean().default(true),
     maxHistoryLength: zod_1.z.number().min(1).max(1000).default(100),
     // Optional system prompt for general chat mode
@@ -195,7 +195,7 @@ class SimpleConfigManager {
         this.defaultConfig = {
             currentModel: 'claude-sonnet-4-20250514',
             temperature: 0.7,
-            maxTokens: 4000,
+            maxTokens: 12000,
             chatHistory: true,
             maxHistoryLength: 100,
             systemPrompt: undefined,

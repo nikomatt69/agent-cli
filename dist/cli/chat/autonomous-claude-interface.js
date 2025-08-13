@@ -543,6 +543,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             if (metrics.compressionRatio > 0) {
                 console.log(chalk_1.default.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
                 console.log(chalk_1.default.dim(`   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
+                console.log(); // Add spacing after token info
             }
             // Stream the autonomous response with optimized context
             for await (const event of advanced_ai_provider_1.advancedAIProvider.streamChatWithFullAutonomy(optimizedMessages, this.currentStreamController.signal)) {
@@ -582,7 +583,8 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                         }
                         const duration = Date.now() - startTime;
                         console.log();
-                        console.log(chalk_1.default.green(`\\n✨ Completed in ${duration}ms • ${toolsExecuted} tools used`));
+                        console.log(); // Add extra spacing before completion message
+                        console.log(chalk_1.default.green(`✨ Completed in ${duration}ms • ${toolsExecuted} tools used`));
                         break;
                     case 'error':
                         console.log(chalk_1.default.red(`\\n❌ Error: ${event.error}`));

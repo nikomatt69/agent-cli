@@ -80,19 +80,6 @@ class AdvancedCliUI {
     /**
      * Show application header
      */
-    showHeader() {
-        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.4-beta')}\n` +
-            `${chalk_1.default.gray('Autonomous AI Developer Assistant')}\n\n` +
-            `${chalk_1.default.blue('Status:')} ${this.getOverallStatus()}  ${chalk_1.default.blue('Active Tasks:')} ${this.indicators.size}\n` +
-            `${chalk_1.default.blue('Mode:')} Interactive  ${chalk_1.default.blue('Live Updates:')} Enabled`, {
-            padding: 1,
-            margin: { top: 0, bottom: 1, left: 0, right: 0 },
-            borderStyle: 'round',
-            borderColor: 'cyan',
-            textAlignment: 'center',
-        });
-        console.log(header);
-    }
     /**
      * Create a new status indicator
      */
@@ -382,7 +369,6 @@ class AdvancedCliUI {
             return;
         // Move cursor to top and clear
         process.stdout.write('\x1B[2J\x1B[H');
-        this.showHeader();
         this.showActiveIndicators();
         this.showRecentUpdates();
     }
@@ -794,7 +780,6 @@ class AdvancedCliUI {
             return;
         }
         console.clear();
-        this.showHeader();
         const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
         if (visiblePanels.length === 0) {
             this.showActiveIndicators();

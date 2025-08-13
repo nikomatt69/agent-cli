@@ -15,7 +15,7 @@ const ModelConfigSchema = z.object({
 const ConfigSchema = z.object({
   currentModel: z.string(),
   temperature: z.number().min(0).max(2).default(0.7),
-  maxTokens: z.number().min(1).max(8000).default(4000),
+  maxTokens: z.number().min(1).max(16000).default(12000),
   chatHistory: z.boolean().default(true),
   maxHistoryLength: z.number().min(1).max(1000).default(100),
   // Optional system prompt for general chat mode
@@ -166,7 +166,7 @@ export class SimpleConfigManager {
   private defaultConfig: ConfigType = {
     currentModel: 'claude-sonnet-4-20250514',
     temperature: 0.7,
-    maxTokens: 4000,
+    maxTokens: 12000,
     chatHistory: true,
     maxHistoryLength: 100,
     systemPrompt: undefined,
