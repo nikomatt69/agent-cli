@@ -154,12 +154,5 @@
     "auth": {
       "method": "bearer"
     }
-  },
-  "openapi": "/openapi.json",
-  "redirects": [
-    {
-      "source": "/old-docs/:path*",
-      "destination": "/user-guide/:path*"
-    }
-  ]
+  }
 }

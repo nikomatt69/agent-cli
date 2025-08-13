@@ -27,6 +27,9 @@ const prompt_manager_1 = require("../prompts/prompt-manager");
 const smart_cache_manager_1 = require("../core/smart-cache-manager");
 const documentation_library_1 = require("../core/documentation-library");
 const documentation_tool_1 = require("../core/documentation-tool");
+const docs_context_manager_1 = require("../context/docs-context-manager");
+const smart_docs_tool_1 = require("../tools/smart-docs-tool");
+const docs_request_tool_1 = require("../tools/docs-request-tool");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
@@ -165,15 +168,22 @@ class AdvancedAIProvider {
     // Enhanced system prompt with advanced capabilities (using PromptManager)
     async getEnhancedSystemPrompt(context = {}) {
         try {
+            // Get documentation context if available
+            const docsContext = this.getDocumentationContext();
             // Try to load base agent prompt first
             const basePrompt = await this.promptManager.loadPromptForContext({
                 agentId: 'base-agent',
                 parameters: {
                     workingDirectory: this.workingDirectory,
                     availableTools: this.toolRouter.getAllTools().map(tool => `${tool.tool}: ${tool.description}`).join(', '),
+                    documentationContext: docsContext,
                     ...context
                 }
             });
+            // If docs are loaded, append them to the base prompt
+            if (docsContext) {
+                return `${basePrompt}\n\n${docsContext}`;
+            }
             return basePrompt;
         }
         catch (error) {
@@ -181,7 +191,9 @@ class AdvancedAIProvider {
             const toolDescriptions = this.toolRouter.getAllTools()
                 .map(tool => `${tool.tool}: ${tool.description}`)
                 .join(', ');
-            return `You are an advanced AI development assistant with enhanced capabilities:
+            // Get documentation context for fallback too
+            const docsContext = this.getDocumentationContext();
+            const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
 🧠 **Enhanced Intelligence**:
 - Context-aware analysis and reasoning
@@ -218,6 +230,34 @@ class AdvancedAIProvider {
 **Available Tools**: ${toolDescriptions}
 
 Respond in a helpful, professional manner with clear explanations and actionable insights.`;
+            // Add documentation context if available
+            if (docsContext) {
+                return `${basePrompt}\n\n${docsContext}`;
+            }
+            return basePrompt;
+        }
+    }
+    // Get current documentation context for AI
+    getDocumentationContext() {
+        try {
+            const stats = docs_context_manager_1.docsContextManager.getContextStats();
+            if (stats.loadedCount === 0) {
+                return null;
+            }
+            // Get context summary and full context
+            const contextSummary = docs_context_manager_1.docsContextManager.getContextSummary();
+            const fullContext = docs_context_manager_1.docsContextManager.getFullContext();
+            // Limit context size to prevent token overflow
+            const maxContextLength = 30000; // ~20K words
+            if (fullContext.length <= maxContextLength) {
+                return fullContext;
+            }
+            // If full context is too large, return summary only
+            return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
+        }
+        catch (error) {
+            console.error('Error getting documentation context:', error);
+            return null;
         }
     }
     // Load tool-specific prompts for enhanced execution
@@ -582,6 +622,13 @@ Respond in a helpful, professional manner with clear explanations and actionable
             doc_search: documentation_tool_1.documentationTools.search,
             doc_add: documentation_tool_1.documentationTools.add,
             doc_stats: documentation_tool_1.documentationTools.stats,
+            // Smart documentation tools for AI agents
+            smart_docs_search: smart_docs_tool_1.smartDocsTools.search,
+            smart_docs_load: smart_docs_tool_1.smartDocsTools.load,
+            smart_docs_context: smart_docs_tool_1.smartDocsTools.context,
+            // AI documentation request tools
+            docs_request: docs_request_tool_1.aiDocsTools.request,
+            docs_gap_report: docs_request_tool_1.aiDocsTools.gapReport,
         };
     }
     // Claude Code style streaming with full autonomy

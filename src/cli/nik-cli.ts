@@ -27,6 +27,10 @@ import { approvalSystem } from './ui/approval-system';
 import { tokenCache } from './core/token-cache';
 import { completionCache } from './core/completion-protocol-cache';
 import { mcpClient, McpServerConfig } from './core/mcp-client';
+import { docLibrary, DocumentationEntry } from './core/documentation-library';
+import { createCloudDocsProvider, getCloudDocsProvider } from './core/cloud-docs-provider';
+import { docsContextManager } from './context/docs-context-manager';
+import { feedbackSystem } from './core/feedback-system';
 import { wrapBlue, formatStatus, formatCommand, formatFileOp, formatProgress, formatAgent, formatSearch } from './utils/text-wrapper';
 import { DiffViewer } from './ui/diff-viewer';
 import { SlashCommandHandler } from './chat/nik-cli-commands';
@@ -1730,6 +1734,45 @@ export class NikCLI {
                 case 'todo':
                 case 'todos':
                     await this.handleAdvancedFeatures(cmd, args);
+                    break;
+
+                // Documentation Commands
+                case 'docs':
+                    await this.handleDocsCommand(args);
+                    break;
+                case 'doc-search':
+                    await this.handleDocSearchCommand(args);
+                    break;
+                case 'doc-add':
+                    await this.handleDocAddCommand(args);
+                    break;
+                case 'doc-stats':
+                    await this.handleDocStatsCommand(args);
+                    break;
+                case 'doc-list':
+                    await this.handleDocListCommand(args);
+                    break;
+                case 'doc-tag':
+                    await this.handleDocTagCommand(args);
+                    break;
+                case 'doc-sync':
+                    await this.handleDocSyncCommand(args);
+                    break;
+                case 'doc-load':
+                    await this.handleDocLoadCommand(args);
+                    break;
+                case 'doc-context':
+                    await this.handleDocContextCommand(args);
+                    break;
+                case 'doc-unload':
+                    await this.handleDocUnloadCommand(args);
+                    break;
+                case 'doc-suggest':
+                    await this.handleDocSuggestCommand(args);
+                    break;
+                    
+                case 'feedback':
+                    await this.handleFeedbackCommand(args);
                     break;
 
                 // Help and Exit
@@ -3773,6 +3816,427 @@ Planning:
         }
     }
 
+    // Documentation Commands Handlers
+    private async handleDocsCommand(args: string[]): Promise<void> {
+        try {
+            if (args.length === 0) {
+                // Show help and status
+                console.log(chalk.blue.bold('\n📚 Documentation System'));
+                console.log(chalk.gray('─'.repeat(50)));
+                
+                // Show status
+                const stats = docLibrary.getStats();
+                console.log(chalk.green(`📖 Library: ${stats.totalDocs} documents`));
+                console.log(chalk.green(`📂 Categories: ${stats.categories.length} (${stats.categories.join(', ')})`));
+                console.log(chalk.green(`📝 Total Words: ${stats.totalWords.toLocaleString()}`));
+                console.log(chalk.green(`🌍 Languages: ${stats.languages.join(', ')}`));
+                
+                // Show available commands
+                console.log(chalk.blue('\n📋 Available Commands:'));
+                console.log(chalk.gray('  /docs                    - Show this help and status'));
+                console.log(chalk.gray('  /doc-search <query>      - Search documentation library'));
+                console.log(chalk.gray('  /doc-add <url>          - Add documentation from URL'));
+                console.log(chalk.gray('  /doc-stats              - Show detailed statistics'));
+                console.log(chalk.gray('  /doc-list [category]    - List available documentation'));
+                console.log(chalk.gray('  /doc-tag <id> <tags>    - Manage document tags (coming soon)'));
+                
+                return;
+            }
+            
+            // Handle subcommands
+            if (args.length === 0) {
+                console.log(chalk.red('Missing subcommand. Use /doc help for available commands.'));
+                return;
+            }
+            
+            const subcommand = args[0];
+            const subArgs = args.slice(1);
+            
+            switch (subcommand) {
+                case 'status':
+                    docLibrary.showStatus();
+                    break;
+                case 'help':
+                    await this.handleDocsCommand([]);
+                    break;
+                default:
+                    console.log(chalk.red(`❌ Unknown docs subcommand: ${subcommand}`));
+                    console.log(chalk.gray('Use "/docs" for help'));
+            }
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Docs command error: ${error.message}`));
+        }
+    }
+
+    private async handleDocSearchCommand(args: string[]): Promise<void> {
+        try {
+            if (args.length === 0) {
+                console.log(chalk.red('Usage: /doc-search <query> [category]'));
+                console.log(chalk.gray('Example: /doc-search "react hooks"'));
+                console.log(chalk.gray('Example: /doc-search "api" backend'));
+                return;
+            }
+            
+            const query = args[0];
+            const category = args[1];
+            
+            console.log(chalk.blue(`🔍 Searching for: "${query}"${category ? ` in category: ${category}` : ''}`));
+            
+            const results = await docLibrary.search(query, category, 10);
+            
+            if (results.length === 0) {
+                console.log(chalk.yellow('❌ No documents found'));
+                console.log(chalk.gray('Try different keywords or use /doc-add to add more documentation'));
+                return;
+            }
+            
+            console.log(chalk.green(`\n✅ Found ${results.length} results:`));
+            console.log(chalk.gray('─'.repeat(60)));
+            
+            results.forEach((result, index) => {
+                console.log(chalk.blue(`${index + 1}. ${result.entry.title}`));
+                console.log(chalk.gray(`   Score: ${(result.score * 100).toFixed(1)}% | Category: ${result.entry.category}`));
+                console.log(chalk.gray(`   URL: ${result.entry.url}`));
+                console.log(chalk.gray(`   Tags: ${result.entry.tags.join(', ')}`));
+                if (result.snippet) {
+                    console.log(chalk.white(`   Preview: ${result.snippet.substring(0, 120)}...`));
+                }
+                console.log();
+            });
+            
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Search error: ${error.message}`));
+        }
+    }
+
+    private async handleDocAddCommand(args: string[]): Promise<void> {
+        try {
+            if (args.length === 0) {
+                console.log(chalk.red('Usage: /doc-add <url> [category] [tags...]'));
+                console.log(chalk.gray('Example: /doc-add https://reactjs.org/'));
+                console.log(chalk.gray('Example: /doc-add https://nodejs.org/ backend node,api'));
+                return;
+            }
+            
+            const url = args[0];
+            const category = args[1] || 'general';
+            const tags = args.slice(2);
+            
+            // Simple URL validation
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                console.log(chalk.red('❌ Invalid URL. Must start with http:// or https://'));
+                return;
+            }
+            
+            console.log(chalk.blue(`📖 Adding documentation from: ${url}`));
+            if (category !== 'general') console.log(chalk.gray(`📂 Category: ${category}`));
+            if (tags.length > 0) console.log(chalk.gray(`🏷️ Tags: ${tags.join(', ')}`));
+            
+            const spinner = ora('Extracting content...').start();
+            
+            try {
+                const entry = await docLibrary.addDocumentation(url, category, tags);
+                spinner.succeed('Documentation added successfully!');
+                
+                console.log(chalk.green('\n✅ Document Added:'));
+                console.log(chalk.gray('─'.repeat(40)));
+                console.log(chalk.blue(`📄 Title: ${entry.title}`));
+                console.log(chalk.gray(`🆔 ID: ${entry.id}`));
+                console.log(chalk.gray(`📂 Category: ${entry.category}`));
+                console.log(chalk.gray(`🏷️ Tags: ${entry.tags.join(', ')}`));
+                console.log(chalk.gray(`📝 Words: ${entry.metadata.wordCount}`));
+                console.log(chalk.gray(`🌍 Language: ${entry.metadata.language}`));
+                
+            } catch (error: any) {
+                spinner.fail('Failed to add documentation');
+                throw error;
+            }
+            
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Add documentation error: ${error.message}`));
+        }
+    }
+
+    private async handleDocStatsCommand(args: string[]): Promise<void> {
+        try {
+            const detailed = args.includes('--detailed') || args.includes('-d');
+            
+            const stats = docLibrary.getStats();
+            
+            console.log(chalk.blue.bold('\n📊 Documentation Library Statistics'));
+            console.log(chalk.gray('─'.repeat(50)));
+            
+            console.log(chalk.green(`📖 Total Documents: ${stats.totalDocs}`));
+            console.log(chalk.green(`📝 Total Words: ${stats.totalWords.toLocaleString()}`));
+            console.log(chalk.green(`📂 Categories: ${stats.categories.length}`));
+            console.log(chalk.green(`🌍 Languages: ${stats.languages.length}`));
+            console.log(chalk.green(`👁️ Average Access Count: ${stats.avgAccessCount.toFixed(1)}`));
+            
+            if (detailed && stats.categories.length > 0) {
+                console.log(chalk.blue('\n📂 By Category:'));
+                stats.categories.forEach((category: string) => {
+                    console.log(chalk.gray(`  • ${category}`));
+                });
+                
+                console.log(chalk.blue('\n🌍 By Language:'));
+                stats.languages.forEach((language: string) => {
+                    console.log(chalk.gray(`  • ${language}`));
+                });
+            }
+            
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Stats error: ${error.message}`));
+        }
+    }
+
+    private async handleDocListCommand(args: string[]): Promise<void> {
+        try {
+            const category = args[0];
+            
+            // Get all documents (accessing the private docs Map)
+            const allDocs = Array.from((docLibrary as any).docs.values()) as DocumentationEntry[];
+            
+            // Filter by category if specified
+            const docs = category 
+                ? allDocs.filter(doc => doc.category === category)
+                : allDocs;
+            
+            if (docs.length === 0) {
+                if (category) {
+                    console.log(chalk.yellow(`❌ No documents found in category: ${category}`));
+                } else {
+                    console.log(chalk.yellow('❌ No documents in library'));
+                    console.log(chalk.gray('Use /doc-add <url> to add documentation'));
+                }
+                return;
+            }
+            
+            console.log(chalk.blue.bold(`\n📋 Documentation List${category ? ` (Category: ${category})` : ''}`));
+            console.log(chalk.gray('─'.repeat(60)));
+            
+            docs
+                .sort((a, b) => b.lastAccessed.getTime() - a.lastAccessed.getTime())
+                .forEach((doc, index) => {
+                    console.log(chalk.blue(`${index + 1}. ${doc.title}`));
+                    console.log(chalk.gray(`   ID: ${doc.id} | Category: ${doc.category}`));
+                    console.log(chalk.gray(`   URL: ${doc.url}`));
+                    console.log(chalk.gray(`   Tags: ${doc.tags.join(', ') || 'none'}`));
+                    console.log(chalk.gray(`   Words: ${doc.metadata.wordCount} | Access: ${doc.accessCount}x`));
+                    console.log(chalk.gray(`   Added: ${doc.timestamp.toLocaleDateString()}`));
+                    console.log();
+                });
+            
+        } catch (error: any) {
+            console.error(chalk.red(`❌ List error: ${error.message}`));
+        }
+    }
+
+    private async handleDocTagCommand(args: string[]): Promise<void> {
+        try {
+            console.log(chalk.yellow('🏷️ Document tagging feature is coming soon!'));
+            console.log(chalk.gray('This will allow you to:'));
+            console.log(chalk.gray('• Add tags to existing documents'));
+            console.log(chalk.gray('• Remove tags from documents'));
+            console.log(chalk.gray('• Search documents by tags'));
+            console.log(chalk.gray('• List all available tags'));
+            
+            if (args.length > 0) {
+                console.log(chalk.gray(`\nYour input: ${args.join(' ')}`));
+            }
+            
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Tag error: ${error.message}`));
+        }
+    }
+
+    private async handleDocSyncCommand(args: string[]): Promise<void> {
+        try {
+            const cloudProvider = getCloudDocsProvider();
+            if (!cloudProvider?.isReady()) {
+                console.log(chalk.yellow('⚠️ Cloud documentation not configured'));
+                console.log(chalk.gray('Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables'));
+                console.log(chalk.gray('Or use /config to enable cloud docs'));
+                return;
+            }
+
+            console.log(chalk.blue('🔄 Synchronizing documentation library...'));
+            const spinner = ora('Syncing with cloud...').start();
+
+            try {
+                const result = await cloudProvider.sync();
+                spinner.succeed(`Sync completed: ${result.downloaded} downloaded, ${result.uploaded} uploaded`);
+
+                if (result.downloaded > 0) {
+                    console.log(chalk.green(`✅ ${result.downloaded} new documents available`));
+                    console.log(chalk.gray('Use /doc-search to explore new content'));
+                }
+            } catch (error: any) {
+                spinner.fail('Sync failed');
+                throw error;
+            }
+
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Sync error: ${error.message}`));
+        }
+    }
+
+    private async handleDocLoadCommand(args: string[]): Promise<void> {
+        try {
+            if (args.length === 0) {
+                console.log(chalk.red('Usage: /doc-load <doc-names>'));
+                console.log(chalk.gray('Example: /doc-load "react hooks" nodejs-api'));
+                console.log(chalk.gray('Example: /doc-load frontend-docs backend-docs'));
+                
+                // Show suggestions
+                const suggestions = await docsContextManager.suggestDocs('popular');
+                if (suggestions.length > 0) {
+                    console.log(chalk.blue('\n💡 Suggestions:'));
+                    suggestions.forEach(title => {
+                        console.log(chalk.gray(`  • ${title}`));
+                    });
+                }
+                return;
+            }
+
+            console.log(chalk.blue(`📚 Loading ${args.length} document(s) into AI context...`));
+            
+            const loadedDocs = await docsContextManager.loadDocs(args);
+            
+            if (loadedDocs.length > 0) {
+                const stats = docsContextManager.getContextStats();
+                console.log(chalk.green(`✅ Context updated:`));
+                console.log(chalk.gray(`   • Loaded docs: ${stats.loadedCount}`));
+                console.log(chalk.gray(`   • Total words: ${stats.totalWords.toLocaleString()}`));
+                console.log(chalk.gray(`   • Context usage: ${stats.utilizationPercent.toFixed(1)}%`));
+                console.log(chalk.gray(`   • Categories: ${stats.categories.join(', ')}`));
+                
+                console.log(chalk.blue('\n💬 AI agents now have access to loaded documentation!'));
+            }
+
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Load error: ${error.message}`));
+        }
+    }
+
+    private async handleDocContextCommand(args: string[]): Promise<void> {
+        try {
+            const stats = docsContextManager.getContextStats();
+            
+            console.log(chalk.blue.bold('\n📚 AI Documentation Context Status'));
+            console.log(chalk.gray('─'.repeat(50)));
+            
+            if (stats.loadedCount === 0) {
+                console.log(chalk.yellow('❌ No documentation loaded in context'));
+                console.log(chalk.gray('Use /doc-load <names> to load documentation'));
+                console.log(chalk.gray('Use /doc-suggest <query> to find relevant docs'));
+                return;
+            }
+
+            console.log(chalk.green(`📖 Loaded Documents: ${stats.loadedCount}`));
+            console.log(chalk.green(`📝 Total Words: ${stats.totalWords.toLocaleString()}`));
+            console.log(chalk.green(`📊 Context Usage: ${stats.utilizationPercent.toFixed(1)}%`));
+            console.log(chalk.green(`📂 Categories: ${stats.categories.join(', ')}`));
+            console.log(chalk.green(`🏠 Local: ${stats.sources.local}, ☁️ Shared: ${stats.sources.shared}`));
+
+            if (args.includes('--detailed') || args.includes('-d')) {
+                console.log(chalk.blue('\n📋 Loaded Documents:'));
+                const loadedDocs = docsContextManager.getLoadedDocs();
+                
+                loadedDocs.forEach((doc, index) => {
+                    const wordCount = doc.content.split(' ').length;
+                    console.log(chalk.blue(`${index + 1}. ${doc.title}`));
+                    console.log(chalk.gray(`   Category: ${doc.category} | Source: ${doc.source}`));
+                    console.log(chalk.gray(`   Tags: ${doc.tags.join(', ')}`));
+                    console.log(chalk.gray(`   Words: ${wordCount.toLocaleString()} | Loaded: ${doc.loadedAt.toLocaleString()}`));
+                    if (doc.summary) {
+                        console.log(chalk.gray(`   Summary: ${doc.summary}`));
+                    }
+                    console.log();
+                });
+            }
+
+            // Context summary for AI
+            const summary = docsContextManager.getContextSummary();
+            if (args.includes('--summary')) {
+                console.log(chalk.blue('\n🤖 AI Context Summary:'));
+                console.log(chalk.gray('─'.repeat(40)));
+                console.log(summary);
+            }
+
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Context error: ${error.message}`));
+        }
+    }
+
+    private async handleDocUnloadCommand(args: string[]): Promise<void> {
+        try {
+            if (args.length === 0) {
+                // Show current loaded docs and ask for confirmation to clear all
+                const stats = docsContextManager.getContextStats();
+                if (stats.loadedCount === 0) {
+                    console.log(chalk.yellow('❌ No documentation loaded in context'));
+                    return;
+                }
+
+                console.log(chalk.yellow(`⚠️ This will remove all ${stats.loadedCount} loaded documents from AI context`));
+                console.log(chalk.gray('Use /doc-unload <names> to remove specific documents'));
+                console.log(chalk.gray('Use /doc-unload --all to confirm removal of all documents'));
+                return;
+            }
+
+            if (args.includes('--all')) {
+                await docsContextManager.unloadDocs();
+                console.log(chalk.green('✅ All documentation removed from AI context'));
+                return;
+            }
+
+            await docsContextManager.unloadDocs(args);
+            
+            const stats = docsContextManager.getContextStats();
+            console.log(chalk.green('✅ Documentation context updated'));
+            console.log(chalk.gray(`   • Remaining docs: ${stats.loadedCount}`));
+            console.log(chalk.gray(`   • Context usage: ${stats.utilizationPercent.toFixed(1)}%`));
+
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Unload error: ${error.message}`));
+        }
+    }
+
+    private async handleDocSuggestCommand(args: string[]): Promise<void> {
+        try {
+            const query = args.join(' ');
+            if (!query) {
+                console.log(chalk.red('Usage: /doc-suggest <query>'));
+                console.log(chalk.gray('Example: /doc-suggest react hooks'));
+                console.log(chalk.gray('Example: /doc-suggest authentication'));
+                return;
+            }
+
+            console.log(chalk.blue(`💡 Suggesting documentation for: "${query}"`));
+            
+            const suggestions = await docsContextManager.suggestDocs(query, 10);
+            
+            if (suggestions.length === 0) {
+                console.log(chalk.yellow('❌ No relevant documentation found'));
+                console.log(chalk.gray('Try different keywords or use /doc-add to add more documentation'));
+                return;
+            }
+
+            console.log(chalk.green(`\n✅ Found ${suggestions.length} relevant documents:`));
+            console.log(chalk.gray('─'.repeat(50)));
+            
+            suggestions.forEach((title, index) => {
+                console.log(chalk.blue(`${index + 1}. ${title}`));
+            });
+
+            console.log(chalk.gray('\n💡 To load these documents:'));
+            console.log(chalk.gray(`/doc-load "${suggestions.slice(0, 3).join('" "')}"`));
+
+        } catch (error: any) {
+            console.error(chalk.red(`❌ Suggest error: ${error.message}`));
+        }
+    }
+
     // Enhanced Planning Methods (from enhanced-planning.ts)
     private async generateAdvancedPlan(goal: string, options: any = {}): Promise<any> {
         const {
@@ -4387,7 +4851,40 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         planningService.setWorkingDirectory(this.workingDirectory);
         // Event bridge is idempotent
         this.setupOrchestratorEventBridge();
+        
+        // Initialize cloud docs provider
+        await this.initializeCloudDocs();
+        
         console.log(chalk.dim('✓ Systems initialized'));
+    }
+
+    private async initializeCloudDocs(): Promise<void> {
+        try {
+            const cloudDocsConfig = this.configManager.get('cloudDocs');
+            
+            // Get API credentials from environment or config
+            const apiUrl = cloudDocsConfig.apiUrl || process.env.SUPABASE_URL;
+            const apiKey = cloudDocsConfig.apiKey || process.env.SUPABASE_ANON_KEY;
+            
+            if (cloudDocsConfig.enabled && apiUrl && apiKey) {
+                const provider = createCloudDocsProvider({
+                    ...cloudDocsConfig,
+                    apiUrl,
+                    apiKey
+                });
+                
+                if (cloudDocsConfig.autoSync) {
+                    console.log(chalk.gray('📚 Auto-syncing documentation library...'));
+                    await provider.sync();
+                }
+                
+                console.log(chalk.dim('✓ Cloud documentation system ready'));
+            } else {
+                console.log(chalk.dim('ℹ️ Cloud documentation disabled'));
+            }
+        } catch (error: any) {
+            console.log(chalk.yellow(`⚠️ Cloud docs initialization failed: ${error.message}`));
+        }
     }
 
     private switchModel(modelName: string): void {
@@ -5095,6 +5592,19 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/mcp remove <name>', 'Remove MCP server'],
             ['/mcp health', 'Check all server health'],
 
+            // Documentation Management
+            ['/docs', 'Documentation system help and status'],
+            ['/doc-search <query> [category]', 'Search documentation library'],
+            ['/doc-add <url> [category]', 'Add documentation from URL'],
+            ['/doc-stats [--detailed]', 'Show library statistics'],
+            ['/doc-list [category]', 'List available documentation'],
+            ['/doc-sync', 'Sync with cloud documentation library'],
+            ['/doc-load <names>', 'Load docs into AI agent context'],
+            ['/doc-context [--detailed]', 'Show AI context documentation'],
+            ['/doc-unload [names]', 'Remove docs from AI context'],
+            ['/doc-suggest <query>', 'Suggest relevant documentation'],
+            ['/doc-tag <id> <tags>', 'Manage document tags (coming soon)'],
+
             // Advanced Features
             ['/context [paths]', 'Manage workspace context'],
             ['/stream [clear]', 'Show/clear agent streams'],
@@ -5151,13 +5661,18 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
+        console.log(chalk.blue.bold('\n📚 Documentation Management:'));
+        commands.slice(44, 55).forEach(([cmd, desc]) => {
+            console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
+        });
+
         console.log(chalk.blue.bold('\n🔧 Advanced Features:'));
-        commands.slice(44, 49).forEach(([cmd, desc]) => {
+        commands.slice(55, 60).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
         console.log(chalk.blue.bold('\n📋 Basic Commands:'));
-        commands.slice(49).forEach(([cmd, desc]) => {
+        commands.slice(60).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 

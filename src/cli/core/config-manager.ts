@@ -93,6 +93,26 @@ const ConfigSchema = z.object({
     allowNetwork: false,
     allowCommands: true,
   }),
+  // Cloud documentation system
+  cloudDocs: z.object({
+    enabled: z.boolean().default(false),
+    provider: z.enum(['supabase', 'firebase', 'github']).default('supabase'),
+    apiUrl: z.string().optional(),
+    apiKey: z.string().optional(),
+    autoSync: z.boolean().default(true),
+    contributionMode: z.boolean().default(true),
+    maxContextSize: z.number().min(10000).max(100000).default(50000),
+    autoLoadForAgents: z.boolean().default(true),
+    smartSuggestions: z.boolean().default(true),
+  }).default({
+    enabled: false,
+    provider: 'supabase',
+    autoSync: true,
+    contributionMode: true,
+    maxContextSize: 50000,
+    autoLoadForAgents: true,
+    smartSuggestions: true,
+  }),
 });
 
 export type ConfigType = z.infer<typeof ConfigSchema>;
@@ -201,6 +221,15 @@ export class SimpleConfigManager {
       allowNetwork: false,
       allowCommands: true,
     },
+    cloudDocs: {
+      enabled: true,
+      provider: 'supabase' as const,
+      autoSync: true,
+      contributionMode: true,
+      maxContextSize: 50000,
+      autoLoadForAgents: true,
+      smartSuggestions: true,
+    },
   };
 
   constructor() {
@@ -290,6 +319,24 @@ export class SimpleConfigManager {
     }
 
     return undefined;
+  }
+
+  // Cloud documentation API keys
+  getCloudDocsApiKeys(): { apiUrl?: string; apiKey?: string } {
+    // Fallback to environment variables if config not loaded
+    if (!this.config || !this.config.cloudDocs) {
+      return {
+        apiUrl: process.env.SUPABASE_URL,
+        apiKey: process.env.SUPABASE_ANON_KEY
+      };
+    }
+    
+    const cloudDocsConfig = this.config.cloudDocs;
+    
+    return {
+      apiUrl: cloudDocsConfig.apiUrl || process.env.SUPABASE_URL,
+      apiKey: cloudDocsConfig.apiKey || process.env.SUPABASE_ANON_KEY
+    };
   }
 
   // Model management

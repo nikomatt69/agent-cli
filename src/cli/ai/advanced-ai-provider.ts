@@ -33,6 +33,11 @@ import { PromptManager } from '../prompts/prompt-manager';
 import { smartCache } from '../core/smart-cache-manager';
 import { docLibrary } from '../core/documentation-library';
 import { documentationTools } from '../core/documentation-tool';
+import { docsContextManager } from '../context/docs-context-manager';
+import { smartDocsTools } from '../tools/smart-docs-tool';
+import { aiDocsTools } from '../tools/docs-request-tool';
+import { intelligentFeedbackWrapper } from '../core/intelligent-feedback-wrapper';
+import FeedbackAwareTools from '../core/feedback-aware-tools';
 
 const execAsync = promisify(exec);
 
@@ -228,15 +233,24 @@ export class AdvancedAIProvider implements AutonomousProvider {
   // Enhanced system prompt with advanced capabilities (using PromptManager)
   private async getEnhancedSystemPrompt(context: any = {}): Promise<string> {
     try {
+      // Get documentation context if available
+      const docsContext = this.getDocumentationContext();
+      
       // Try to load base agent prompt first
       const basePrompt = await this.promptManager.loadPromptForContext({
         agentId: 'base-agent',
         parameters: {
           workingDirectory: this.workingDirectory,
           availableTools: this.toolRouter.getAllTools().map(tool => `${tool.tool}: ${tool.description}`).join(', '),
+          documentationContext: docsContext,
           ...context
         }
       });
+
+      // If docs are loaded, append them to the base prompt
+      if (docsContext) {
+        return `${basePrompt}\n\n${docsContext}`;
+      }
 
       return basePrompt;
     } catch (error) {
@@ -245,7 +259,10 @@ export class AdvancedAIProvider implements AutonomousProvider {
         .map(tool => `${tool.tool}: ${tool.description}`)
         .join(', ');
 
-      return `You are an advanced AI development assistant with enhanced capabilities:
+      // Get documentation context for fallback too
+      const docsContext = this.getDocumentationContext();
+
+      const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
 🧠 **Enhanced Intelligence**:
 - Context-aware analysis and reasoning
@@ -282,6 +299,40 @@ export class AdvancedAIProvider implements AutonomousProvider {
 **Available Tools**: ${toolDescriptions}
 
 Respond in a helpful, professional manner with clear explanations and actionable insights.`;
+
+      // Add documentation context if available
+      if (docsContext) {
+        return `${basePrompt}\n\n${docsContext}`;
+      }
+
+      return basePrompt;
+    }
+  }
+
+  // Get current documentation context for AI
+  private getDocumentationContext(): string | null {
+    try {
+      const stats = docsContextManager.getContextStats();
+      
+      if (stats.loadedCount === 0) {
+        return null;
+      }
+
+      // Get context summary and full context
+      const contextSummary = docsContextManager.getContextSummary();
+      const fullContext = docsContextManager.getFullContext();
+      
+      // Limit context size to prevent token overflow
+      const maxContextLength = 30000; // ~20K words
+      if (fullContext.length <= maxContextLength) {
+        return fullContext;
+      }
+
+      // If full context is too large, return summary only
+      return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
+    } catch (error) {
+      console.error('Error getting documentation context:', error);
+      return null;
     }
   }
 
@@ -685,6 +736,15 @@ Respond in a helpful, professional manner with clear explanations and actionable
       doc_search: documentationTools.search,
       doc_add: documentationTools.add,
       doc_stats: documentationTools.stats,
+
+      // Smart documentation tools for AI agents
+      smart_docs_search: smartDocsTools.search,
+      smart_docs_load: smartDocsTools.load,
+      smart_docs_context: smartDocsTools.context,
+      
+      // AI documentation request tools
+      docs_request: aiDocsTools.request,
+      docs_gap_report: aiDocsTools.gapReport,
     };
   }
 
