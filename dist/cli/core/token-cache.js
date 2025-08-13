@@ -48,9 +48,9 @@ const chalk_1 = __importDefault(require("chalk"));
 class TokenCacheManager {
     constructor(cacheDir = './.nikcli') {
         this.cache = new Map();
-        this.maxCacheSize = 100; // Ridotto ulteriormente
-        this.similarityThreshold = 0.98; // Praticamente uguale
-        this.maxCacheAge = 1 * 24 * 60 * 60 * 1000; // 1 giorno
+        this.maxCacheSize = 1000;
+        this.similarityThreshold = 0.85;
+        this.maxCacheAge = 7 * 24 * 60 * 60 * 1000; // 7 days
         this.cacheFile = path.join(cacheDir, 'token-cache.json');
         this.loadCache();
     }
@@ -68,6 +68,23 @@ class TokenCacheManager {
             .update(sortedWords.join('|'))
             .digest('hex')
             .substring(0, 16);
+    }
+    /**
+     * Extract signature words used for similarity without storing full text
+     */
+    extractSignatureWords(text) {
+        const normalized = this.normalizeText(text);
+        const all = normalized.split(/\s+/).filter(w => w.length > 2);
+        // Frequency map
+        const freq = new Map();
+        for (const w of all)
+            freq.set(w, (freq.get(w) || 0) + 1);
+        // Sort by frequency then alphabetically
+        const sorted = Array.from(freq.entries())
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, 20)
+            .map(([w]) => w);
+        return sorted;
     }
     /**
      * Generate exact hash for precise matching
@@ -100,18 +117,31 @@ class TokenCacheManager {
         return intersection.size / union.size;
     }
     /**
+     * Similarity using current prompt vs stored signature word set
+     */
+    calculateSignatureSimilarity(text, signatureWords) {
+        const set1 = new Set(this.normalizeText(text).split(/\s+/).filter(w => w.length > 2));
+        const set2 = new Set(signatureWords);
+        const intersection = new Set([...set1].filter(w => set2.has(w)));
+        const union = new Set([...set1, ...set2]);
+        return union.size === 0 ? 0 : intersection.size / union.size;
+    }
+    /**
      * Find cached response for similar prompts
      */
     async getCachedResponse(prompt, context = '', tags = []) {
         // First try exact match
         const exactKey = this.generateExactKey(prompt, context);
-        const exactEntry = this.cache.get(exactKey);
-        if (exactEntry) {
-            exactEntry.hitCount++;
-            exactEntry.exactMatch = true;
-            return exactEntry;
+        if (this.cache.has(exactKey)) {
+            const entry = this.cache.get(exactKey);
+            entry.hitCount++;
+            entry.similarity = 1.0;
+            console.log(chalk_1.default.green(`🎯 Cache HIT (exact): saved ~${entry.tokensSaved} tokens`));
+            return entry;
         }
-        // Then try very similar match (98% similarity)
+        // Then try semantic similarity
+        const semanticKey = this.generateSemanticKey(prompt, context);
+        // Find similar entries
         const similarEntries = Array.from(this.cache.values())
             .filter(entry => {
             // Check if entry is not expired
@@ -128,15 +158,16 @@ class TokenCacheManager {
         })
             .map(entry => ({
             ...entry,
-            similarity: this.calculateSimilarity(prompt + context, entry.userInput)
+            similarity: entry.signatureWords && entry.signatureWords.length > 0
+                ? this.calculateSignatureSimilarity(prompt, entry.signatureWords)
+                : (entry.userInput ? this.calculateSimilarity(prompt, entry.userInput) : 0)
         }))
-            .filter(entry => entry.similarity >= this.similarityThreshold) // 98% similarity
+            .filter(entry => entry.similarity >= this.similarityThreshold)
             .sort((a, b) => b.similarity - a.similarity);
         if (similarEntries.length > 0) {
             const bestMatch = similarEntries[0];
             bestMatch.hitCount++;
-            bestMatch.exactMatch = bestMatch.similarity >= 0.99; // Esatto se >= 99%
-            console.log(chalk_1.default.cyan(`🎯 Similarity: ${(bestMatch.similarity * 100).toFixed(1)}%`));
+            console.log(chalk_1.default.cyan(`🎯 Cache HIT (similar ${Math.round(bestMatch.similarity * 100)}%): saved ~${bestMatch.tokensSaved} tokens`));
             return bestMatch;
         }
         return null;
@@ -149,8 +180,10 @@ class TokenCacheManager {
         const entry = {
             key: exactKey,
             promptHash: this.generateSemanticKey(prompt, context),
-            userInput: prompt,
-            response,
+            signatureWords: this.extractSignatureWords(prompt + ' ' + context),
+            promptPreview: prompt.substring(0, 120),
+            responseHash: crypto_1.default.createHash('sha256').update(response).digest('hex').substring(0, 32),
+            responsePreview: response.substring(0, 120),
             timestamp: new Date(),
             tokensSaved: Math.max(tokensSaved, this.estimateTokens(prompt + response)),
             hitCount: 0,
@@ -164,7 +197,7 @@ class TokenCacheManager {
         if (this.cache.size % 10 === 0) {
             await this.saveCache();
         }
-        console.log(chalk_1.default.blue(`💾`));
+        console.log(chalk_1.default.blue(`💾 Cached response (${this.cache.size} entries)`));
     }
     /**
      * Estimate token count from text
@@ -281,7 +314,7 @@ class TokenCacheManager {
         return Array.from(this.cache.values())
             .map(entry => ({
             ...entry,
-            similarity: this.calculateSimilarity(prompt, entry.userInput)
+            similarity: entry.userInput ? this.calculateSimilarity(prompt, entry.userInput) : 0
         }))
             .filter(entry => entry.similarity > 0.5)
             .sort((a, b) => b.similarity - a.similarity)

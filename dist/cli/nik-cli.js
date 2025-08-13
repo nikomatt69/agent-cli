@@ -3353,7 +3353,7 @@ Planning:
             if (cachedResponse) {
                 console.log(chalk_1.default.green('🎯 Using cached planning response'));
                 try {
-                    const planData = JSON.parse(cachedResponse.response);
+                    const planData = JSON.parse(cachedResponse.response || '{}');
                     if (planData.todos && Array.isArray(planData.todos)) {
                         return planData.todos.slice(0, maxTodos);
                     }

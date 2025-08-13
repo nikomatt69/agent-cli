@@ -1,0 +1,1129 @@
+---
+title: 'Agent Management'
+description: 'Complete guide to managing AI agents in NikCLI'
+icon: 'users'
+---
+
+## Overview
+
+NikCLI's agent management system provides sophisticated control over AI agents, enabling you to orchestrate multiple specialized agents, create custom agents, and manage complex multi-agent workflows. The system supports both individual agent operations and coordinated multi-agent collaboration.
+
+<CardGroup cols={2}>
+  <Card title="Agent Orchestration" icon="sitemap">
+    Coordinate multiple agents for complex tasks
+  </Card>
+  <Card title="Custom Agents" icon="wrench">
+    Create and deploy specialized agents
+  </Card>
+  <Card title="Performance Monitoring" icon="chart-line">
+    Track agent performance and effectiveness
+  </Card>
+  <Card title="Workflow Management" icon="flow-chart">
+    Design and execute multi-agent workflows
+  </Card>
+</CardGroup>
+
+## Core Agent Commands
+
+### `/agents` - Agent Discovery and Status
+
+Display comprehensive information about available agents and their current status.
+
+<Tabs>
+  <Tab title="Basic Agent Listing">
+    ```bash
+    # List all available agents
+    /agents
+    
+    # Show detailed agent information
+    /agents --detailed
+    /agents --verbose
+    
+    # Filter agents by capability
+    /agents --frontend
+    /agents --backend
+    /agents --devops
+    ```
+    
+    **Output Example:**
+    ```
+    Available Agents:
+    ┌─────────────────┬──────────────┬─────────┬─────────────┐
+    │ Agent           │ Specialization│ Status  │ Performance │
+    ├─────────────────┼──────────────┼─────────┼─────────────┤
+    │ universal-agent │ Full-stack   │ Active  │ 95.2%       │
+    │ react-expert    │ React/UI     │ Idle    │ 92.8%       │
+    │ backend-agent   │ APIs/Services│ Active  │ 89.5%       │
+    │ devops-agent    │ CI/CD/Deploy │ Idle    │ 87.3%       │
+    └─────────────────┴──────────────┴─────────┴─────────────┘
+    ```
+  </Tab>
+  
+  <Tab title="Agent Capabilities">
+    ```bash
+    # Show agent capabilities
+    /agents capabilities
+    /agents --skills --tools
+    
+    # Show agent specializations
+    /agents specializations
+    /agents --domains --expertise
+    
+    # Show agent performance metrics
+    /agents performance
+    /agents --metrics --success-rate --efficiency
+    ```
+  </Tab>
+  
+  <Tab title="Agent Health">
+    ```bash
+    # Check agent health
+    /agents health
+    /agents --status --diagnostics
+    
+    # Show agent resource usage
+    /agents resources
+    /agents --cpu --memory --tokens
+    
+    # Agent activity monitoring
+    /agents activity
+    /agents --tasks --history --timeline
+    ```
+  </Tab>
+</Tabs>
+
+### `/agent` - Individual Agent Execution
+
+Execute tasks with specific agents, providing fine-grained control over agent selection and behavior.
+
+<AccordionGroup>
+  <Accordion title="Direct Agent Invocation">
+    ```bash
+    # Execute with universal agent
+    /agent universal-agent "create a React login component"
+    
+    # Execute with specialized agent
+    /agent react-expert "optimize this component for performance"
+    /agent backend-agent "create REST API for user management"
+    /agent devops-agent "set up CI/CD pipeline for deployment"
+    ```
+    
+    **Agent Selection Guide:**
+    - `universal-agent`: Best for general tasks requiring multiple skills
+    - `react-expert`: Optimal for React/Next.js specific tasks
+    - `backend-agent`: Ideal for API, database, and server-side logic
+    - `devops-agent`: Perfect for deployment, monitoring, and infrastructure
+  </Accordion>
+  
+  <Accordion title="Agent Configuration">
+    ```bash
+    # Configure agent parameters
+    /agent react-expert --temperature 0.3 "refactor component"
+    /agent backend-agent --max-tokens 4000 "design database schema"
+    
+    # Set agent context
+    /agent universal-agent --context "src/components/" "analyze code"
+    /agent devops-agent --workspace "infrastructure/" "update configs"
+    
+    # Agent execution modes
+    /agent react-expert --mode creative "design new UI pattern"
+    /agent backend-agent --mode conservative "fix security issue"
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent Chaining">
+    ```bash
+    # Sequential agent execution
+    /agent backend-agent "create API endpoint" | 
+    /agent react-expert "create UI component for API"
+    
+    # Conditional agent chaining
+    /agent universal-agent "analyze project structure" --then-if-frontend 
+    /agent react-expert "optimize components"
+    
+    # Agent handoff with context
+    /agent backend-agent "implement authentication" --handoff-to 
+    /agent react-expert --context "auth implementation"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/auto` - Autonomous Multi-Agent Execution
+
+Enable autonomous mode where agents work together with minimal human intervention.
+
+<Tabs>
+  <Tab title="Basic Autonomous Mode">
+    ```bash
+    # Simple autonomous task
+    /auto "create a todo application with React and Node.js"
+    
+    # Complex autonomous project
+    /auto "build a e-commerce platform with authentication, 
+           payment processing, and admin dashboard"
+    
+    # Autonomous bug fixing
+    /auto "identify and fix all TypeScript errors in the project"
+    ```
+  </Tab>
+  
+  <Tab title="Autonomous Configuration">
+    ```bash
+    # Configure autonomous behavior
+    /auto --approval-required "major refactoring"
+    /auto --no-approval "minor fixes and optimizations"
+    
+    # Set autonomous constraints
+    /auto --max-agents 3 --time-limit 2h "optimize application"
+    /auto --budget-tokens 50000 "implement new features"
+    
+    # Autonomous with specific agents
+    /auto --agents "react-expert,backend-agent" 
+         "create full-stack authentication system"
+    ```
+  </Tab>
+  
+  <Tab title="Autonomous Monitoring">
+    ```bash
+    # Monitor autonomous execution
+    /auto status
+    /auto --progress --timeline
+    
+    # Control autonomous execution
+    /auto pause
+    /auto resume
+    /auto stop
+    
+    # Autonomous execution history
+    /auto history
+    /auto --sessions --results --performance
+    ```
+  </Tab>
+</Tabs>
+
+### `/parallel` - Parallel Agent Execution
+
+Execute multiple agents simultaneously on related or independent tasks.
+
+<AccordionGroup>
+  <Accordion title="Parallel Task Distribution">
+    ```bash
+    # Parallel execution with multiple agents
+    /parallel "react-expert,backend-agent" 
+              "create user dashboard with API integration"
+    
+    # Distribute tasks across agents
+    /parallel --distribute "optimize frontend performance" 
+              --agents "react-expert,universal-agent"
+    
+    # Parallel with different tasks
+    /parallel --tasks "frontend:react-expert:create UI components"
+                     "backend:backend-agent:implement API endpoints"
+                     "devops:devops-agent:setup deployment pipeline"
+    ```
+  </Accordion>
+  
+  <Accordion title="Parallel Coordination">
+    ```bash
+    # Coordinated parallel execution
+    /parallel --coordinated 
+              --agents "react-expert,backend-agent"
+              "build authentication system"
+    
+    # Parallel with synchronization points
+    /parallel --sync-points "design,implementation,testing"
+              --agents "universal-agent,react-expert"
+              "create component library"
+    
+    # Parallel with conflict resolution
+    /parallel --resolve-conflicts auto
+              --agents "react-expert,universal-agent"
+              "refactor application architecture"
+    ```
+  </Accordion>
+  
+  <Accordion title="Parallel Monitoring">
+    ```bash
+    # Monitor parallel execution
+    /parallel status
+    /parallel --progress --per-agent
+    
+    # Parallel execution control
+    /parallel pause react-expert
+    /parallel resume backend-agent
+    /parallel rebalance
+    
+    # Parallel results aggregation
+    /parallel results
+    /parallel --merge-outputs --summary
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Agent Management
+
+### `/factory` - Agent Factory Dashboard
+
+Access the agent factory for creating, configuring, and managing custom agents.
+
+<Tabs>
+  <Tab title="Agent Creation Interface">
+    ```bash
+    # Open agent factory dashboard
+    /factory
+    
+    # Create new agent interactively
+    /factory create
+    /factory --wizard --guided-creation
+    
+    # Agent creation from template
+    /factory template
+    /factory --template react-specialist
+    /factory --template api-developer
+    ```
+  </Tab>
+  
+  <Tab title="Agent Configuration">
+    ```bash
+    # Configure agent capabilities
+    /factory configure agent-id
+    /factory --configure --skills --tools --permissions
+    
+    # Agent training and specialization
+    /factory train agent-id
+    /factory --training-data --examples --feedback
+    
+    # Agent deployment
+    /factory deploy agent-id
+    /factory --deploy --test --validate --activate
+    ```
+  </Tab>
+  
+  <Tab title="Agent Analytics">
+    ```bash
+    # Agent performance analytics
+    /factory analytics
+    /factory --performance --usage --effectiveness
+    
+    # Agent optimization recommendations
+    /factory optimize
+    /factory --suggestions --improvements --tuning
+    
+    # Agent lifecycle management
+    /factory lifecycle
+    /factory --versions --updates --retirement
+    ```
+  </Tab>
+</Tabs>
+
+### `/create-agent` - Custom Agent Creation
+
+Create specialized agents tailored to specific domains or use cases.
+
+<AccordionGroup>
+  <Accordion title="Domain-Specific Agents">
+    ```bash
+    # Create React testing specialist
+    /create-agent "React Testing Expert" 
+                  --domain "frontend-testing"
+                  --skills "jest,react-testing-library,cypress"
+                  --context "testing best practices"
+    
+    # Create API security specialist
+    /create-agent "API Security Analyst"
+                  --domain "backend-security"
+                  --skills "owasp,jwt,oauth,encryption"
+                  --tools "security-scanner,vulnerability-assessment"
+    
+    # Create DevOps automation specialist
+    /create-agent "Infrastructure Automation Expert"
+                  --domain "devops-automation"
+                  --skills "terraform,kubernetes,ansible,monitoring"
+                  --cloud-providers "aws,gcp,azure"
+    ```
+  </Accordion>
+  
+  <Accordion title="Task-Specific Agents">
+    ```bash
+    # Create code review agent
+    /create-agent "Code Review Specialist"
+                  --task "code-review"
+                  --focus "security,performance,maintainability"
+                  --languages "typescript,python,go"
+    
+    # Create documentation agent
+    /create-agent "Documentation Expert"
+                  --task "documentation"
+                  --formats "markdown,jsdoc,api-docs"
+                  --tools "mintlify,gitbook,confluence"
+    
+    # Create performance optimization agent
+    /create-agent "Performance Optimizer"
+                  --task "optimization"
+                  --targets "bundle-size,runtime,memory"
+                  --frameworks "react,vue,angular"
+    ```
+  </Accordion>
+  
+  <Accordion title="Industry-Specific Agents">
+    ```bash
+    # Create fintech compliance agent
+    /create-agent "Fintech Compliance Expert"
+                  --industry "fintech"
+                  --compliance "pci-dss,gdpr,sox"
+                  --focus "payment-processing,audit-trails"
+    
+    # Create healthcare data agent
+    /create-agent "Healthcare Data Specialist"
+                  --industry "healthcare"
+                  --compliance "hipaa,fhir,hl7"
+                  --focus "patient-data,privacy,interoperability"
+    
+    # Create e-commerce optimization agent
+    /create-agent "E-commerce Optimizer"
+                  --industry "e-commerce"
+                  --focus "conversion,ux,performance,seo"
+                  --platforms "shopify,woocommerce,magento"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/launch-agent` - Blueprint-Based Agent Deployment
+
+Deploy agents from pre-configured blueprints or saved configurations.
+
+<Tabs>
+  <Tab title="Blueprint Deployment">
+    ```bash
+    # Launch from saved blueprint
+    /launch-agent blueprint-id "implement user authentication"
+    
+    # Launch with configuration override
+    /launch-agent react-testing-blueprint 
+                  --override temperature=0.2
+                  "create comprehensive test suite"
+    
+    # Launch multiple agents from blueprint
+    /launch-agent full-stack-blueprint
+                  --agents "frontend,backend,devops"
+                  "build complete application"
+    ```
+  </Tab>
+  
+  <Tab title="Blueprint Management">
+    ```bash
+    # List available blueprints
+    /launch-agent --list-blueprints
+    /launch-agent --blueprints --categories
+    
+    # Create blueprint from existing agent
+    /launch-agent --save-blueprint agent-id "custom-react-expert"
+    
+    # Update blueprint configuration
+    /launch-agent --update-blueprint blueprint-id
+                  --add-skill "testing"
+                  --modify-context "src/components/"
+    ```
+  </Tab>
+  
+  <Tab title="Blueprint Sharing">
+    ```bash
+    # Export blueprint for sharing
+    /launch-agent --export-blueprint react-expert-v2
+                  --format json --include-training-data
+    
+    # Import shared blueprint
+    /launch-agent --import-blueprint ./shared-agent-blueprint.json
+                  --validate --test
+    
+    # Blueprint version control
+    /launch-agent --version-blueprint react-expert
+                  --tag "v1.2.0" --changelog "Added hook optimization"
+    ```
+  </Tab>
+</Tabs>
+
+## Agent Collaboration and Orchestration
+
+### `/orchestrate` - Multi-Agent Orchestration
+
+Design and execute complex multi-agent workflows with sophisticated coordination.
+
+<AccordionGroup>
+  <Accordion title="Workflow Definition">
+    ```bash
+    # Define multi-agent workflow
+    /orchestrate workflow "full-stack-development"
+                --phases "design,backend,frontend,testing,deployment"
+                --agents "universal-agent,backend-agent,react-expert,devops-agent"
+    
+    # Create conditional workflow
+    /orchestrate workflow "adaptive-development"
+                --condition "if typescript then add type-checking phase"
+                --condition "if react then optimize for performance"
+    
+    # Workflow with dependencies
+    /orchestrate workflow "microservices-deployment"
+                --dependencies "database:before:api"
+                --dependencies "api:before:frontend"
+                --dependencies "frontend:before:e2e-tests"
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent Coordination">
+    ```bash
+    # Coordinate agent handoffs
+    /orchestrate handoff "backend-agent" "react-expert"
+                --context "API implementation completed"
+                --next-task "create frontend integration"
+    
+    # Synchronize agent checkpoints
+    /orchestrate sync --checkpoint "design-review"
+                --agents "react-expert,backend-agent"
+                --approval-required
+    
+    # Agent conflict resolution
+    /orchestrate resolve-conflict
+                --agents "react-expert,universal-agent"
+                --conflict-type "implementation-approach"
+                --resolution-strategy "expert-preference"
+    ```
+  </Accordion>
+  
+  <Accordion title="Orchestration Monitoring">
+    ```bash
+    # Monitor workflow execution
+    /orchestrate status
+    /orchestrate --timeline --progress --bottlenecks
+    
+    # Workflow performance analysis
+    /orchestrate analytics
+    /orchestrate --efficiency --resource-usage --success-rate
+    
+    # Workflow optimization
+    /orchestrate optimize
+    /orchestrate --rebalance --parallel-opportunities --reduce-overhead
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/context` - Agent Context Management
+
+Manage workspace context and information sharing between agents.
+
+<Tabs>
+  <Tab title="Context Configuration">
+    ```bash
+    # Set workspace context
+    /context workspace src/
+    /context --paths "src/components/,src/hooks/,src/utils/"
+    
+    # Set context with filters
+    /context --include "*.ts,*.tsx"
+              --exclude "*.test.*,*.spec.*"
+              --max-files 100
+    
+    # Dynamic context based on task
+    /context auto --task "react component optimization"
+             --smart-selection --relevant-files-only
+    ```
+  </Tab>
+  
+  <Tab title="Context Sharing">
+    ```bash
+    # Share context between agents
+    /context share --from "react-expert" --to "backend-agent"
+             --context-type "component-api-requirements"
+    
+    # Global context for all agents
+    /context global --set "project-standards,coding-guidelines"
+                    --access-level "read-only"
+    
+    # Context isolation
+    /context isolate --agent "security-agent"
+                     --sensitive-paths "config/,secrets/"
+    ```
+  </Tab>
+  
+  <Tab title="Context Intelligence">
+    ```bash
+    # Analyze context relevance
+    /context analyze
+    /context --relevance-score --context-gaps --recommendations
+    
+    # Context optimization
+    /context optimize
+    /context --reduce-noise --prioritize-files --smart-chunking
+    
+    # Context versioning
+    /context version --snapshot "pre-refactor"
+             --restore "stable-state"
+             --compare "before-after"
+    ```
+  </Tab>
+</Tabs>
+
+### `/stream` - Agent Activity Streaming
+
+Monitor and control live agent activity streams for real-time visibility.
+
+<AccordionGroup>
+  <Accordion title="Stream Dashboard">
+    ```bash
+    # Open stream dashboard
+    /stream
+    
+    # View specific agent stream
+    /stream agent react-expert
+    /stream --agent backend-agent --verbose
+    
+    # Multiple agent streams
+    /stream multi --agents "react-expert,backend-agent"
+            --layout split --real-time
+    ```
+  </Accordion>
+  
+  <Accordion title="Stream Control">
+    ```bash
+    # Pause agent stream
+    /stream pause react-expert
+    
+    # Resume agent stream
+    /stream resume backend-agent
+    
+    # Clear completed streams
+    /stream clear
+    /stream --cleanup --completed --older-than 24h
+    
+    # Stream recording
+    /stream record --agent universal-agent
+            --output "agent-session-$(date).log"
+    ```
+  </Accordion>
+  
+  <Accordion title="Stream Analytics">
+    ```bash
+    # Stream performance metrics
+    /stream metrics
+    /stream --throughput --response-time --error-rate
+    
+    # Stream pattern analysis
+    /stream patterns
+    /stream --common-tasks --efficiency-trends --bottlenecks
+    
+    # Stream alerting
+    /stream alerts --setup
+            --threshold response-time=5s
+            --threshold error-rate=10%
+            --notify-on failure
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent Performance and Optimization
+
+### `/agent-performance` - Performance Monitoring
+
+Monitor and analyze agent performance metrics for optimization opportunities.
+
+<Tabs>
+  <Tab title="Performance Metrics">
+    ```bash
+    # Overall performance dashboard
+    /agent-performance dashboard
+    /agent-performance --metrics --charts --trends
+    
+    # Agent-specific performance
+    /agent-performance react-expert
+    /agent-performance --agent backend-agent --detailed
+    
+    # Comparative performance analysis
+    /agent-performance compare
+    /agent-performance --agents "react-expert,universal-agent"
+                       --metric efficiency --time-range 7d
+    ```
+  </Tab>
+  
+  <Tab title="Resource Usage">
+    ```bash
+    # Token consumption analysis
+    /agent-performance tokens
+    /agent-performance --token-usage --by-agent --cost-analysis
+    
+    # Processing time analysis
+    /agent-performance timing
+    /agent-performance --response-times --task-complexity --optimization
+    
+    # Memory and CPU usage
+    /agent-performance resources
+    /agent-performance --system-resources --agent-overhead
+    ```
+  </Tab>
+  
+  <Tab title="Quality Metrics">
+    ```bash
+    # Success rate analysis
+    /agent-performance success-rate
+    /agent-performance --completed-tasks --failure-analysis
+    
+    # Output quality assessment
+    /agent-performance quality
+    /agent-performance --code-quality --accuracy --relevance
+    
+    # User satisfaction metrics
+    /agent-performance satisfaction
+    /agent-performance --user-feedback --task-completion-rate
+    ```
+  </Tab>
+</Tabs>
+
+### `/optimize-agents` - Agent Optimization
+
+Optimize agent configuration and performance based on usage patterns and feedback.
+
+<AccordionGroup>
+  <Accordion title="Automatic Optimization">
+    ```bash
+    # Auto-optimize all agents
+    /optimize-agents auto
+    /optimize-agents --auto-tune --performance-based --usage-patterns
+    
+    # Optimize specific agent
+    /optimize-agents react-expert
+    /optimize-agents --agent backend-agent --focus response-time
+    
+    # Optimization recommendations
+    /optimize-agents recommend
+    /optimize-agents --suggestions --impact-analysis --implementation-guide
+    ```
+  </Accordion>
+  
+  <Accordion title="Configuration Optimization">
+    ```bash
+    # Temperature optimization
+    /optimize-agents temperature
+    /optimize-agents --temperature-tuning --task-specific
+    
+    # Context window optimization
+    /optimize-agents context
+    /optimize-agents --context-sizing --relevance-filtering
+    
+    # Tool usage optimization
+    /optimize-agents tools
+    /optimize-agents --tool-selection --access-patterns
+    ```
+  </Accordion>
+  
+  <Accordion title="Learning and Adaptation">
+    ```bash
+    # Agent learning from feedback
+    /optimize-agents learn
+    /optimize-agents --feedback-integration --pattern-recognition
+    
+    # Adaptive agent behavior
+    /optimize-agents adapt
+    /optimize-agents --behavioral-adaptation --context-awareness
+    
+    # Continuous improvement
+    /optimize-agents improve
+    /optimize-agents --continuous-learning --performance-monitoring
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent Security and Governance
+
+### `/agent-security` - Security Management
+
+Implement comprehensive security controls and governance for agent operations.
+
+<Tabs>
+  <Tab title="Access Control">
+    ```bash
+    # Agent permission management
+    /agent-security permissions
+    /agent-security --permissions --agent react-expert --tools --resources
+    
+    # Role-based access control
+    /agent-security rbac
+    /agent-security --roles --assign "developer:react-expert,backend-agent"
+    
+    # Security policy enforcement
+    /agent-security policy
+    /agent-security --policy-check --violations --enforcement
+    ```
+  </Tab>
+  
+  <Tab title="Audit and Compliance">
+    ```bash
+    # Agent activity audit
+    /agent-security audit
+    /agent-security --audit-log --actions --resources --timeline
+    
+    # Compliance checking
+    /agent-security compliance
+    /agent-security --gdpr --hipaa --sox --compliance-report
+    
+    # Security incident response
+    /agent-security incident
+    /agent-security --incident-detection --response-plan --containment
+    ```
+  </Tab>
+  
+  <Tab title="Data Protection">
+    ```bash
+    # Data classification and protection
+    /agent-security data-protection
+    /agent-security --classify-data --encryption --access-controls
+    
+    # Sensitive data handling
+    /agent-security sensitive
+    /agent-security --pii-detection --masking --secure-processing
+    
+    # Data retention and purging
+    /agent-security retention
+    /agent-security --data-lifecycle --purge-policies --compliance
+    ```
+  </Tab>
+</Tabs>
+
+### `/agent-governance` - Governance Framework
+
+Establish governance frameworks for agent development, deployment, and operations.
+
+<AccordionGroup>
+  <Accordion title="Governance Policies">
+    ```bash
+    # Define governance policies
+    /agent-governance policy-define
+    /agent-governance --policy "agent-creation-approval"
+                      --policy "performance-standards"
+                      --policy "security-requirements"
+    
+    # Policy enforcement
+    /agent-governance enforce
+    /agent-governance --policy-enforcement --violations --remediation
+    
+    # Policy compliance reporting
+    /agent-governance compliance
+    /agent-governance --compliance-report --exceptions --improvements
+    ```
+  </Accordion>
+  
+  <Accordion title="Quality Standards">
+    ```bash
+    # Define quality standards
+    /agent-governance quality-standards
+    /agent-governance --code-quality --performance --reliability
+    
+    # Quality assessment
+    /agent-governance assess
+    /agent-governance --agent react-expert --quality-metrics --benchmarks
+    
+    # Quality improvement plans
+    /agent-governance improve
+    /agent-governance --improvement-plans --training --optimization
+    ```
+  </Accordion>
+  
+  <Accordion title="Risk Management">
+    ```bash
+    # Risk assessment
+    /agent-governance risk-assessment
+    /agent-governance --identify-risks --impact-analysis --mitigation
+    
+    # Risk monitoring
+    /agent-governance risk-monitor
+    /agent-governance --continuous-monitoring --alerts --dashboard
+    
+    # Risk mitigation
+    /agent-governance risk-mitigate
+    /agent-governance --mitigation-strategies --controls --validation
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Agent Features
+
+### `/agent-learning` - Adaptive Learning System
+
+Enable agents to learn and improve from interactions and feedback.
+
+<Tabs>
+  <Tab title="Learning Configuration">
+    ```bash
+    # Enable agent learning
+    /agent-learning enable react-expert
+    /agent-learning --learning-mode adaptive --feedback-integration
+    
+    # Learning data management
+    /agent-learning data
+    /agent-learning --training-data --examples --quality-control
+    
+    # Learning model updates
+    /agent-learning update
+    /agent-learning --model-updates --incremental --validation
+    ```
+  </Tab>
+  
+  <Tab title="Feedback Integration">
+    ```bash
+    # Collect user feedback
+    /agent-learning feedback
+    /agent-learning --user-feedback --ratings --improvement-suggestions
+    
+    # Performance feedback
+    /agent-learning performance-feedback
+    /agent-learning --success-metrics --failure-analysis --optimization
+    
+    # Automated feedback
+    /agent-learning auto-feedback
+    /agent-learning --code-quality-feedback --test-results --deployment-success
+    ```
+  </Tab>
+  
+  <Tab title="Learning Analytics">
+    ```bash
+    # Learning progress tracking
+    /agent-learning progress
+    /agent-learning --learning-curves --improvement-metrics --effectiveness
+    
+    # Knowledge base evolution
+    /agent-learning knowledge
+    /agent-learning --knowledge-updates --skill-development --expertise-growth
+    
+    # Learning impact analysis
+    /agent-learning impact
+    /agent-learning --performance-improvements --user-satisfaction --productivity
+    ```
+  </Tab>
+</Tabs>
+
+### `/agent-collaboration` - Inter-Agent Collaboration
+
+Enable sophisticated collaboration patterns between multiple agents.
+
+<AccordionGroup>
+  <Accordion title="Collaboration Patterns">
+    ```bash
+    # Pair programming mode
+    /agent-collaboration pair
+    /agent-collaboration --agents "react-expert,backend-agent"
+                         --mode pair-programming
+                         --task "implement authentication"
+    
+    # Code review collaboration
+    /agent-collaboration review
+    /agent-collaboration --reviewer "security-agent"
+                         --reviewee "backend-agent"
+                         --focus "security,performance"
+    
+    # Mentoring collaboration
+    /agent-collaboration mentor
+    /agent-collaboration --mentor "senior-agent"
+                         --mentee "junior-agent"
+                         --learning-objectives "best-practices"
+    ```
+  </Accordion>
+  
+  <Accordion title="Knowledge Sharing">
+    ```bash
+    # Share agent insights
+    /agent-collaboration share-insights
+    /agent-collaboration --from react-expert --to universal-agent
+                         --insights "performance-patterns,optimization-techniques"
+    
+    # Cross-agent learning
+    /agent-collaboration cross-learn
+    /agent-collaboration --agents "all" --knowledge-transfer --skill-sharing
+    
+    # Best practices propagation
+    /agent-collaboration propagate-practices
+    /agent-collaboration --source security-agent --practices "secure-coding"
+                         --targets "backend-agent,react-expert"
+    ```
+  </Accordion>
+  
+  <Accordion title="Collaboration Analytics">
+    ```bash
+    # Collaboration effectiveness
+    /agent-collaboration effectiveness
+    /agent-collaboration --collaboration-metrics --success-rates --efficiency
+    
+    # Team dynamics analysis
+    /agent-collaboration dynamics
+    /agent-collaboration --interaction-patterns --communication-quality
+    
+    # Collaborative output quality
+    /agent-collaboration quality
+    /agent-collaboration --joint-outputs --quality-metrics --improvements
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting Agent Issues
+
+### Common Agent Problems
+
+<AccordionGroup>
+  <Accordion title="Agent Not Responding">
+    **Problem:** Agent becomes unresponsive or fails to complete tasks
+    
+    **Diagnostic Steps:**
+    ```bash
+    # Check agent health
+    /agents health react-expert
+    
+    # View agent logs
+    /debug agent react-expert --logs --recent
+    
+    # Check resource usage
+    /agent-performance react-expert --resources
+    ```
+    
+    **Solutions:**
+    ```bash
+    # Restart agent
+    /agents restart react-expert
+    
+    # Reset agent state
+    /agents reset react-expert --preserve-learning
+    
+    # Agent resource optimization
+    /optimize-agents react-expert --memory --context
+    ```
+  </Accordion>
+  
+  <Accordion title="Poor Agent Performance">
+    **Problem:** Agent produces low-quality outputs or takes too long
+    
+    **Diagnostic Steps:**
+    ```bash
+    # Analyze performance metrics
+    /agent-performance react-expert --detailed
+    
+    # Check recent tasks
+    /agents activity react-expert --recent --quality-analysis
+    
+    # Review agent configuration
+    /agents info react-expert --config --capabilities
+    ```
+    
+    **Solutions:**
+    ```bash
+    # Optimize agent configuration
+    /optimize-agents react-expert --auto-tune
+    
+    # Update agent training
+    /agent-learning update react-expert --recent-feedback
+    
+    # Adjust agent parameters
+    /agents configure react-expert --temperature 0.3 --max-tokens 3000
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent Conflicts">
+    **Problem:** Multiple agents produce conflicting outputs or approaches
+    
+    **Diagnostic Steps:**
+    ```bash
+    # Analyze conflict patterns
+    /orchestrate conflicts --agents "react-expert,universal-agent"
+    
+    # Review collaboration history
+    /agent-collaboration history --conflicts --resolution
+    ```
+    
+    **Solutions:**
+    ```bash
+    # Configure conflict resolution
+    /orchestrate configure --conflict-resolution expert-priority
+    
+    # Improve agent coordination
+    /agent-collaboration optimize --coordination-patterns
+    
+    # Establish agent hierarchies
+    /agents hierarchy --senior react-expert --junior universal-agent
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Agent Debugging
+
+<Tabs>
+  <Tab title="Debug Mode">
+    ```bash
+    # Enable agent debugging
+    /debug agent react-expert --enable --verbose
+    
+    # Debug specific agent action
+    /debug agent-action react-expert "create component" --trace
+    
+    # Debug agent decision making
+    /debug agent-reasoning react-expert --decision-tree --context-analysis
+    ```
+  </Tab>
+  
+  <Tab title="Performance Debugging">
+    ```bash
+    # Profile agent execution
+    /debug agent-profile react-expert --execution-time --token-usage
+    
+    # Debug slow responses
+    /debug agent-performance react-expert --bottlenecks --optimization
+    
+    # Debug resource issues
+    /debug agent-resources react-expert --memory --cpu --context-size
+    ```
+  </Tab>
+  
+  <Tab title="Output Quality Debugging">
+    ```bash
+    # Debug output quality
+    /debug agent-quality react-expert --recent-outputs --quality-metrics
+    
+    # Debug learning issues
+    /debug agent-learning react-expert --learning-progress --feedback-integration
+    
+    # Debug capability gaps
+    /debug agent-capabilities react-expert --skill-gaps --training-needs
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Session Management"
+    icon="clock"
+    href="/cli-reference/session-management"
+  >
+    Learn about session control and history management
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/cli-reference/configuration"
+  >
+    Master NikCLI configuration and customization
+  </Card>
+  <Card
+    title="Universal Agent"
+    icon="robot"
+    href="/agent-system/universal-agent"
+  >
+    Deep dive into the Universal Agent capabilities
+  </Card>
+  <Card
+    title="Agent Orchestration"
+    icon="sitemap"
+    href="/agent-system/orchestration"
+  >
+    Explore advanced agent orchestration patterns
+  </Card>
+</CardGroup>
+
+<Tip>
+  Use `/agents` as your first command to understand available agents and their current status. The agent system is designed to be self-managing, but understanding agent capabilities helps you choose the right agent for each task.
+</Tip>
