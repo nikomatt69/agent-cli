@@ -739,68 +739,26 @@ Respond in a helpful, professional manner with clear explanations and actionable
           userContent.toLowerCase().includes('cerca') ||
           userContent.toLowerCase().includes('search');
 
-        // Cache solo per domande ESATTAMENTE identiche
-        if (!isAnalysisRequest) {
-          // Genera chiave esatta per confronto
-          const exactKey = `${userContent.trim()}|${systemContext.substring(0, 500).trim()}`;
+        // Usa cache intelligente ma leggera
+        const cacheDecision = this.smartCache.shouldCache(userContent, systemContext);
 
-          // 1. Prova completion cache (esatto match)
-          const params = this.getProviderParams();
-          const completionRequest = {
-            prefix: userContent.trim(),
-            context: systemContext.substring(0, 500).trim(),
-            maxTokens: Math.min(200, params.maxTokens),
-            temperature: params.temperature,
-            model: this.currentModel
-          };
+        if (cacheDecision.should && !isAnalysisRequest) {
+          const cachedResponse = await this.smartCache.getCachedResponse(userContent, systemContext);
 
-          const protocolCompletion = await completionCache.getCompletion(completionRequest);
-          if (protocolCompletion && protocolCompletion.exactMatch) {
-            yield { type: 'start', content: '🔮 [CACHE] Risposta esatta trovata in completion cache...' };
+          if (cachedResponse) {
+            yield { type: 'start', content: `🎯 Using smart cache (${cacheDecision.strategy})...` };
 
-            const formattedCompletion = this.formatCachedResponse(protocolCompletion.completion);
-            for (const chunk of this.chunkText(formattedCompletion, 80)) {
-              yield { type: 'text_delta', content: chunk };
-            }
-
-            yield { type: 'complete', content: `✅ [CACHE] Completion cache hit - ${protocolCompletion.tokensSaved} tokens risparmiati!` };
-            return;
-          }
-
-          // 2. Prova smart cache (esatto match)
-          const smartCached = await this.smartCache.getCachedResponse(userContent.trim(), systemContext.substring(0, 500).trim());
-          if (smartCached && smartCached.exactMatch) {
-            yield { type: 'start', content: '🎯 [CACHE] Risposta esatta trovata in smart cache...' };
-
-            const formattedResponse = this.formatCachedResponse(smartCached.response);
+            // Stream the cached response properly formatted
+            const formattedResponse = this.formatCachedResponse(cachedResponse.response);
             for (const chunk of this.chunkText(formattedResponse, 80)) {
               yield { type: 'text_delta', content: chunk };
             }
 
-            yield { type: 'complete', content: `✅ [CACHE] Smart cache hit - ${smartCached.metadata.tokensSaved} tokens risparmiati!` };
+            yield { type: 'complete', content: `Cache hit - ${cachedResponse.metadata.tokensSaved} tokens saved!` };
             return;
           }
-
-          // 3. Prova token cache (esatto match)
-          const tokenCached = await tokenCache.getCachedResponse(
-            userContent.trim(),
-            systemContext.substring(0, 500).trim(),
-            ['chat', 'autonomous']
-          );
-
-          if (tokenCached && tokenCached.exactMatch) {
-            yield { type: 'start', content: '💾 [CACHE] Risposta esatta trovata in token cache...' };
-
-            const formattedResponse = this.formatCachedResponse(tokenCached.response);
-            for (const chunk of this.chunkText(formattedResponse, 80)) {
-              yield { type: 'text_delta', content: chunk };
-            }
-
-            yield { type: 'complete', content: '✅ [CACHE] Token cache hit - tokens risparmiati!' };
-            return;
-          }
-        } else {
-          yield { type: 'start', content: '🔍 [AI REALE] Avvio analisi fresca (bypassing cache)...' };
+        } else if (isAnalysisRequest) {
+          yield { type: 'start', content: '🔍 Starting fresh analysis (bypassing cache)...' };
         }
       }
 
@@ -1018,20 +976,8 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                     : String(lastUserMessage.content);
 
-                // Salva in tutti i sistemi di cache (multi-livello)
+                // Salva nella cache intelligente
                 try {
-                  // 1. Completion cache (più veloce)
-                  const cacheParams = this.getProviderParams();
-                  const completionRequest = {
-                    prefix: userContentStr,
-                    context: systemContext.substring(0, 2000),
-                    maxTokens: Math.min(300, cacheParams.maxTokens),
-                    temperature: cacheParams.temperature,
-                    model: this.currentModel
-                  };
-                  await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
-
-                  // 2. Smart cache (intelligente)
                   await this.smartCache.setCachedResponse(
                     userContentStr,
                     accumulatedText.trim(),
@@ -1039,17 +985,8 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     {
                       tokensSaved: tokensUsed,
                       responseTime: Date.now() - startTime,
-                      userSatisfaction: 1.0
+                      userSatisfaction: 1.0 // Default satisfaction
                     }
-                  );
-
-                  // 3. Token cache (fallback)
-                  await tokenCache.setCachedResponse(
-                    userContentStr,
-                    accumulatedText.trim(),
-                    systemContext.substring(0, 2000),
-                    tokensUsed,
-                    ['chat', 'autonomous']
                   );
                 } catch (cacheError: any) {
                   // Continue without caching - don't fail the stream
