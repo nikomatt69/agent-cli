@@ -6,5 +6,7 @@ tsconfig.cli.tsbuildinfo
 tsconfig.tsbuildinfo
 build/
 *.tgz
-.nikcli
+.nikcli/    
 build-single-binary.js
+.cursor/
+dist/
