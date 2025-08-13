@@ -10,7 +10,8 @@ import {
   CoreTool,
   ToolCallPart,
   ToolResultPart,
-  generateObject
+  generateObject,
+  StreamData
 } from 'ai';
 import { z } from 'zod';
 import { simpleConfigManager as configManager } from '../core/config-manager';
@@ -22,6 +23,16 @@ import { promisify } from 'util';
 import { compactAnalysis, safeStringifyContext, truncateForPrompt } from '../utils/analysis-utils';
 import { tokenCache } from '../core/token-cache';
 import { completionCache } from '../core/completion-protocol-cache';
+import { ContextEnhancer } from '../core/context-enhancer';
+import { PerformanceOptimizer } from '../core/performance-optimizer';
+import { WebSearchProvider } from '../core/web-search-provider';
+import { IDEContextEnricher } from '../core/ide-context-enricher';
+import { AdvancedTools } from '../core/advanced-tools';
+import { ToolRouter } from '../core/tool-router';
+import { PromptManager } from '../prompts/prompt-manager';
+import { smartCache } from '../core/smart-cache-manager';
+import { docLibrary } from '../core/documentation-library';
+import { documentationTools } from '../core/documentation-tool';
 
 const execAsync = promisify(exec);
 
@@ -36,7 +47,7 @@ export interface StreamEvent {
 }
 
 export interface AutonomousProvider {
-  streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent>;
+  streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent>;
   executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent>;
 }
 
@@ -50,12 +61,244 @@ export class AdvancedAIProvider implements AutonomousProvider {
     if (!s) return '';
     return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
   }
+
+  // Approximate token counting (1 token ≈ 4 characters for most languages)
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    // More accurate estimation: count words, punctuation, special chars
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    const specialChars = (text.match(/[{}[\](),.;:!?'"]/g) || []).length;
+    return Math.ceil((words.length + specialChars * 0.5) * 1.3); // Conservative estimate
+  }
+
+  // Estimate total tokens in messages array
+  private estimateMessagesTokens(messages: CoreMessage[]): number {
+    let totalTokens = 0;
+    for (const message of messages) {
+      const content = typeof message.content === 'string'
+        ? message.content
+        : Array.isArray(message.content)
+          ? message.content.map(part => typeof part === 'string' ? part : JSON.stringify(part)).join('')
+          : JSON.stringify(message.content);
+
+      totalTokens += this.estimateTokens(content);
+      totalTokens += 10; // Role, metadata overhead
+    }
+    return totalTokens;
+  }
+
+  // Intelligent message truncation to stay within token limits - AGGRESSIVE MODE
+  private truncateMessages(messages: CoreMessage[], maxTokens: number = 120000): CoreMessage[] {
+    const currentTokens = this.estimateMessagesTokens(messages);
+
+    if (currentTokens <= maxTokens) {
+      return messages;
+    }
+
+    // Messages too long - applying intelligent truncation
+
+    // Strategy: Keep system messages, recent user/assistant, and important tool calls
+    const truncatedMessages: CoreMessage[] = [];
+    const systemMessages = messages.filter(m => m.role === 'system');
+    const nonSystemMessages = messages.filter(m => m.role !== 'system');
+
+    // Always keep system messages (but truncate AGGRESSIVELY)
+    for (const sysMsg of systemMessages) {
+      const content = typeof sysMsg.content === 'string' ? sysMsg.content : JSON.stringify(sysMsg.content);
+      truncatedMessages.push({
+        ...sysMsg,
+        content: this.truncateForPrompt(content, 3000) // REDUCED: Max 3k chars for system messages
+      });
+    }
+
+    // Keep the most recent messages (MORE AGGRESSIVE sliding window)
+    const recentMessages = nonSystemMessages.slice(-10); // REDUCED: Keep last 10 non-system messages
+    let accumulatedTokens = this.estimateMessagesTokens(truncatedMessages);
+
+    // Add recent messages in reverse order until we hit the limit
+    for (let i = recentMessages.length - 1; i >= 0; i--) {
+      const msg = recentMessages[i];
+      const msgTokens = this.estimateTokens(
+        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      );
+
+      if (accumulatedTokens + msgTokens > maxTokens) {
+        // Truncate this message if it's too long
+        const availableTokens = maxTokens - accumulatedTokens;
+        const availableChars = Math.max(500, availableTokens * 3); // Conservative char conversion
+
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        const truncatedContent = this.truncateForPrompt(content, availableChars);
+
+        // Handle different message types properly
+        if (msg.role === 'tool') {
+          truncatedMessages.push({
+            ...msg,
+            content: [{ type: 'text', text: truncatedContent }] as any
+          });
+        } else {
+          truncatedMessages.push({
+            ...msg,
+            content: truncatedContent
+          });
+        }
+        break;
+      }
+
+      truncatedMessages.push(msg);
+      accumulatedTokens += msgTokens;
+    }
+
+    // If we still need more space, add truncation summary
+    if (nonSystemMessages.length > 10) {
+      const skippedCount = nonSystemMessages.length - 10;
+      truncatedMessages.splice(systemMessages.length, 0, {
+        role: 'system' as const,
+        content: `[Conversation truncated: ${skippedCount} older messages removed to fit context limit. Total original: ${currentTokens} tokens, truncated to: ~${this.estimateMessagesTokens(truncatedMessages)} tokens]`
+      });
+    }
+
+    const finalTokens = this.estimateMessagesTokens(truncatedMessages);
+    return truncatedMessages;
+  }
   private currentModel: string;
   private workingDirectory: string = process.cwd();
   private executionContext: Map<string, any> = new Map();
+  private enhancedContext: Map<string, any> = new Map();
+  private conversationMemory: CoreMessage[] = [];
+  private analysisCache: Map<string, any> = new Map();
+  private contextEnhancer: ContextEnhancer;
+  private performanceOptimizer: PerformanceOptimizer;
+  private webSearchProvider: WebSearchProvider;
+  private ideContextEnricher: IDEContextEnricher;
+  private advancedTools: AdvancedTools;
+  private toolRouter: ToolRouter;
+  private promptManager: PromptManager;
+  private smartCache: typeof smartCache;
+  private docLibrary: typeof docLibrary;
 
   constructor() {
     this.currentModel = configManager.get('currentModel') || 'claude-sonnet-4-20250514';
+    this.contextEnhancer = new ContextEnhancer();
+    this.performanceOptimizer = new PerformanceOptimizer();
+    this.webSearchProvider = new WebSearchProvider();
+    this.ideContextEnricher = new IDEContextEnricher();
+    this.advancedTools = new AdvancedTools();
+    this.toolRouter = new ToolRouter();
+    this.promptManager = PromptManager.getInstance(process.cwd());
+    this.smartCache = smartCache;
+    this.docLibrary = docLibrary;
+  }
+
+  // Tool call tracking for intelligent continuation
+  private toolCallHistory: Array<{
+    toolName: string;
+    args: any;
+    result: any;
+    timestamp: Date;
+    success: boolean;
+  }> = [];
+
+  // Round tracking for 2-round limit
+  private completedRounds: number = 0;
+  private maxRounds: number = 2;
+
+  // Advanced context enhancement system
+  private async enhanceContext(messages: CoreMessage[]): Promise<CoreMessage[]> {
+    const enhancedMessages = await this.contextEnhancer.enhance(messages, {
+      workingDirectory: this.workingDirectory,
+      executionContext: this.executionContext,
+      conversationMemory: this.conversationMemory,
+      analysisCache: this.analysisCache
+    });
+
+    // Update conversation memory
+    this.conversationMemory = enhancedMessages.slice(-20); // Keep last 20 messages
+
+    // Reset tool history and rounds for new conversation context
+    const lastUserMessage = enhancedMessages.filter(m => m.role === 'user').pop();
+    if (lastUserMessage) {
+      this.toolCallHistory = []; // Fresh start for new queries
+      this.completedRounds = 0; // Reset rounds counter
+    }
+
+    return enhancedMessages;
+  }
+
+  // Enhanced system prompt with advanced capabilities (using PromptManager)
+  private async getEnhancedSystemPrompt(context: any = {}): Promise<string> {
+    try {
+      // Try to load base agent prompt first
+      const basePrompt = await this.promptManager.loadPromptForContext({
+        agentId: 'base-agent',
+        parameters: {
+          workingDirectory: this.workingDirectory,
+          availableTools: this.toolRouter.getAllTools().map(tool => `${tool.tool}: ${tool.description}`).join(', '),
+          ...context
+        }
+      });
+
+      return basePrompt;
+    } catch (error) {
+      // Fallback to hardcoded prompt if file system prompts fail
+      const toolDescriptions = this.toolRouter.getAllTools()
+        .map(tool => `${tool.tool}: ${tool.description}`)
+        .join(', ');
+
+      return `You are an advanced AI development assistant with enhanced capabilities:
+
+🧠 **Enhanced Intelligence**:
+- Context-aware analysis and reasoning
+- Multi-step problem solving
+- Pattern recognition and optimization
+- Adaptive learning from conversation history
+
+🛠️ **Advanced Tools**:
+- File system operations with metadata analysis
+- Code generation with syntax validation
+- Directory exploration with intelligent filtering
+- Command execution with safety checks
+- Package management with dependency analysis
+
+📊 **Context Management**:
+- Workspace awareness and file structure understanding
+- Conversation memory and pattern recognition
+- Execution context tracking
+- Analysis result caching
+
+🎯 **Optimization Features**:
+- Token-aware response generation
+- Chained file reading for large analyses
+- Intelligent caching strategies
+- Performance monitoring and optimization
+
+💡 **Best Practices**:
+- Always validate file operations
+- Provide clear explanations for complex tasks
+- Use appropriate tools for each task type
+- Maintain conversation context and continuity
+
+**Current Working Directory**: ${this.workingDirectory}
+**Available Tools**: ${toolDescriptions}
+
+Respond in a helpful, professional manner with clear explanations and actionable insights.`;
+    }
+  }
+
+  // Load tool-specific prompts for enhanced execution
+  private async getToolPrompt(toolName: string, parameters: any = {}): Promise<string> {
+    try {
+      return await this.promptManager.loadPromptForContext({
+        toolName,
+        parameters: {
+          workingDirectory: this.workingDirectory,
+          ...parameters
+        }
+      });
+    } catch (error) {
+      // Return fallback prompt if file prompt fails
+      return `Execute ${toolName} with the provided parameters. Follow best practices and provide clear, helpful output.`;
+    }
   }
 
   // Advanced file operations with context awareness
@@ -70,6 +313,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
         }),
         execute: async ({ path, analyze }) => {
           try {
+            // Load tool-specific prompt for context
+            const toolPrompt = await this.getToolPrompt('read_file', { path, analyze });
+
             const fullPath = resolve(this.workingDirectory, path);
             if (!existsSync(fullPath)) {
               return { error: `File not found: ${path}` };
@@ -89,7 +335,8 @@ export class AdvancedAIProvider implements AutonomousProvider {
               content,
               stats,
               analysis,
-              lastRead: new Date()
+              lastRead: new Date(),
+              toolPrompt // Store prompt for potential reuse
             });
 
             return {
@@ -118,6 +365,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
         }),
         execute: async ({ path, content, backup, validate }) => {
           try {
+            // Load tool-specific prompt for context
+            const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...', backup, validate });
+
             const fullPath = resolve(this.workingDirectory, path);
             const dir = dirname(fullPath);
 
@@ -149,10 +399,11 @@ export class AdvancedAIProvider implements AutonomousProvider {
               content,
               stats,
               lastWritten: new Date(),
-              backedUp
+              backedUp,
+              toolPrompt
             });
 
-            console.log(chalk.green(`✅ ${backedUp ? 'Updated' : 'Created'}: ${path}`));
+            // File operation completed
 
             return {
               path: relative(this.workingDirectory, fullPath),
@@ -179,6 +430,9 @@ export class AdvancedAIProvider implements AutonomousProvider {
         }),
         execute: async ({ path, depth, includeHidden, filterBy }) => {
           try {
+            // Load tool-specific prompt for context
+            const toolPrompt = await this.getToolPrompt('explore_directory', { path, depth, includeHidden, filterBy });
+
             const fullPath = resolve(this.workingDirectory, path);
             const structure = this.exploreDirectoryStructure(fullPath, depth, includeHidden, filterBy);
 
@@ -186,7 +440,8 @@ export class AdvancedAIProvider implements AutonomousProvider {
             this.executionContext.set(`dir:${path}`, {
               structure,
               explored: new Date(),
-              fileCount: this.countFiles(structure)
+              fileCount: this.countFiles(structure),
+              toolPrompt
             });
 
             return {
@@ -204,7 +459,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
       // Autonomous command execution with intelligence
       execute_command: tool({
-        description: 'Execute commands autonomously with context awareness',
+        description: 'Execute commands autonomously with context awareness and safety checks',
         parameters: z.object({
           command: z.string().describe('Command to execute'),
           args: z.array(z.string()).default([]).describe('Command arguments'),
@@ -225,16 +480,32 @@ export class AdvancedAIProvider implements AutonomousProvider {
               };
             }
 
+            // Verifica che il comando non esca dalla directory del progetto
+            const projectRoot = this.workingDirectory;
+            const commandCwd = this.workingDirectory;
+
+            // Controlla se il comando tenta di cambiare directory
+            if (fullCommand.includes('cd ') && !fullCommand.includes(`cd ${projectRoot}`)) {
+              return {
+                error: 'Command blocked: cannot change directory outside project',
+                command: fullCommand,
+                reason: 'Security: directory change blocked'
+              };
+            }
+
             console.log(chalk.blue(`🚀 Executing: ${fullCommand}`));
 
             const startTime = Date.now();
             const { stdout, stderr } = await execAsync(fullCommand, {
-              cwd: this.workingDirectory,
+              cwd: commandCwd,
               timeout,
               maxBuffer: 1024 * 1024 * 10, // 10MB
             });
 
             const duration = Date.now() - startTime;
+
+            // Pausa molto leggera tra comandi per evitare sovraccarichi
+            await this.sleep(50);
 
             // Store execution context
             this.executionContext.set(`cmd:${command}`, {
@@ -242,17 +513,19 @@ export class AdvancedAIProvider implements AutonomousProvider {
               stdout,
               stderr,
               duration,
-              executed: new Date()
+              executed: new Date(),
+              cwd: commandCwd
             });
 
-            console.log(chalk.green(`✅ Completed in ${duration}ms`));
+            // Command completed
 
             return {
               command: fullCommand,
               stdout: stdout.trim(),
               stderr: stderr.trim(),
               success: true,
-              duration
+              duration,
+              cwd: commandCwd
             };
           } catch (error: any) {
             console.log(chalk.red(`❌ Command failed: ${error.message}`));
@@ -364,7 +637,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
       generate_code: tool({
         description: 'Generate code with context awareness and best practices',
         parameters: z.object({
-          type: z.enum(['component', 'function', 'class', 'test', 'config']).describe('Code type'),
+          type: z.enum(['component', 'function', 'class', 'test', 'config', 'docs']).describe('Code type'),
           description: z.string().describe('What to generate'),
           language: z.string().default('typescript').describe('Programming language'),
           framework: z.string().optional().describe('Framework context (react, node, etc)'),
@@ -386,7 +659,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
             if (outputPath && codeGenResult.code) {
               writeFileSync(resolve(this.workingDirectory, outputPath), codeGenResult.code);
-              console.log(chalk.green(`✅ Generated: ${outputPath}`));
+              // Code generated
             }
 
             return codeGenResult;
@@ -395,185 +668,394 @@ export class AdvancedAIProvider implements AutonomousProvider {
           }
         },
       }),
+
+      // Web search capabilities
+      web_search: this.webSearchProvider.getWebSearchTool(),
+
+      // IDE context enrichment
+      ide_context: this.ideContextEnricher.getIDEContextTool(),
+
+      // Advanced AI-powered tools
+      semantic_search: this.advancedTools.getSemanticSearchTool(),
+      code_analysis: this.advancedTools.getCodeAnalysisTool(),
+      dependency_analysis: this.advancedTools.getDependencyAnalysisTool(),
+      git_workflow: this.advancedTools.getGitWorkflowTool(),
+
+      // Documentation tools
+      doc_search: documentationTools.search,
+      doc_add: documentationTools.add,
+      doc_stats: documentationTools.stats,
     };
   }
 
   // Claude Code style streaming with full autonomy
-  async *streamChatWithFullAutonomy(messages: CoreMessage[]): AsyncGenerator<StreamEvent> {
+  async *streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent> {
+    if (abortSignal && !(abortSignal instanceof AbortSignal)) {
+      throw new TypeError('Invalid AbortSignal provided');
+    }
+
+    // Start performance monitoring
+    const sessionId = `session_${Date.now()}`;
+    const startTime = Date.now();
+    this.performanceOptimizer.startMonitoring();
+
+    // Enhance context with advanced intelligence
+    const enhancedMessages = await this.enhanceContext(messages);
+
+    // Optimize messages for performance
+    const optimizedMessages = this.performanceOptimizer.optimizeMessages(enhancedMessages);
+
+    // Apply AGGRESSIVE truncation to prevent prompt length errors
+    const truncatedMessages = this.truncateMessages(optimizedMessages, 100000); // REDUCED: 100k tokens safety margin
+
     const model = this.getModel() as any;
     const tools = this.getAdvancedTools();
 
     try {
       // ADVANCED: Check completion protocol cache first (ultra-efficient)
-      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-      const systemContext = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+      const lastUserMessage = truncatedMessages.filter(m => m.role === 'user').pop();
+      const systemContext = truncatedMessages.filter(m => m.role === 'system').map(m => m.content).join('\n');
 
       if (lastUserMessage) {
-        // Try completion protocol cache first (most efficient)
+        // Check if this is an analysis request (skip cache for fresh analysis)
         const userContent = typeof lastUserMessage.content === 'string'
           ? lastUserMessage.content
           : Array.isArray(lastUserMessage.content)
             ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
             : String(lastUserMessage.content);
 
-        const completionRequest = {
-          prefix: userContent,
-          context: systemContext.substring(0, 300),
-          maxTokens: 1000,
-          temperature: 0.7,
-          model: this.currentModel
-        };
+        // Use ToolRouter for intelligent tool analysis
+        const toolRecommendations = this.toolRouter.analyzeMessage(lastUserMessage);
+        this.toolRouter.logRecommendations(userContent, toolRecommendations);
 
-        const protocolCompletion = await completionCache.getCompletion(completionRequest);
-        if (protocolCompletion) {
-          yield { type: 'start', content: '🔮 Using completion pattern (ultra-efficient)...' };
-          yield { type: 'text_delta', content: protocolCompletion.completion };
-          yield { type: 'complete', content: `Protocol cache hit - ${protocolCompletion.tokensSaved} tokens saved!` };
-          return;
-        }
+        const isAnalysisRequest = userContent.toLowerCase().includes('analizza') ||
+          userContent.toLowerCase().includes('analysis') ||
+          userContent.toLowerCase().includes('analisi') ||
+          userContent.toLowerCase().includes('scan') ||
+          userContent.toLowerCase().includes('esplora') ||
+          userContent.toLowerCase().includes('explore') ||
+          userContent.toLowerCase().includes('trova') ||
+          userContent.toLowerCase().includes('find') ||
+          userContent.toLowerCase().includes('cerca') ||
+          userContent.toLowerCase().includes('search');
 
-        // Fallback to full response cache
-        const cachedResponse = await tokenCache.getCachedResponse(
-          userContent,
-          systemContext.substring(0, 500),
-          ['chat', 'autonomous']
-        );
+        // Usa cache intelligente ma leggera
+        const cacheDecision = this.smartCache.shouldCache(userContent, systemContext);
 
-        if (cachedResponse) {
-          yield { type: 'start', content: '🎯 Using cached response...' };
-          yield { type: 'text_delta', content: cachedResponse.response };
-          yield { type: 'complete', content: 'Cache hit - tokens saved!' };
-          return;
+        if (cacheDecision.should && !isAnalysisRequest) {
+          const cachedResponse = await this.smartCache.getCachedResponse(userContent, systemContext);
+
+          if (cachedResponse) {
+            yield { type: 'start', content: `🎯 Using smart cache (${cacheDecision.strategy})...` };
+
+            // Stream the cached response properly formatted
+            const formattedResponse = this.formatCachedResponse(cachedResponse.response);
+            for (const chunk of this.chunkText(formattedResponse, 80)) {
+              yield { type: 'text_delta', content: chunk };
+            }
+
+            yield { type: 'complete', content: `Cache hit - ${cachedResponse.metadata.tokensSaved} tokens saved!` };
+            return;
+          }
+        } else if (isAnalysisRequest) {
+          yield { type: 'start', content: '🔍 Starting fresh analysis (bypassing cache)...' };
         }
       }
 
       yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
 
-      const result = streamText({
+      const originalTokens = this.estimateMessagesTokens(messages);
+      const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
+
+      // Check if we're approaching token limits and need to create a summary
+      const tokenLimit = 150000; // Conservative limit
+      const isAnalysisRequest = lastUserMessage && typeof lastUserMessage.content === 'string' &&
+        (lastUserMessage.content.toLowerCase().includes('analizza') ||
+          lastUserMessage.content.toLowerCase().includes('analysis') ||
+          lastUserMessage.content.toLowerCase().includes('analisi') ||
+          lastUserMessage.content.toLowerCase().includes('scan') ||
+          lastUserMessage.content.toLowerCase().includes('esplora') ||
+          lastUserMessage.content.toLowerCase().includes('explore'));
+
+      if (isAnalysisRequest && originalTokens > tokenLimit * 0.8) {
+        yield { type: 'thinking', content: '📊 Large analysis detected - enabling chained file reading to avoid token limits...' };
+
+        // Enabling chained file reading mode for large analysis
+
+        // Add special instruction for chained file reading
+        const chainedInstruction = `IMPORTANT: For this analysis, use chained file reading approach:
+1. First, scan and list files/directories to understand structure
+2. Then read files in small batches (max 3-5 files per call)
+3. Process each batch before moving to the next
+4. Build analysis incrementally to avoid token limits
+5. Use find_files_tool first, then read_file_tool in small groups`;
+
+        // Add the instruction to the system context
+        const enhancedSystemContext = systemContext + '\n\n' + chainedInstruction;
+
+        // Update messages with enhanced context
+        const enhancedMessages = messages.map(msg =>
+          msg.role === 'system'
+            ? { ...msg, content: enhancedSystemContext }
+            : msg
+        );
+
+        // Use enhanced messages for the rest of the processing
+        messages = enhancedMessages;
+      }
+
+      const params = this.getProviderParams();
+
+      // Add enhanced system prompt to messages (async)
+      const enhancedSystemPrompt = await this.getEnhancedSystemPrompt();
+      const messagesWithEnhancedPrompt = truncatedMessages.map(msg =>
+        msg.role === 'system' ? { ...msg, content: enhancedSystemPrompt } : msg
+      );
+
+      const provider = this.getCurrentModelInfo().config.provider;
+      const safeMessages = this.sanitizeMessagesForProvider(provider, messagesWithEnhancedPrompt);
+      const streamOpts: any = {
         model,
-        messages,
+        messages: safeMessages,
         tools,
-        maxToolRoundtrips: 10, // Allow multiple tool calls
-        maxTokens: 4000,
-        temperature: 0.7,
-        onStepFinish: ({ stepType, toolCalls, toolResults }) => {
-          // This will be handled by the stream
-        },
-      });
+        maxToolRoundtrips: isAnalysisRequest ? 25 : 50, // Increased for deeper analysis and toolchains
+        temperature: params.temperature,
+        abortSignal,
+        onStepFinish: (_evt: any) => { },
+      };
+      if (provider !== 'openai') {
+        streamOpts.maxTokens = params.maxTokens;
+      }
+      const result = streamText(streamOpts);
 
       let currentToolCalls: ToolCallPart[] = [];
       let accumulatedText = '';
+      let toolCallCount = 0;
+      const maxToolCallsForAnalysis = 30; // Increased limit for comprehensive analysis
 
+      const approxCharLimit = provider === 'openai' ? params.maxTokens * 4 : Number.POSITIVE_INFINITY;
+      let truncatedByCap = false;
       for await (const delta of (await result).fullStream) {
-        switch (delta.type) {
-          case 'text-delta':
-            if (delta.textDelta) {
-              accumulatedText += delta.textDelta;
-              yield {
-                type: 'text_delta',
-                content: delta.textDelta,
-                metadata: { accumulatedLength: accumulatedText.length }
-              };
-            }
-            break;
-
-          case 'tool-call':
-            currentToolCalls.push(delta);
-            yield {
-              type: 'tool_call',
-              toolName: delta.toolName,
-              toolArgs: delta.args,
-              content: `Executing ${delta.toolName}...`,
-              metadata: { toolCallId: delta.toolCallId }
-            };
-            break;
-
-          case 'tool-call-delta':
-            const toolCall = currentToolCalls.find(tc => tc.toolCallId === delta.toolCallId);
-            yield {
-              type: 'tool_result',
-              toolName: toolCall?.toolName,
-              toolResult: delta.argsTextDelta,
-              content: `Completed ${toolCall?.toolName}`,
-              metadata: {
-                toolCallId: delta.toolCallId,
-                success: !delta.argsTextDelta
-              }
-            };
-            break;
-
-          case 'step-finish':
-            if (delta.isContinued) {
-              // Step completed, continue to next
-            }
-            break;
-
-          case 'finish':
-            // DUAL CACHE: Store both completion pattern AND full response
-            if (lastUserMessage && accumulatedText.trim()) {
-              const userContentLength = typeof lastUserMessage.content === 'string'
-                ? lastUserMessage.content.length
-                : String(lastUserMessage.content).length;
-              const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
-
-              // Extract user content as string for storage
-              const userContentStr = typeof lastUserMessage.content === 'string'
-                ? lastUserMessage.content
-                : Array.isArray(lastUserMessage.content)
-                  ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
-                  : String(lastUserMessage.content);
-
-              // Store in completion protocol cache (primary - most efficient)
-              const completionRequest = {
-                prefix: userContentStr,
-                context: systemContext.substring(0, 300),
-                maxTokens: 1000,
-                temperature: 0.7,
-                model: this.currentModel
-              };
-              await completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
-
-              // Store in full response cache (fallback)
-              await tokenCache.setCachedResponse(
-                userContentStr,
-                accumulatedText.trim(),
-                systemContext.substring(0, 500),
-                tokensUsed,
-                ['chat', 'autonomous']
-              );
-            }
-
-            yield {
-              type: 'complete',
-              content: 'Task completed',
-              metadata: {
-                finishReason: delta.finishReason,
-                usage: delta.usage,
-                totalText: accumulatedText.length
-              }
-            };
-            break;
-
-          case 'error':
+        try {
+          // Check for abort signal interruption
+          if (abortSignal?.aborted) {
             yield {
               type: 'error',
-              error: (delta?.error) as any,
-              content: `Error: ${delta.error}`
+              error: 'Interrupted by user',
+              content: 'Stream processing interrupted'
             };
             break;
+          }
+
+          switch (delta.type) {
+            case 'text-delta':
+              if (delta.textDelta) {
+                accumulatedText += delta.textDelta;
+                yield {
+                  type: 'text_delta',
+                  content: delta.textDelta,
+                  metadata: {
+                    accumulatedLength: accumulatedText.length,
+                    provider: this.getCurrentModelInfo().config.provider
+                  }
+                };
+                if (provider === 'openai' && accumulatedText.length >= approxCharLimit) {
+                  truncatedByCap = true;
+                  break;
+                }
+              }
+              break;
+
+            case 'tool-call':
+              toolCallCount++;
+              currentToolCalls.push(delta);
+
+              // Track this tool call in history (always track for intelligent analysis)
+              this.toolCallHistory.push({
+                toolName: delta.toolName,
+                args: delta.args,
+                result: null, // Will be updated when result comes
+                timestamp: new Date(),
+                success: false // Will be updated
+              });
+
+              // Check if we're hitting tool call limits for analysis - use intelligent continuation
+              if (isAnalysisRequest && toolCallCount > maxToolCallsForAnalysis) {
+                // Increment completed rounds
+                this.completedRounds++;
+
+                const originalQuery = typeof lastUserMessage?.content === 'string'
+                  ? lastUserMessage.content
+                  : String(lastUserMessage?.content || '');
+
+                // Check if we've completed 2 rounds - if so, provide final summary and stop
+                if (this.completedRounds >= this.maxRounds) {
+                  const finalSummary = this.generateFinalSummary(originalQuery, this.toolCallHistory);
+
+                  yield {
+                    type: 'thinking',
+                    content: `🏁 Completed ${this.completedRounds} rounds of analysis. Providing final summary.`
+                  };
+                  yield {
+                    type: 'text_delta',
+                    content: `\n\n${finalSummary}\n\n`
+                  };
+                  yield {
+                    type: 'complete',
+                    content: `Analysis completed after ${this.completedRounds} rounds. Please review the summary above.`,
+                    metadata: { finalStop: true, rounds: this.completedRounds }
+                  };
+                  return; // Hard stop after 2 rounds
+                }
+
+                // If this is the first round, continue with intelligent question
+                const gapAnalysis = this.analyzeMissingInformation(originalQuery, this.toolCallHistory);
+                const clarifyingQuestion = this.generateClarifyingQuestion(gapAnalysis, originalQuery, this.toolCallHistory);
+
+                yield {
+                  type: 'thinking',
+                  content: this.truncateForPrompt(`🔄 Round ${this.completedRounds} complete. ${gapAnalysis}`, 100)
+                };
+                yield {
+                  type: 'text_delta',
+                  content: `\n\n**Round ${this.completedRounds} Analysis:**\n${gapAnalysis}\n\n**Question to continue:**\n${clarifyingQuestion}\n\n`
+                };
+                // Don't break - let the conversation continue naturally
+                break;
+              }
+
+              yield {
+                type: 'tool_call',
+                toolName: delta.toolName,
+                toolArgs: delta.args,
+                content: `Executing ${delta.toolName}... (${toolCallCount}/${maxToolCallsForAnalysis})`,
+                metadata: { toolCallId: delta.toolCallId }
+              };
+              break;
+
+            case 'tool-call-delta':
+              const toolCall = currentToolCalls.find(tc => tc.toolCallId === delta.toolCallId);
+
+              // Update tool history with result
+              const historyEntry = this.toolCallHistory.find(h => h.toolName === toolCall?.toolName);
+              if (historyEntry) {
+                historyEntry.result = delta.argsTextDelta;
+                historyEntry.success = !!delta.argsTextDelta;
+              }
+
+              yield {
+                type: 'tool_result',
+                toolName: toolCall?.toolName,
+                toolResult: delta.argsTextDelta,
+                content: `Completed ${toolCall?.toolName}`,
+                metadata: {
+                  toolCallId: delta.toolCallId,
+                  success: !delta.argsTextDelta
+                }
+              };
+              break;
+
+            case 'step-finish':
+              if (delta.isContinued) {
+                // Step completed, continue to next
+              }
+              break;
+
+            case 'finish':
+              // Salva nella cache adattiva
+              if (lastUserMessage && accumulatedText.trim()) {
+                const userContentLength = typeof lastUserMessage.content === 'string'
+                  ? lastUserMessage.content.length
+                  : String(lastUserMessage.content).length;
+                const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
+
+                // Extract user content as string for storage
+                const userContentStr = typeof lastUserMessage.content === 'string'
+                  ? lastUserMessage.content
+                  : Array.isArray(lastUserMessage.content)
+                    ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
+                    : String(lastUserMessage.content);
+
+                // Salva nella cache intelligente
+                try {
+                  await this.smartCache.setCachedResponse(
+                    userContentStr,
+                    accumulatedText.trim(),
+                    systemContext.substring(0, 1000),
+                    {
+                      tokensSaved: tokensUsed,
+                      responseTime: Date.now() - startTime,
+                      userSatisfaction: 1.0 // Default satisfaction
+                    }
+                  );
+                } catch (cacheError: any) {
+                  // Continue without caching - don't fail the stream
+                }
+
+                yield {
+                  type: 'complete',
+                  content: truncatedByCap ? 'Output truncated by local cap' : 'Task completed',
+                  metadata: {
+                    finishReason: delta.finishReason,
+                    usage: delta.usage,
+                    totalText: accumulatedText.length,
+                    capped: truncatedByCap
+                  }
+                };
+              }
+              break;
+
+            case 'error':
+              yield {
+                type: 'error',
+                error: (delta?.error) as any,
+                content: `Error: ${delta.error}`
+              };
+              break;
+          }
+        } catch (deltaError: any) {
+          // Stream delta error occurred
+          yield {
+            type: 'error',
+            error: deltaError.message,
+            content: `Stream error: ${deltaError.message}`
+          };
         }
       }
 
+      // Check if response was complete
+      if (accumulatedText.length === 0) {
+        // No text received from model
+        yield {
+          type: 'error',
+          error: 'Empty response',
+          content: 'No text was generated - possible parameter mismatch'
+        };
+      }
+
+      // End performance monitoring and log metrics
+      const metrics = this.performanceOptimizer.endMonitoring(sessionId, {
+        tokenCount: this.estimateMessagesTokens(truncatedMessages),
+        toolCallCount,
+        responseQuality: this.performanceOptimizer.analyzeResponseQuality(accumulatedText)
+      });
+
+      // Show only essential info: tokens used and context remaining  
+      if (truncatedTokens > 0) {
+        console.log(chalk.dim(`💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
+      }
+
     } catch (error: any) {
+      console.error(`Provider error (${this.getCurrentModelInfo().config.provider}):`, error);
       yield {
         type: 'error',
         error: error.message,
-        content: `System error: ${error.message}`
+        content: `System error: ${error.message} (Provider: ${this.getCurrentModelInfo().config.provider})`
       };
     }
   }
 
-  // Execute autonomous task with intelligent planning
+  // Execute autonomous task with intelligent planning and parallel agent support
   async *executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent> {
     yield { type: 'start', content: `🎯 Starting task: ${task}` };
 
@@ -584,7 +1066,21 @@ export class AdvancedAIProvider implements AutonomousProvider {
       // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
       if (context && Array.isArray(context.messages)) {
         const providedMessages: CoreMessage[] = context.messages;
+        // Note: streamChatWithFullAutonomy will handle truncation internally
         for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
+          yield event;
+        }
+        return;
+      }
+
+      // Analizza se il task richiede agenti paralleli
+      const requiresParallelAgents = this.analyzeParallelRequirements(task);
+
+      if (requiresParallelAgents) {
+        yield { type: 'thinking', content: '🔄 Task requires parallel agent execution...' };
+
+        // Esegui con agenti paralleli
+        for await (const event of this.executeParallelTask(task, context)) {
           yield event;
         }
         return;
@@ -594,12 +1090,12 @@ export class AdvancedAIProvider implements AutonomousProvider {
         {
           role: 'system',
           content: `AI dev assistant. CWD: ${this.workingDirectory}
-Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code
-Task: ${this.truncateForPrompt(task, 500)}
+Tools: read_file, write_file, explore_directory, execute_command, analyze_project, manage_packages, generate_code, doc_search, doc_add
+Task: ${this.truncateForPrompt(task, 300)} 
 
-${context ? this.truncateForPrompt(safeStringifyContext(context), 300) : ''}
+${context ? this.truncateForPrompt(safeStringifyContext(context), 150) : ''}
 
-Execute task autonomously with tools. Be direct.`
+Execute task autonomously with tools. Be direct. Stay within project directory.`
         },
         {
           role: 'user',
@@ -621,14 +1117,113 @@ Execute task autonomously with tools. Be direct.`
     }
   }
 
-  // Safely stringify and truncate large contexts to prevent prompt overflow
-  private safeStringifyContext(ctx: any, maxChars: number = 4000): string {
+  // Analizza se un task richiede agenti paralleli
+  private analyzeParallelRequirements(task: string): boolean {
+    const parallelKeywords = [
+      'parallel', 'simultaneous', 'concurrent', 'multiple', 'several',
+      'parallelo', 'simultaneo', 'concorrente', 'multiplo', 'diversi',
+      'build and test', 'compile and deploy', 'analyze and generate'
+    ];
+
+    const lowerTask = task.toLowerCase();
+    return parallelKeywords.some(keyword => lowerTask.includes(keyword));
+  }
+
+  // Esegue task con agenti paralleli
+  private async *executeParallelTask(task: string, context?: any): AsyncGenerator<StreamEvent> {
+    yield { type: 'thinking', content: '🔄 Planning parallel execution...' };
+
+    try {
+      // Dividi il task in sottotask paralleli
+      const subtasks = this.splitIntoSubtasks(task);
+
+      yield { type: 'thinking', content: `📋 Split into ${subtasks.length} parallel subtasks` };
+
+      // Esegui sottotask in parallelo con isolamento
+      const results = await Promise.allSettled(
+        subtasks.map(async (subtask, index) => {
+          // Pausa molto leggera tra l'avvio degli agenti per evitare sovraccarichi
+          await this.sleep(index * 50);
+
+          return this.executeSubtask(subtask, index, context);
+        })
+      );
+
+      // Aggrega risultati
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      yield {
+        type: 'complete',
+        content: `✅ Parallel execution complete: ${successful} successful, ${failed} failed`,
+        metadata: { parallel: true, subtasks: subtasks.length }
+      };
+
+    } catch (error: any) {
+      yield {
+        type: 'error',
+        error: error.message,
+        content: `Parallel execution failed: ${error.message}`
+      };
+    }
+  }
+
+  // Divide un task in sottotask paralleli
+  private splitIntoSubtasks(task: string): string[] {
+    // Logica semplice per dividere task complessi
+    const subtasks: string[] = [];
+
+    if (task.toLowerCase().includes('build and test')) {
+      subtasks.push('Build the project');
+      subtasks.push('Run tests');
+    } else if (task.toLowerCase().includes('analyze and generate')) {
+      subtasks.push('Analyze code structure');
+      subtasks.push('Generate documentation');
+    } else {
+      // Fallback: dividi per frasi
+      const sentences = task.split(/[.!?]+/).filter(s => s.trim().length > 10);
+      subtasks.push(...sentences.slice(0, 3)); // Massimo 3 sottotask
+    }
+
+    return subtasks.length > 0 ? subtasks : [task];
+  }
+
+  // Esegue un singolo sottotask con isolamento
+  private async executeSubtask(subtask: string, index: number, context?: any): Promise<any> {
+    const subtaskContext = {
+      ...context,
+      subtaskIndex: index,
+      isParallel: true,
+      workingDirectory: this.workingDirectory // Mantieni directory del progetto
+    };
+
+    const messages: CoreMessage[] = [
+      {
+        role: 'system',
+        content: `AI agent ${index + 1}. CWD: ${this.workingDirectory}
+Execute this subtask independently. Do not interfere with other agents.
+Subtask: ${subtask}
+Stay within project directory.`
+      },
+      {
+        role: 'user',
+        content: subtask
+      }
+    ];
+
+    // Esegui il sottotask
+    const result = await this.streamChatWithFullAutonomy(messages);
+    return result;
+  }
+
+  // Safely stringify and truncate large contexts to prevent prompt overflow - AGGRESSIVE
+  private safeStringifyContext(ctx: any, maxChars: number = 1000): string { // REDUCED from 4000
     if (!ctx) return '{}';
     try {
       const str = JSON.stringify(ctx, (key, value) => {
-        // Truncate long strings
+        // Truncate long strings AGGRESSIVELY
         if (typeof value === 'string') {
-          return value.length > 512 ? value.slice(0, 512) + '…[truncated]' : value;
+          return value.length > 100 ? value.slice(0, 100) + '…[truncated]' : value; // REDUCED from 512
         }
         // Limit large arrays
         if (Array.isArray(value)) {
@@ -878,7 +1473,15 @@ Execute task autonomously with tools. Be direct.`
       '.py': 'python',
       '.java': 'java',
       '.cpp': 'cpp',
+      '.cs': 'csharp',
       '.c': 'c',
+      '.toml': 'toml',
+      '.yaml': 'yaml',
+      '.yml': 'yaml',
+      '.ini': 'ini',
+      '.env': 'env',
+      '.sh': 'shell',
+      '.bash': 'shell',
       '.rs': 'rust',
       '.go': 'go',
       '.php': 'php',
@@ -899,10 +1502,14 @@ Execute task autonomously with tools. Be direct.`
     if (deps.react) return 'React';
     if (deps.express) return 'Express';
     if (deps.fastify) return 'Fastify';
+    if (deps.svelte) return 'Svelte';
+    if (deps.astro) return 'Astro';
 
+
+
+    if (deps.remix) return 'Remix';
     return 'JavaScript/Node.js';
   }
-
   private detectProjectLanguages(structure: any): string[] {
     const languages = new Set<string>();
 
@@ -939,11 +1546,16 @@ Requirements:
 
     try {
       const model = this.getModel() as any;
-      const result = await generateText({
+      const params = this.getProviderParams();
+      const provider = this.getCurrentModelInfo().config.provider;
+      const genOpts: any = {
         model,
-        prompt: codeGenPrompt,
-        maxTokens: 2000,
-      });
+        prompt: this.truncateForPrompt(codeGenPrompt, provider === 'openai' ? 120000 : 80000),
+      };
+      if (this.getCurrentModelInfo().config.provider !== 'openai') {
+        genOpts.maxTokens = Math.min(params.maxTokens, 2000);
+      }
+      const result = await generateText(genOpts);
 
       return {
         type,
@@ -974,7 +1586,7 @@ Requirements:
       case 'openai': {
         const apiKey = configManager.getApiKey(model);
         if (!apiKey) throw new Error(`No API key found for model ${model} (OpenAI)`);
-        const openaiProvider = createOpenAI({ apiKey });
+        const openaiProvider = createOpenAI({ apiKey, compatibility: 'strict' });
         return openaiProvider(configData.model);
       }
       case 'anthropic': {
@@ -997,6 +1609,118 @@ Requirements:
       default:
         throw new Error(`Unsupported provider: ${configData.provider}`);
     }
+  }
+
+  // Get provider-specific parameters
+  private getProviderParams(modelName?: string): { maxTokens: number; temperature: number } {
+    const model = modelName || this.currentModel || configManager.get('currentModel');
+    const allModels = configManager.get('models');
+    const configData = allModels[model];
+
+    if (!configData) {
+      return { maxTokens: 8000, temperature: 0.7 }; // REDUCED default
+    }
+
+    // Provider-specific token limits and settings
+    switch (configData.provider) {
+      case 'openai':
+        // OpenAI models - REDUCED for lighter requests
+        if (configData.model.includes('gpt-5')) {
+          return { maxTokens: 8192, temperature: 1 }; // REDUCED from 8192
+        } else if (configData.model.includes('gpt-4')) {
+          return { maxTokens: 4096, temperature: 1 }; // REDUCED from 4096
+        }
+        return { maxTokens: 3000, temperature: 1 };
+
+      case 'anthropic':
+        // Claude models - AUMENTATO per risposte più complete
+        if (configData.model.includes('claude-4') ||
+          configData.model.includes('claude-4-sonnet') ||
+          configData.model.includes('claude-sonnet-4')) {
+          return { maxTokens: 12000, temperature: 0.7 }; // AUMENTATO da 4000
+        }
+        return { maxTokens: 10000, temperature: 0.7 }; // AUMENTATO da 4000
+
+      case 'google':
+        // Gemini models - AUMENTATO per risposte più complete
+        return { maxTokens: 8000, temperature: 0.7 }; // AUMENTATO da 1500
+
+      case 'ollama':
+        // Local models - AUMENTATO per risposte più complete
+        return { maxTokens: 4000, temperature: 0.7 }; // AUMENTATO da 1000
+
+      default:
+        return { maxTokens: 12000, temperature: 0.7 }; // AUMENTATO da 8000
+    }
+  }
+
+  // Build provider-specific options to satisfy differing token parameter names
+  private getProviderOptions(maxTokens: number): any {
+    try {
+      const provider = this.getCurrentModelInfo().config.provider;
+      switch (provider) {
+        case 'openai':
+          return { openai: { max_completion_tokens: maxTokens } };
+        case 'google':
+          // Google Generative AI expects max_output_tokens
+          return { google: { max_output_tokens: maxTokens } };
+        // Anthropic and others work with normalized maxTokens via AI SDK
+        default:
+          return {};
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  // Build a provider-safe message array by enforcing hard character caps
+  private sanitizeMessagesForProvider(provider: string, messages: CoreMessage[]): CoreMessage[] {
+    const maxTotalChars = provider === 'openai' ? 800_000 : 400_000; // conservative caps
+    const maxPerMessage = provider === 'openai' ? 60_000 : 40_000;
+
+    const safeMessages: CoreMessage[] = [];
+    let total = 0;
+
+    const clamp = (text: string, limit: number): string => {
+      if (text.length <= limit) return text;
+      const head = text.slice(0, Math.floor(limit * 0.8));
+      const tail = text.slice(-Math.floor(limit * 0.2));
+      return `${head}\n…[omitted ${text.length - limit} chars]\n${tail}`;
+    };
+
+    // Keep system messages first (clamped)
+    const systems = messages.filter(m => m.role === 'system');
+    for (const m of systems) {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const clamped = clamp(content, 8000);
+      total += clamped.length;
+      if (total > maxTotalChars) break;
+      // For tool messages, wrap clamped string as tool-friendly text content
+      if ((m as any).role === 'tool') {
+        safeMessages.push({ ...(m as any), content: [{ type: 'text', text: clamped }] as any });
+      } else {
+        const role = (m as any).role;
+        safeMessages.push({ role, content: clamped } as any);
+      }
+    }
+
+    // Then add the most recent non-system messages until we hit the cap
+    const rest = messages.filter(m => m.role !== 'system');
+    for (let i = Math.max(0, rest.length - 40); i < rest.length; i++) { // last 40 msgs
+      const m = rest[i];
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      const clamped = clamp(content, maxPerMessage);
+      if (total + clamped.length > maxTotalChars) break;
+      total += clamped.length;
+      if ((m as any).role === 'tool') {
+        safeMessages.push({ ...(m as any), content: [{ type: 'text', text: clamped }] as any });
+      } else {
+        const role = (m as any).role;
+        safeMessages.push({ role, content: clamped } as any);
+      }
+    }
+
+    return safeMessages;
   }
 
   // Configuration methods
@@ -1039,6 +1763,206 @@ Requirements:
   // Clear execution context
   clearExecutionContext(): void {
     this.executionContext.clear();
+  }
+
+  // Utility method for sleep
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Test method to verify prompt loading works
+  async testPromptLoading(): Promise<{ baseAgent: string, readFile: string }> {
+    try {
+      const baseAgent = await this.getEnhancedSystemPrompt();
+      const readFile = await this.getToolPrompt('read_file', { path: 'test.txt' });
+
+      return {
+        baseAgent: baseAgent.substring(0, 4000) + '...',
+        readFile: readFile.substring(0, 4000) + '...'
+      };
+    } catch (error: any) {
+      return {
+        baseAgent: `Error loading base agent: ${error.message}`,
+        readFile: `Error loading read_file: ${error.message}`
+      };
+    }
+  }
+
+  // Format cached response to preserve proper text formatting
+  private formatCachedResponse(cachedText: string): string {
+    if (!cachedText || typeof cachedText !== 'string') {
+      return cachedText;
+    }
+
+    // Restore proper formatting
+    let formatted = cachedText
+      // Fix missing spaces after punctuation
+      .replace(/([.!?,:;])([A-Z])/g, '$1 $2')
+      // Fix missing spaces after commas and periods
+      .replace(/([,])([a-zA-Z])/g, '$1 $2')
+      // Fix missing spaces around common words
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      // Fix code block formatting
+      .replace(/```([a-z]*)\n/g, '```$1\n')
+      // Fix list items
+      .replace(/^(\d+\.)([A-Z])/gm, '$1 $2')
+      .replace(/^([-*])([A-Z])/gm, '$1 $2')
+      // Fix markdown headers
+      .replace(/^(#{1,6})([A-Z])/gm, '$1 $2')
+      // Fix step numbers
+      .replace(/Step(\d+):/g, 'Step $1:')
+      // Add space after certain patterns
+      .replace(/(\w)###/g, '$1\n\n###')
+      .replace(/(\w)##/g, '$1\n\n##')
+      .replace(/(\w)#([A-Z])/g, '$1\n\n# $2');
+
+    return formatted;
+  }
+
+  // Chunk text into smaller pieces for streaming
+  private chunkText(text: string, chunkSize: number = 80): string[] {
+    if (!text || text.length <= chunkSize) {
+      return [text];
+    }
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+    const words = text.split(/(\s+)/); // Split on whitespace but keep separators
+
+    for (const word of words) {
+      if ((currentChunk + word).length <= chunkSize) {
+        currentChunk += word;
+      } else {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk);
+        }
+        currentChunk = word;
+      }
+    }
+
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  // Analyze gaps when tool roundtrips are exhausted (token-optimized)
+  private analyzeMissingInformation(originalQuery: string, toolHistory: Array<{ toolName: string, args: any, result: any, success: boolean }>): string {
+    const tools = [...new Set(toolHistory.map(t => t.toolName))];
+    const failed = toolHistory.filter(t => !t.success).length;
+    const queryLower = originalQuery.toLowerCase();
+
+    let analysis = `Used ${tools.length} tools: ${tools.slice(0, 3).join(', ')}${tools.length > 3 ? '...' : ''}. `;
+
+    if (failed > 0) analysis += `${failed} failed. `;
+
+    // Suggest missing tools based on query
+    const missing = [];
+    if ((queryLower.includes('search') || queryLower.includes('find') || queryLower.includes('cerca') || queryLower.includes('trova')) && !tools.includes('semantic_search')) {
+      missing.push('semantic search');
+    }
+    if ((queryLower.includes('analyze') || queryLower.includes('analizza')) && !tools.includes('code_analysis')) {
+      missing.push('code analysis');
+    }
+
+    if (missing.length > 0) {
+      analysis += `Missing: ${missing.join(', ')}.`;
+    }
+
+    return this.truncateForPrompt(analysis, 200);
+  }
+
+  // Generate specific clarifying questions (token-optimized)
+  private generateClarifyingQuestion(gapAnalysis: string, originalQuery: string, toolHistory: Array<{ toolName: string, args: any, result: any, success: boolean }>): string {
+    const queryLower = originalQuery.toLowerCase();
+    const tools = toolHistory.map(t => t.toolName);
+
+    let question = '';
+
+    if ((queryLower.includes('function') || queryLower.includes('funzione')) && !tools.includes('semantic_search')) {
+      question = '🔎 Should I search for similar functions with different names?';
+    } else if (queryLower.includes('component') || queryLower.includes('componente')) {
+      question = '⚛️ Is the component in specific subdirectories (components/, ui/)?';
+    } else if (queryLower.includes('config')) {
+      question = '⚙️ Is the config in different files (.env, .yaml, .toml)?';
+    } else if (queryLower.includes('error') || queryLower.includes('errore')) {
+      question = '🐛 Do you have specific error logs or messages?';
+    } else {
+      question = '🎯 More context on where to search?';
+    }
+
+    return this.truncateForPrompt(`${question}\n💡 Tell me how to continue.`, 150);
+  }
+
+  // Generate final summary after 2 rounds of roundtrips
+  private generateFinalSummary(originalQuery: string, toolHistory: Array<{ toolName: string, args: any, result: any, success: boolean }>): string {
+    const tools = [...new Set(toolHistory.map(t => t.toolName))];
+    const successful = toolHistory.filter(t => t.success).length;
+    const failed = toolHistory.filter(t => !t.success).length;
+    const totalOperations = toolHistory.length;
+
+    let summary = `**Final Analysis Summary:**\n\n`;
+
+    // What was done
+    summary += `📊 **Operations Completed:** ${totalOperations} total operations across ${this.completedRounds} rounds\n`;
+    summary += `✅ **Successful:** ${successful} operations\n`;
+    summary += `❌ **Failed:** ${failed} operations\n`;
+    summary += `🛠️ **Tools Used:** ${tools.join(', ')}\n\n`;
+
+    // Key findings
+    summary += `🔍 **Key Findings:**\n`;
+    if (successful > 0) {
+      summary += `- Successfully executed ${successful} operations\n`;
+    }
+    if (failed > 0) {
+      summary += `- ${failed} operations encountered issues\n`;
+    }
+
+    // Analysis of query fulfillment
+    const queryLower = originalQuery.toLowerCase();
+    summary += `\n📝 **Query Analysis:**\n`;
+    summary += `- Original request: "${this.truncateForPrompt(originalQuery, 80)}"\n`;
+
+    // Recommend next steps based on analysis
+    summary += `\n🎯 **Recommended Next Steps:**\n`;
+
+    // Strategy based on what was tried
+    if (failed > successful && failed > 3) {
+      summary += `- Review and refine search criteria (many operations failed)\n`;
+      summary += `- Try different search patterns or keywords\n`;
+    }
+
+    if (queryLower.includes('search') || queryLower.includes('find')) {
+      if (!tools.includes('web_search')) {
+        summary += `- Try web search for external documentation\n`;
+      }
+      if (!tools.includes('semantic_search')) {
+        summary += `- Use semantic search for similar patterns\n`;
+      }
+      summary += `- Manually specify directories or file patterns\n`;
+      summary += `- Consider searching in hidden/config directories\n`;
+    }
+
+    if (queryLower.includes('analyze') || queryLower.includes('analisi')) {
+      if (!tools.includes('dependency_analysis')) {
+        summary += `- Run dependency analysis for comprehensive view\n`;
+      }
+      if (!tools.includes('code_analysis')) {
+        summary += `- Perform detailed code quality analysis\n`;
+      }
+      summary += `- Focus on specific modules or components\n`;
+    }
+
+    // General strategies
+    summary += `- Provide more specific context or constraints\n`;
+    summary += `- Break down the request into smaller, targeted tasks\n`;
+    summary += `- Try alternative approaches or tools not yet used\n`;
+
+    // Final guidance
+    summary += `\n💡 **How to Continue:** Please provide more specific guidance, narrow the scope, or try a different approach based on the recommendations above. Consider breaking your request into smaller, more focused tasks.`;
+
+    return this.truncateForPrompt(summary, 800);
   }
 }
 

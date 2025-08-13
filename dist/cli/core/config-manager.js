@@ -52,7 +52,7 @@ const ModelConfigSchema = zod_1.z.object({
 const ConfigSchema = zod_1.z.object({
     currentModel: zod_1.z.string(),
     temperature: zod_1.z.number().min(0).max(2).default(0.7),
-    maxTokens: zod_1.z.number().min(1).max(8000).default(4000),
+    maxTokens: zod_1.z.number().min(1).max(16000).default(12000),
     chatHistory: zod_1.z.boolean().default(true),
     maxHistoryLength: zod_1.z.number().min(1).max(1000).default(100),
     // Optional system prompt for general chat mode
@@ -92,6 +92,33 @@ const ConfigSchema = zod_1.z.object({
     logLevel: zod_1.z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     requireApprovalForNetwork: zod_1.z.boolean().default(true),
     approvalPolicy: zod_1.z.enum(['strict', 'moderate', 'permissive']).default('moderate'),
+    // Security configuration for different modes
+    securityMode: zod_1.z.enum(['safe', 'default', 'developer']).default('safe'),
+    toolApprovalPolicies: zod_1.z.object({
+        fileOperations: zod_1.z.enum(['always', 'risky', 'never']).default('risky'),
+        gitOperations: zod_1.z.enum(['always', 'risky', 'never']).default('risky'),
+        packageOperations: zod_1.z.enum(['always', 'risky', 'never']).default('risky'),
+        systemCommands: zod_1.z.enum(['always', 'risky', 'never']).default('always'),
+        networkRequests: zod_1.z.enum(['always', 'risky', 'never']).default('always'),
+    }).default({
+        fileOperations: 'risky',
+        gitOperations: 'risky',
+        packageOperations: 'risky',
+        systemCommands: 'always',
+        networkRequests: 'always',
+    }),
+    // Session-based settings
+    sessionSettings: zod_1.z.object({
+        approvalTimeoutMs: zod_1.z.number().min(5000).max(300000).default(30000),
+        devModeTimeoutMs: zod_1.z.number().min(60000).max(7200000).default(3600000),
+        batchApprovalEnabled: zod_1.z.boolean().default(true),
+        autoApproveReadOnly: zod_1.z.boolean().default(true),
+    }).default({
+        approvalTimeoutMs: 30000,
+        devModeTimeoutMs: 3600000,
+        batchApprovalEnabled: true,
+        autoApproveReadOnly: true,
+    }),
     sandbox: zod_1.z.object({
         enabled: zod_1.z.boolean().default(true),
         allowFileSystem: zod_1.z.boolean().default(true),
@@ -168,7 +195,7 @@ class SimpleConfigManager {
         this.defaultConfig = {
             currentModel: 'claude-sonnet-4-20250514',
             temperature: 0.7,
-            maxTokens: 4000,
+            maxTokens: 12000,
             chatHistory: true,
             maxHistoryLength: 100,
             systemPrompt: undefined,
@@ -183,6 +210,20 @@ class SimpleConfigManager {
             logLevel: 'info',
             requireApprovalForNetwork: true,
             approvalPolicy: 'moderate',
+            securityMode: 'safe',
+            toolApprovalPolicies: {
+                fileOperations: 'risky',
+                gitOperations: 'risky',
+                packageOperations: 'risky',
+                systemCommands: 'always',
+                networkRequests: 'always',
+            },
+            sessionSettings: {
+                approvalTimeoutMs: 30000,
+                devModeTimeoutMs: 3600000,
+                batchApprovalEnabled: true,
+                autoApproveReadOnly: true,
+            },
             sandbox: {
                 enabled: true,
                 allowFileSystem: true,
@@ -234,6 +275,10 @@ class SimpleConfigManager {
     }
     getAll() {
         return { ...this.config };
+    }
+    setAll(newConfig) {
+        this.config = { ...newConfig };
+        this.saveConfig();
     }
     // API Key management
     setApiKey(model, apiKey) {

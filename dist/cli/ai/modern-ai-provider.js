@@ -32,9 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.modernAIProvider = exports.ModernAIProvider = void 0;
 const anthropic_1 = require("@ai-sdk/anthropic");
@@ -45,12 +42,29 @@ const zod_1 = require("zod");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const child_process_1 = require("child_process");
-const chalk_1 = __importDefault(require("chalk"));
 const config_manager_1 = require("../core/config-manager");
+const prompt_manager_1 = require("../prompts/prompt-manager");
 class ModernAIProvider {
     constructor() {
         this.workingDirectory = process.cwd();
         this.currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+        this.promptManager = prompt_manager_1.PromptManager.getInstance(process.cwd());
+    }
+    // Load tool-specific prompts for enhanced execution
+    async getToolPrompt(toolName, parameters = {}) {
+        try {
+            return await this.promptManager.loadPromptForContext({
+                toolName,
+                parameters: {
+                    workingDirectory: this.workingDirectory,
+                    ...parameters
+                }
+            });
+        }
+        catch (error) {
+            // Return fallback prompt if file prompt fails
+            return `Execute ${toolName} with the provided parameters. Follow best practices and provide clear, helpful output.`;
+        }
     }
     // Core file operations tools - Claude Code style
     getFileOperationsTools() {
@@ -62,6 +76,8 @@ class ModernAIProvider {
                 }),
                 execute: async ({ path }) => {
                     try {
+                        // Load tool-specific prompt for context
+                        const toolPrompt = await this.getToolPrompt('read_file', { path });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         if (!(0, fs_1.existsSync)(fullPath)) {
                             return { error: `File not found: ${path}` };
@@ -88,6 +104,8 @@ class ModernAIProvider {
                 }),
                 execute: async ({ path, content }) => {
                     try {
+                        // Load tool-specific prompt for context
+                        const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...' });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         const dir = (0, path_1.dirname)(fullPath);
                         // Create directory if it doesn't exist
@@ -95,7 +113,7 @@ class ModernAIProvider {
                         mkdirSync(dir, { recursive: true });
                         (0, fs_1.writeFileSync)(fullPath, content, 'utf-8');
                         const stats = (0, fs_1.statSync)(fullPath);
-                        console.log(chalk_1.default.green(`✓ Created/updated: ${path}`));
+                        // File operation completed
                         return {
                             path: (0, path_1.relative)(this.workingDirectory, fullPath),
                             size: stats.size,
@@ -161,7 +179,7 @@ class ModernAIProvider {
                 execute: async ({ command, args = [] }) => {
                     try {
                         const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-                        console.log(chalk_1.default.blue(`$ ${fullCommand}`));
+                        // Executing command
                         const output = (0, child_process_1.execSync)(fullCommand, {
                             cwd: this.workingDirectory,
                             encoding: 'utf-8',
@@ -174,7 +192,7 @@ class ModernAIProvider {
                         };
                     }
                     catch (error) {
-                        console.log(chalk_1.default.red(`Command failed: ${error.message}`));
+                        // Command failed
                         return {
                             command: `${command} ${args.join(' ')}`,
                             error: error.message,
@@ -367,6 +385,7 @@ class ModernAIProvider {
         }
         switch (config.provider) {
             case 'openai':
+                // OpenAI provider is already response-API compatible via model options; no chainable helper here.
                 return (0, openai_1.openai)(config.model);
             case 'anthropic':
                 return (0, anthropic_1.anthropic)(config.model);
@@ -385,8 +404,8 @@ class ModernAIProvider {
                 model,
                 messages,
                 tools,
-                maxTokens: 4000,
-                temperature: 0.7,
+                maxTokens: 8000,
+                temperature: 1,
             });
             for await (const delta of result.textStream) {
                 yield {
@@ -413,8 +432,8 @@ class ModernAIProvider {
                 model,
                 messages,
                 tools,
-                maxToolRoundtrips: 5,
-                maxTokens: 4000,
+                maxToolRoundtrips: 25,
+                maxTokens: 12000,
                 temperature: 0.7,
             });
             return {

@@ -1,0 +1,345 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+Ecco l'analisi completa del sistema CLI con i diagrammi dell'architettura:
+📊 Architettura del Sistema
+Il sistema è un CLI avanzato con architettura multi-layer basata su agenti autonomi e intelligenza artificiale. Ecco i componenti principali:
+🎯 Layer 1: User Interface
+CLI Entry Point: Punto di ingresso principale (bin/cli.ts)
+Main Orchestrator: Coordinatore centrale del sistema
+Autonomous Chat Interface: Interfaccia di chat avanzata con capacità autonome
+Streaming Module: Gestione degli stream in tempo reale
+Advanced UI: Interfaccia utente sofisticata
+🧠 Layer 2: AI Provider System
+Advanced AI Provider: Provider AI avanzato con capacità autonome
+Modern AI Provider: Provider AI moderno con tool integration
+Model Provider: Gestione dei modelli AI
+AI Call Manager: Orchestrazione delle chiamate AI
+🤖 Layer 3: Multi-Agent System
+Il cuore del sistema con diversi agenti specializzati:
+Agenti Specializzati:
+Backend Agent: Sviluppo backend, API, database
+Frontend Agent: Sviluppo frontend, UI/UX, responsive design
+Coding Agent: Programmazione generale, refactoring
+Code Review Agent: Revisione e analisi qualità codice
+DevOps Agent: Deployment, CI/CD, containerizzazione
+Universal Agent: Agente tuttofare per task generici
+Autonomous Coder: Coding completamente autonomo
+Gestione Agenti:
+Agent Manager: Gestione lifecycle degli agenti
+Agent Router: Routing intelligente dei task
+Agent Factory: Creazione dinamica di agenti
+Event Bus: Sistema di messaging tra agenti
+Autonomous Orchestrator: Orchestrazione autonoma multi-agente
+🧩 Layer 4: Context & Intelligence
+Workspace Context: Analisi e gestione del contesto workspace
+Context-Aware RAG: Sistema RAG consapevole del contesto
+Workspace RAG: Retrieval Augmented Generation specifico per workspace
+Context Manager: Gestione centralizzata del contesto
+📋 Layer 5: Planning & Execution
+Autonomous Planner: Pianificazione autonoma dei task
+Planning Manager: Gestione del sistema di pianificazione
+Plan Executor: Esecuzione dei piani
+Agent Todo Manager: Gestione todo e task degli agenti
+Workflow Orchestrator: Orchestrazione di workflow complessi
+🛠️ Layer 6: Tools System
+Sistema di strumenti sicuri e modulari:
+File Tools:
+Read/Write/Edit File Tools
+Find Files Tool
+Multi-Edit Tool
+System Tools:
+Bash Tool
+Command Execution Tool
+Grep Tool
+Security:
+Secure Tools Registry
+Tool Registry con controlli di sicurezza
+🔌 Layer 7: External Integrations
+MCP Client: Integration con Model Context Protocol
+LSP Manager: Language Server Protocol per code intelligence
+Git Integration: Operazioni Git
+Docker Integration: Operazioni containerizzazione
+⚡ Layer 8: Performance & Caching
+Token Cache: Cache per token AI
+Completion Protocol Cache: Cache per completamenti
+Stream Manager: Gestione stream ottimizzati
+🔧 Layer 9: Core Management
+Config Manager: Gestione configurazione
+Logger: Sistema di logging avanzato
+Session Manager: Gestione sessioni
+Guidance Manager: Gestione guidance files
+Execution Policy: Politiche di sicurezza ed esecuzione
+🔄 Flussi di Esecuzione
+Modalità Autonoma:
+User input → AI Provider analizza e pianifica
+Context Manager fornisce contesto workspace
+Planning System genera piano di esecuzione
+Agent Manager distribuisce task agli agenti
+Ogni agente esegue i suoi task usando i tools
+Risultati vengono aggregati e presentati
+Modalità Manuale:
+User input → Esecuzione diretta tools
+Risposta immediata senza pianificazione complessa
+🎯 Caratteristiche Principali
+🤖 Multi-Agent Architecture: Agenti specializzati per diversi domini
+🧠 AI-Powered: Integrazione con multiple AI providers
+🔒 Security-First: Sistema di policy e approvazioni
+📊 Context-Aware: RAG system per intelligenza contestuale
+⚡ High Performance: Caching e streaming ottimizzati
+🔄 Autonomous: Capacità di esecuzione completamente autonoma
+🛠️ Extensible: Sistema modulare e estensibile
+Il sistema rappresenta una CLI di nuova generazione che combina AI, multi-agent systems, e automation per fornire un'esperienza di sviluppo estremamente avanzata e autonoma.
+
+graph TB
+%% User Interface Layer
+subgraph "User Interface Layer"
+CLI[CLI Entry Point<br/>bin/cli.ts]
+MAIN[Main Orchestrator<br/>main-orchestrator.ts]
+CHAT[Chat Interface<br/>autonomous-claude-interface.ts]
+UI[Advanced CLI UI<br/>advanced-cli-ui.ts]
+STREAM[Streaming Module<br/>streaming-orchestrator.ts]
+end
+
+    %% Core Management Layer
+    subgraph "Core Management Layer"
+        CONFIG[Config Manager<br/>config-manager.ts]
+        LOGGER[Logger<br/>logger.ts]
+        SESSION[Session Manager<br/>session-manager.ts]
+        GUIDANCE[Guidance Manager<br/>guidance-manager.ts]
+        POLICY[Execution Policy<br/>execution-policy.ts]
+    end
+
+    %% AI Provider Layer
+    subgraph "AI Provider Layer"
+        ADVANCED_AI[Advanced AI Provider<br/>advanced-ai-provider.ts]
+        MODERN_AI[Modern AI Provider<br/>modern-ai-provider.ts]
+        MODEL[Model Provider<br/>model-provider.ts]
+        AI_MANAGER[AI Call Manager<br/>ai-call-manager.ts]
+    end
+
+    %% Agent System
+    subgraph "Multi-Agent System"
+        AGENT_MGR[Agent Manager<br/>agent-manager.ts]
+        AGENT_ROUTER[Agent Router<br/>agent-router.ts]
+        FACTORY[Agent Factory<br/>agent-factory.ts]
+
+        subgraph "Specialized Agents"
+            BACKEND[Backend Agent]
+            FRONTEND[Frontend Agent]
+            CODING[Coding Agent]
+            REVIEW[Code Review Agent]
+            DEVOPS[DevOps Agent]
+            UNIVERSAL[Universal Agent]
+            AUTONOMOUS[Autonomous Coder]
+        end
+
+        ORCHESTRATOR[Autonomous Orchestrator<br/>autonomous-orchestrator.ts]
+        EVENT_BUS[Event Bus<br/>event-bus.ts]
+    end
+
+    %% Context & RAG System
+    subgraph "Context & Intelligence"
+        WORKSPACE_CTX[Workspace Context<br/>workspace-context.ts]
+        RAG[Context-Aware RAG<br/>context-aware-rag.ts]
+        WORKSPACE_RAG[Workspace RAG<br/>workspace-rag.ts]
+        CONTEXT_MGR[Context Manager<br/>context-manager.ts]
+    end
+
+    %% Planning System
+    subgraph "Planning & Execution"
+        PLANNER[Autonomous Planner<br/>autonomous-planner.ts]
+        PLAN_MGR[Planning Manager<br/>planning-manager.ts]
+        PLAN_EXEC[Plan Executor<br/>plan-executor.ts]
+        TODO_MGR[Agent Todo Manager<br/>agent-todo-manager.ts]
+        WORKFLOW[Workflow Orchestrator<br/>workflow-orchestrator.ts]
+    end
+
+    %% Tools System
+    subgraph "Tools & Operations"
+        TOOL_REG[Tool Registry<br/>tool-registry.ts]
+        SECURE_TOOLS[Secure Tools Registry<br/>secure-tools-registry.ts]
+
+        subgraph "File Tools"
+            READ_TOOL[Read File Tool]
+            WRITE_TOOL[Write File Tool]
+            EDIT_TOOL[Edit Tool]
+            FIND_TOOL[Find Files Tool]
+        end
+
+        subgraph "System Tools"
+            BASH_TOOL[Bash Tool]
+            COMMAND_TOOL[Run Command Tool]
+            GREP_TOOL[Grep Tool]
+        end
+    end
+
+    %% External Systems
+    subgraph "External Integrations"
+        MCP[MCP Client<br/>mcp-client.ts]
+        LSP[LSP Manager<br/>lsp-manager.ts]
+        GIT[Git Integration]
+        DOCKER[Docker Integration]
+    end
+
+    %% Caching & Performance
+    subgraph "Caching & Performance"
+        TOKEN_CACHE[Token Cache<br/>token-cache.ts]
+        COMPLETION_CACHE[Completion Protocol Cache<br/>completion-protocol-cache.ts]
+        STREAM_MGR[Stream Manager<br/>stream-manager.ts]
+    end
+
+    %% UI Components
+    subgraph "UI Components"
+        APPROVAL[Approval System<br/>approval-system.ts]
+        DIFF_MGR[Diff Manager<br/>diff-manager.ts]
+        DIFF_VIEW[Diff Viewer<br/>diff-viewer.ts]
+    end
+
+    %% Data Flow Connections
+    CLI --> MAIN
+    MAIN --> CHAT
+    MAIN --> STREAM
+    CHAT --> UI
+
+    MAIN --> CONFIG
+    MAIN --> LOGGER
+    MAIN --> SESSION
+    MAIN --> GUIDANCE
+    MAIN --> POLICY
+
+    CHAT --> ADVANCED_AI
+    CHAT --> MODERN_AI
+    ADVANCED_AI --> MODEL
+    MODERN_AI --> MODEL
+    AI_MANAGER --> ADVANCED_AI
+    AI_MANAGER --> MODERN_AI
+
+    MAIN --> AGENT_MGR
+    AGENT_MGR --> AGENT_ROUTER
+    AGENT_MGR --> FACTORY
+    AGENT_ROUTER --> BACKEND
+    AGENT_ROUTER --> FRONTEND
+    AGENT_ROUTER --> CODING
+    AGENT_ROUTER --> REVIEW
+    AGENT_ROUTER --> DEVOPS
+    AGENT_ROUTER --> UNIVERSAL
+    AGENT_ROUTER --> AUTONOMOUS
+    ORCHESTRATOR --> AGENT_MGR
+    EVENT_BUS --> AGENT_MGR
+
+    AGENT_MGR --> WORKSPACE_CTX
+    WORKSPACE_CTX --> RAG
+    RAG --> WORKSPACE_RAG
+    CONTEXT_MGR --> WORKSPACE_CTX
+
+    AGENT_MGR --> PLANNER
+    PLANNER --> PLAN_MGR
+    PLAN_MGR --> PLAN_EXEC
+    PLAN_EXEC --> TODO_MGR
+    WORKFLOW --> ORCHESTRATOR
+
+    AGENT_MGR --> TOOL_REG
+    TOOL_REG --> SECURE_TOOLS
+    SECURE_TOOLS --> READ_TOOL
+    SECURE_TOOLS --> WRITE_TOOL
+    SECURE_TOOLS --> EDIT_TOOL
+    SECURE_TOOLS --> FIND_TOOL
+    SECURE_TOOLS --> BASH_TOOL
+    SECURE_TOOLS --> COMMAND_TOOL
+    SECURE_TOOLS --> GREP_TOOL
+
+    MAIN --> MCP
+    MAIN --> LSP
+    TOOL_REG --> GIT
+    TOOL_REG --> DOCKER
+
+    AI_MANAGER --> TOKEN_CACHE
+    AI_MANAGER --> COMPLETION_CACHE
+    CHAT --> STREAM_MGR
+
+    UI --> APPROVAL
+    UI --> DIFF_MGR
+    DIFF_MGR --> DIFF_VIEW
+
+    %% Styling
+    classDef uiLayer fill:#e1f5fe
+    classDef coreLayer fill:#f3e5f5
+    classDef aiLayer fill:#e8f5e8
+    classDef agentLayer fill:#fff3e0
+    classDef contextLayer fill:#fce4ec
+    classDef planningLayer fill:#f1f8e9
+    classDef toolsLayer fill:#fff8e1
+    classDef externalLayer fill:#f5f5f5
+    classDef cacheLayer fill:#e0f2f1
+    classDef uiComponentLayer fill:#fafafa
+
+    class CLI,MAIN,CHAT,UI,STREAM uiLayer
+    class CONFIG,LOGGER,SESSION,GUIDANCE,POLICY coreLayer
+    class ADVANCED_AI,MODERN_AI,MODEL,AI_MANAGER aiLayer
+    class AGENT_MGR,AGENT_ROUTER,FACTORY,BACKEND,FRONTEND,CODING,REVIEW,DEVOPS,UNIVERSAL,AUTONOMOUS,ORCHESTRATOR,EVENT_BUS agentLayer
+    class WORKSPACE_CTX,RAG,WORKSPACE_RAG,CONTEXT_MGR contextLayer
+    class PLANNER,PLAN_MGR,PLAN_EXEC,TODO_MGR,WORKFLOW planningLayer
+    class TOOL_REG,SECURE_TOOLS,READ_TOOL,WRITE_TOOL,EDIT_TOOL,FIND_TOOL,BASH_TOOL,COMMAND_TOOL,GREP_TOOL toolsLayer
+    class MCP,LSP,GIT,DOCKER externalLayer
+    class TOKEN_CACHE,COMPLETION_CACHE,STREAM_MGR cacheLayer
+    class APPROVAL,DIFF_MGR,DIFF_VIEW uiComponentLayer
+
+sequenceDiagram
+participant User
+participant CLI
+participant MainOrchestrator
+participant ChatInterface
+participant AIProvider
+participant AgentManager
+participant Agent
+participant ToolRegistry
+participant Tool
+participant ContextManager
+participant PlanningSystem
+
+    User->>CLI: Command/Input
+    CLI->>MainOrchestrator: Initialize & Route
+    MainOrchestrator->>ChatInterface: Start Chat Session
+
+    alt Autonomous Mode
+        ChatInterface->>AIProvider: Process User Input
+        AIProvider->>ContextManager: Get Context
+        ContextManager-->>AIProvider: Workspace Context
+        AIProvider->>PlanningSystem: Generate Execution Plan
+        PlanningSystem-->>AIProvider: Task Plan
+        AIProvider->>AgentManager: Route Tasks to Agents
+
+        loop For Each Task
+            AgentManager->>Agent: Execute Task
+            Agent->>ToolRegistry: Request Tool
+            ToolRegistry->>Tool: Execute Operation
+            Tool-->>Agent: Result
+            Agent-->>AgentManager: Task Result
+        end
+
+        AgentManager-->>AIProvider: All Results
+        AIProvider-->>ChatInterface: Final Response
+    else Manual Mode
+        ChatInterface->>AIProvider: Process Input
+        AIProvider->>ToolRegistry: Direct Tool Execution
+        ToolRegistry->>Tool: Execute
+        Tool-->>ToolRegistry: Result
+        ToolRegistry-->>AIProvider: Tool Result
+        AIProvider-->>ChatInterface: Response
+    end
+
+    ChatInterface-->>User: Display Result
+
+    Note over User,PlanningSystem: System supports both autonomous<br/>multi-agent execution and<br/>manual tool operations
+
+---
+
+description:
+globs:
+alwaysApply: false
+
+---

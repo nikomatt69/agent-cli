@@ -63,23 +63,9 @@ class IntroductionModule {
     // Use realistic solid colors instead of rainbow gradient
     console.log(chalk.cyanBright(banner));
 
-    const welcomeBox = boxen(
-      chalk.white.bold('🤖 Autonomous AI Development Assistant\n\n') +
-      chalk.gray('• Intelligent code generation and analysis\n') +
-      chalk.gray('• Autonomous planning and execution\n') +
-      chalk.gray('• Real-time project understanding\n') +
-      chalk.gray('• Interactive terminal interface\n\n') +
-      chalk.cyan('Ready to transform your development workflow!'),
-      {
-        padding: 1,
-        margin: 1,
-        borderStyle: 'round',
-        borderColor: 'cyan',
-        backgroundColor: '#1a1a1a'
-      }
-    );
 
-    console.log(welcomeBox);
+
+
   }
 
   static displayApiKeySetup() {
@@ -154,16 +140,16 @@ class SystemModule {
   static checkNodeVersion(): boolean {
     const version = process.version;
     const major = parseInt(version.slice(1).split('.')[0]);
-    
+
     if (major < 18) {
       console.log(chalk.red(`❌ Node.js ${major} is too old. Requires Node.js 18+`));
       return false;
     }
-    
+
     console.log(chalk.green(`✅ Node.js ${version}`));
     return true;
   }
-  
+
   static async checkOllamaAvailability(): Promise<boolean> {
     // Only enforce when current provider is Ollama
     try {
@@ -750,10 +736,14 @@ class MainOrchestrator {
       // Show quick start guide
       this.showQuickStart();
 
-      // Start unified NikCLI interface
-      console.log(chalk.blue.bold('🤖 Starting NikCLI...\n'));
+      // Start unified NikCLI interface with structured UI
+      console.log(chalk.blue.bold('🤖 Starting NikCLI with Structured UI...\n'));
+
       const cli = new NikCLI();
-      await cli.startChat({});
+      await cli.startChat({
+        // Enable structured UI mode from the start
+        structuredUI: true
+      });
 
     } catch (error: any) {
       console.error(chalk.red('❌ Failed to start orchestrator:'), error);

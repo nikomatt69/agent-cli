@@ -36,7 +36,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
   private rl: readline.Interface;
   private context: StreamContext;
   private policyManager: ExecutionPolicyManager;
-  
+
   // Message streaming system
   private messageQueue: StreamMessage[] = [];
   private processingMessage = false;
@@ -46,7 +46,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
   constructor() {
     super();
-    
+
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -78,11 +78,13 @@ class StreamingOrchestratorImpl extends EventEmitter {
       if (key && key.name === 'slash' && !this.processingMessage) {
         setTimeout(() => this.showCommandMenu(), 50);
       }
-      
+
       if (key && key.name === 'tab' && key.shift) {
         this.cycleMode();
       }
-      
+
+
+
       if (key && key.name === 'c' && key.ctrl) {
         if (this.activeAgents.size > 0) {
           this.stopAllAgents();
@@ -99,7 +101,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
         this.showPrompt();
         return;
       }
-      
+
       await this.queueUserInput(trimmed);
       this.showPrompt();
     });
@@ -149,7 +151,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
           content: `✅ Agent ${task.agentType} completed successfully`,
           metadata: { agentId: task.id, result: task.result }
         });
-        
+
         // Auto-absorb completed messages after 2 seconds
         setTimeout(() => this.absorbCompletedMessages(), 2000);
       } else {
@@ -172,7 +174,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
     };
 
     this.messageQueue.push(message);
-    
+
     // Process immediately if not busy
     if (!this.processingMessage && this.messageQueue.length === 1) {
       this.processNextMessage();
@@ -212,7 +214,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
     } finally {
       message.status = 'completed';
       this.processingMessage = false;
-      
+
       // Process next message
       setTimeout(() => this.processNextMessage(), 100);
     }
@@ -244,7 +246,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
   private async handleCommand(command: string): Promise<void> {
     const [cmd, ...args] = command.slice(1).split(' ');
-    
+
     switch (cmd) {
       case 'status':
         this.showStatus();
@@ -319,20 +321,20 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
     // Select best agent for the task
     const selectedAgent = this.selectBestAgent(input);
-    
+
     if (this.context.planMode) {
       this.queueMessage({
         type: 'system',
         content: `🎯 Plan Mode: Creating execution plan...`
       });
-      
+
       try {
         const plan = await planningService.createPlan(input, {
           showProgress: false,
           autoExecute: this.context.autonomous,
           confirmSteps: false
         });
-        
+
         this.queueMessage({
           type: 'system',
           content: `📋 Generated plan with ${plan.steps.length} steps`
@@ -361,7 +363,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
   private selectBestAgent(input: string): string {
     const lower = input.toLowerCase();
-    
+
     if (lower.includes('react') || lower.includes('component')) return 'react-expert';
     if (lower.includes('backend') || lower.includes('api')) return 'backend-expert';
     if (lower.includes('frontend') || lower.includes('ui')) return 'frontend-expert';
@@ -371,9 +373,9 @@ class StreamingOrchestratorImpl extends EventEmitter {
   }
 
   private displayMessage(message: StreamMessage): void {
-    const timestamp = message.timestamp.toLocaleTimeString('en-GB', { 
-      hour12: false, 
-      hour: '2-digit', 
+    const timestamp = message.timestamp.toLocaleTimeString('en-GB', {
+      hour12: false,
+      hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
     });
@@ -410,8 +412,8 @@ class StreamingOrchestratorImpl extends EventEmitter {
     }
 
     const statusIndicator = message.status === 'completed' ? '' :
-                           message.status === 'processing' ? chalk.yellow('⏳') :
-                           message.status === 'absorbed' ? chalk.dim('📤') : '';
+      message.status === 'processing' ? chalk.yellow('⏳') :
+        message.status === 'absorbed' ? chalk.dim('📤') : '';
 
     console.log(`${chalk.dim(timestamp)} ${prefix} ${color(content)} ${statusIndicator}`);
 
@@ -461,7 +463,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
     const active = this.activeAgents.size;
     const queued = agentService.getQueuedTasks().length;
     const pending = diffManager.getPendingCount();
-    
+
     console.log(chalk.cyan.bold('\\n🎛️ Orchestrator Status'));
     console.log(chalk.gray('─'.repeat(40)));
     console.log(`${chalk.blue('Working Dir:')} ${this.context.workingDirectory}`);
@@ -480,7 +482,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
     console.log(chalk.cyan.bold('\\n🤖 Active Agents'));
     console.log(chalk.gray('─'.repeat(30)));
-    
+
     this.activeAgents.forEach(agent => {
       console.log(`${chalk.blue(agent.agentType)} - ${agent.task.slice(0, 40)}...`);
     });
@@ -512,12 +514,12 @@ class StreamingOrchestratorImpl extends EventEmitter {
     console.log(`${chalk.green('/accept')} [all]  Accept file changes`);
     console.log(`${chalk.green('/clear')}         Clear message queue`);
     console.log(`${chalk.green('/help')}          Show detailed help`);
-    
+
     console.log(chalk.cyan.bold('\\n🤖 Agent Usage:'));
     console.log(`${chalk.blue('@agent-name')} task description`);
     console.log(chalk.dim('Available: react-expert, backend-expert, frontend-expert,'));
     console.log(chalk.dim('          devops-expert, code-review, autonomous-coder'));
-    
+
     console.log(chalk.cyan.bold('\\n💬 Natural Language:'));
     console.log(chalk.dim('Just describe what you want to accomplish'));
   }
@@ -525,18 +527,19 @@ class StreamingOrchestratorImpl extends EventEmitter {
   private showHelp(): void {
     console.log(chalk.cyan.bold('\\n🎛️ AI Development Orchestrator Help'));
     console.log(chalk.gray('═'.repeat(60)));
-    
+
     console.log(chalk.white.bold('\\nHow it works:'));
     console.log('• Messages are queued and processed in order');
     console.log('• Up to 3 agents can run in parallel');
     console.log('• Completed messages are auto-absorbed');
     console.log('• Context is automatically managed');
-    
+
     console.log(chalk.white.bold('\\nKeyboard shortcuts:'));
     console.log('• / - Show command menu');
     console.log('• Shift+Tab - Cycle modes (manual → plan → auto-accept)');
+    console.log('• ESC - Return to default chat');
     console.log('• Ctrl+C - Stop agents or exit');
-    
+
     console.log(chalk.white.bold('\\nModes:'));
     console.log('• Manual - Ask for confirmation');
     console.log('• Plan - Create execution plans first');
@@ -567,14 +570,14 @@ class StreamingOrchestratorImpl extends EventEmitter {
     const dir = require('path').basename(this.context.workingDirectory);
     const agents = this.activeAgents.size;
     const agentIndicator = agents > 0 ? chalk.blue(`${agents}🤖`) : '🎛️';
-    
+
     const modes: string[] = [];
     if (this.context.planMode) modes.push(chalk.cyan('plan'));
     if (this.context.autoAcceptEdits) modes.push(chalk.green('auto-accept'));
     const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
-    
+
     const contextStr = chalk.dim(`${this.context.contextLeft}%`);
-    
+
     const prompt = `\n┌─[${agentIndicator}:${chalk.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
     this.rl.setPrompt(prompt);
     this.rl.prompt();
@@ -585,40 +588,42 @@ class StreamingOrchestratorImpl extends EventEmitter {
       '/status', '/agents', '/diff', '/accept', '/clear', '/help'
     ];
     const agents = [
-      '@react-expert', '@backend-expert', '@frontend-expert', 
+      '@react-expert', '@backend-expert', '@frontend-expert',
       '@devops-expert', '@code-review', '@autonomous-coder'
     ];
-    
+
     const all = [...commands, ...agents];
     const hits = all.filter(c => c.startsWith(line));
     return [hits.length ? hits : all, line];
   }
 
+
+
   private gracefulExit(): void {
     console.log(chalk.blue('\n👋 Shutting down orchestrator...'));
-    
+
     if (this.activeAgents.size > 0) {
       console.log(chalk.yellow(`⏳ Waiting for ${this.activeAgents.size} agents to finish...`));
       // In production, you'd wait for agents to complete
     }
-    
+
     console.log(chalk.green('✅ Goodbye!'));
     process.exit(0);
   }
 
   async start(): Promise<void> {
     console.clear();
-    
+
     // Check API keys
     const hasKeys = this.checkAPIKeys();
     if (!hasKeys) return;
-    
+
     this.showWelcome();
     this.initializeServices();
-    
+
     // Start the interface
     this.showPrompt();
-    
+
     return new Promise<void>((resolve) => {
       this.rl.on('close', resolve);
     });
@@ -649,16 +654,16 @@ class StreamingOrchestratorImpl extends EventEmitter {
     toolService.setWorkingDirectory(this.context.workingDirectory);
     planningService.setWorkingDirectory(this.context.workingDirectory);
     lspService.setWorkingDirectory(this.context.workingDirectory);
-    
+
     // Auto-start relevant services
     await lspService.autoStartServers(this.context.workingDirectory);
-    
+
     console.log(chalk.dim('🚀 Services initialized'));
   }
 }
 
 // Export the class
-export class StreamingOrchestrator extends StreamingOrchestratorImpl {}
+export class StreamingOrchestrator extends StreamingOrchestratorImpl { }
 
 // Start the orchestrator if this file is run directly
 if (require.main === module) {

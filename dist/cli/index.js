@@ -76,19 +76,6 @@ class IntroductionModule {
         console.clear();
         // Use realistic solid colors instead of rainbow gradient
         console.log(chalk_1.default.cyanBright(banner));
-        const welcomeBox = (0, boxen_1.default)(chalk_1.default.white.bold('🤖 Autonomous AI Development Assistant\n\n') +
-            chalk_1.default.gray('• Intelligent code generation and analysis\n') +
-            chalk_1.default.gray('• Autonomous planning and execution\n') +
-            chalk_1.default.gray('• Real-time project understanding\n') +
-            chalk_1.default.gray('• Interactive terminal interface\n\n') +
-            chalk_1.default.cyan('Ready to transform your development workflow!'), {
-            padding: 1,
-            margin: 1,
-            borderStyle: 'round',
-            borderColor: 'cyan',
-            backgroundColor: '#1a1a1a'
-        });
-        console.log(welcomeBox);
     }
     static displayApiKeySetup() {
         const setupBox = (0, boxen_1.default)(chalk_1.default.yellow.bold('⚠️  API Key Required\n\n') +
@@ -674,10 +661,13 @@ class MainOrchestrator {
             }
             // Show quick start guide
             this.showQuickStart();
-            // Start unified NikCLI interface
-            console.log(chalk_1.default.blue.bold('🤖 Starting NikCLI...\n'));
+            // Start unified NikCLI interface with structured UI
+            console.log(chalk_1.default.blue.bold('🤖 Starting NikCLI with Structured UI...\n'));
             const cli = new nik_cli_1.NikCLI();
-            await cli.startChat({});
+            await cli.startChat({
+                // Enable structured UI mode from the start
+                structuredUI: true
+            });
         }
         catch (error) {
             console.error(chalk_1.default.red('❌ Failed to start orchestrator:'), error);

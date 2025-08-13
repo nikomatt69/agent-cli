@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -18,6 +51,8 @@ const enhanced_planning_1 = require("../planning/enhanced-planning");
 const approval_system_1 = require("../ui/approval-system");
 const diff_viewer_1 = require("../ui/diff-viewer");
 const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
+const tool_service_1 = require("../services/tool-service");
+const config_manager_2 = require("../core/config-manager");
 class SlashCommandHandler {
     constructor() {
         this.commands = new Map();
@@ -56,6 +91,11 @@ class SlashCommandHandler {
         this.commands.set('todo', this.todoCommand.bind(this));
         this.commands.set('todos', this.todosCommand.bind(this));
         this.commands.set('approval', this.approvalCommand.bind(this));
+        // Security Commands
+        this.commands.set('security', this.securityCommand.bind(this));
+        this.commands.set('dev-mode', this.devModeCommand.bind(this));
+        this.commands.set('safe-mode', this.safeModeCommand.bind(this));
+        this.commands.set('clear-approvals', this.clearApprovalsCommand.bind(this));
         // File operations
         this.commands.set('read', this.readFileCommand.bind(this));
         this.commands.set('write', this.writeFileCommand.bind(this));
@@ -152,6 +192,12 @@ ${chalk_1.default.cyan('/build')} - Build the project
 ${chalk_1.default.cyan('/test [pattern]')} - Run tests
 ${chalk_1.default.cyan('/lint')} - Run linting
 ${chalk_1.default.cyan('/create <type> <name>')} - Create new project
+
+${chalk_1.default.blue.bold('Security Commands:')}
+${chalk_1.default.cyan('/security [status|set|help]')} - Manage security settings
+${chalk_1.default.cyan('/dev-mode [enable|status|help]')} - Developer mode controls
+${chalk_1.default.cyan('/safe-mode')} - Enable safe mode (maximum security)
+${chalk_1.default.cyan('/clear-approvals')} - Clear session approvals
 
 ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
     `;
@@ -1090,6 +1136,13 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                         const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
                         const latestPlan = plans[plans.length - 1];
                         if (latestPlan) {
+                            // Render structured panel with real todos
+                            try {
+                                const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
+                                const todoItems = latestPlan.todos.map((t) => ({ content: t.title || t.description, status: t.status }));
+                                advancedUI.showTodos?.(todoItems, latestPlan.title || 'Update Todos');
+                            }
+                            catch { }
                             enhanced_planning_1.enhancedPlanning.showPlanStatus(latestPlan.id);
                         }
                         else {
@@ -1097,6 +1150,16 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                         }
                     }
                     else {
+                        const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
+                        const target = plans.find(p => p.id === planId);
+                        if (target) {
+                            try {
+                                const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
+                                const todoItems = target.todos.map((t) => ({ content: t.title || t.description, status: t.status }));
+                                advancedUI.showTodos?.(todoItems, target.title || 'Update Todos');
+                            }
+                            catch { }
+                        }
                         enhanced_planning_1.enhancedPlanning.showPlanStatus(planId);
                     }
                     break;
@@ -1201,6 +1264,179 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             agent_stream_1.agentStream.showLiveDashboard();
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    // Security Commands Implementation
+    async securityCommand(args) {
+        const subcommand = args[0] || 'status';
+        try {
+            switch (subcommand) {
+                case 'status': {
+                    const securityStatus = tool_service_1.toolService.getSecurityStatus();
+                    const config = config_manager_2.simpleConfigManager.getAll();
+                    console.log(chalk_1.default.cyan.bold('\n🔒 Security Status'));
+                    console.log(chalk_1.default.gray('═'.repeat(50)));
+                    console.log(`${chalk_1.default.blue('Security Mode:')} ${this.formatSecurityMode(securityStatus.mode)}`);
+                    console.log(`${chalk_1.default.blue('Developer Mode:')} ${securityStatus.devModeActive ? chalk_1.default.yellow('Active') : chalk_1.default.gray('Inactive')}`);
+                    console.log(`${chalk_1.default.blue('Session Approvals:')} ${securityStatus.sessionApprovals}`);
+                    console.log(`${chalk_1.default.blue('Approval Policy:')} ${config.approvalPolicy}`);
+                    console.log(chalk_1.default.cyan.bold('\n📋 Tool Policies:'));
+                    console.log(`${chalk_1.default.blue('File Operations:')} ${config.toolApprovalPolicies.fileOperations}`);
+                    console.log(`${chalk_1.default.blue('Git Operations:')} ${config.toolApprovalPolicies.gitOperations}`);
+                    console.log(`${chalk_1.default.blue('Package Operations:')} ${config.toolApprovalPolicies.packageOperations}`);
+                    console.log(`${chalk_1.default.blue('System Commands:')} ${config.toolApprovalPolicies.systemCommands}`);
+                    console.log(`${chalk_1.default.blue('Network Requests:')} ${config.toolApprovalPolicies.networkRequests}`);
+                    console.log(chalk_1.default.cyan.bold('\n🛠️ Tools by Risk Level:'));
+                    const tools = tool_service_1.toolService.getAvailableToolsWithSecurity();
+                    const lowRisk = tools.filter(t => t.riskLevel === 'low');
+                    const medRisk = tools.filter(t => t.riskLevel === 'medium');
+                    const highRisk = tools.filter(t => t.riskLevel === 'high');
+                    console.log(`${chalk_1.default.green('Low Risk:')} ${lowRisk.map(t => t.name).join(', ')}`);
+                    console.log(`${chalk_1.default.yellow('Medium Risk:')} ${medRisk.map(t => t.name).join(', ')}`);
+                    console.log(`${chalk_1.default.red('High Risk:')} ${highRisk.map(t => t.name).join(', ')}`);
+                    break;
+                }
+                case 'set': {
+                    if (args.length < 3) {
+                        console.log(chalk_1.default.yellow('Usage: /security set <mode> <value>'));
+                        console.log(chalk_1.default.gray('Available modes: security-mode, file-ops, git-ops, package-ops, system-cmds, network-reqs'));
+                        break;
+                    }
+                    const mode = args[1];
+                    const value = args[2];
+                    const config = config_manager_2.simpleConfigManager.getAll();
+                    switch (mode) {
+                        case 'security-mode':
+                            if (['safe', 'default', 'developer'].includes(value)) {
+                                config_manager_2.simpleConfigManager.set('securityMode', value);
+                                console.log(chalk_1.default.green(`✅ Security mode set to: ${value}`));
+                            }
+                            else {
+                                console.log(chalk_1.default.red('❌ Invalid mode. Use: safe, default, or developer'));
+                            }
+                            break;
+                        case 'file-ops':
+                        case 'git-ops':
+                        case 'package-ops':
+                        case 'system-cmds':
+                        case 'network-reqs':
+                            if (['always', 'risky', 'never'].includes(value)) {
+                                const policyKey = mode.replace('-', '').replace('ops', 'Operations').replace('cmds', 'Commands').replace('reqs', 'Requests');
+                                const keyMap = {
+                                    'fileOperations': 'fileOperations',
+                                    'gitOperations': 'gitOperations',
+                                    'packageOperations': 'packageOperations',
+                                    'systemCommands': 'systemCommands',
+                                    'networkRequests': 'networkRequests'
+                                };
+                                config.toolApprovalPolicies[keyMap[policyKey]] = value;
+                                config_manager_2.simpleConfigManager.setAll(config);
+                                console.log(chalk_1.default.green(`✅ ${mode} policy set to: ${value}`));
+                            }
+                            else {
+                                console.log(chalk_1.default.red('❌ Invalid value. Use: always, risky, or never'));
+                            }
+                            break;
+                        default:
+                            console.log(chalk_1.default.red(`❌ Unknown setting: ${mode}`));
+                    }
+                    break;
+                }
+                case 'help':
+                    console.log(chalk_1.default.cyan.bold('\n🔒 Security Command Help'));
+                    console.log(chalk_1.default.gray('─'.repeat(40)));
+                    console.log(`${chalk_1.default.green('/security status')} - Show current security settings`);
+                    console.log(`${chalk_1.default.green('/security set <mode> <value>')} - Change security settings`);
+                    console.log(`${chalk_1.default.green('/security help')} - Show this help`);
+                    console.log(chalk_1.default.cyan('\nSecurity Modes:'));
+                    console.log(`${chalk_1.default.green('safe')} - Maximum security, approval for most operations`);
+                    console.log(`${chalk_1.default.yellow('default')} - Balanced security, approval for risky operations`);
+                    console.log(`${chalk_1.default.red('developer')} - Minimal security, approval only for dangerous operations`);
+                    break;
+                default:
+                    console.log(chalk_1.default.red(`Unknown security command: ${subcommand}`));
+                    console.log(chalk_1.default.gray('Use /security help for available commands'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Security command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async devModeCommand(args) {
+        const action = args[0] || 'enable';
+        try {
+            switch (action) {
+                case 'enable': {
+                    const timeoutMs = args[1] ? parseInt(args[1]) * 60000 : undefined; // Convert minutes to ms
+                    tool_service_1.toolService.enableDevMode(timeoutMs);
+                    const timeout = timeoutMs ? ` for ${args[1]} minutes` : ' for 1 hour (default)';
+                    console.log(chalk_1.default.yellow(`🛠️ Developer mode enabled${timeout}`));
+                    console.log(chalk_1.default.gray('Reduced security restrictions active. Use /security status to see current settings.'));
+                    break;
+                }
+                case 'status': {
+                    const isActive = tool_service_1.toolService.isDevModeActive();
+                    console.log(chalk_1.default.cyan.bold('\n🛠️ Developer Mode Status'));
+                    console.log(chalk_1.default.gray('─'.repeat(30)));
+                    console.log(`${chalk_1.default.blue('Status:')} ${isActive ? chalk_1.default.yellow('Active') : chalk_1.default.gray('Inactive')}`);
+                    if (isActive) {
+                        console.log(chalk_1.default.yellow('⚠️ Security restrictions are reduced'));
+                    }
+                    break;
+                }
+                case 'help':
+                    console.log(chalk_1.default.cyan.bold('\n🛠️ Developer Mode Commands'));
+                    console.log(chalk_1.default.gray('─'.repeat(35)));
+                    console.log(`${chalk_1.default.green('/dev-mode enable [minutes]')} - Enable developer mode`);
+                    console.log(`${chalk_1.default.green('/dev-mode status')} - Check developer mode status`);
+                    console.log(`${chalk_1.default.green('/dev-mode help')} - Show this help`);
+                    console.log(chalk_1.default.yellow('\n⚠️ Developer mode reduces security restrictions'));
+                    break;
+                default:
+                    console.log(chalk_1.default.red(`Unknown dev-mode command: ${action}`));
+                    console.log(chalk_1.default.gray('Use /dev-mode help for available commands'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Dev-mode command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async safeModeCommand(args) {
+        try {
+            const config = config_manager_2.simpleConfigManager.getAll();
+            config.securityMode = 'safe';
+            config_manager_2.simpleConfigManager.setAll(config);
+            console.log(chalk_1.default.green('🔒 Safe mode enabled - maximum security restrictions'));
+            console.log(chalk_1.default.gray('All risky operations will require approval. Use /security status to see details.'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Safe mode command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async clearApprovalsCommand(args) {
+        try {
+            tool_service_1.toolService.clearSessionApprovals();
+            console.log(chalk_1.default.green('✅ All session approvals cleared'));
+            console.log(chalk_1.default.gray('Next operations will require fresh approval'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Clear approvals command failed: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    formatSecurityMode(mode) {
+        switch (mode) {
+            case 'safe':
+                return chalk_1.default.green('🔒 Safe');
+            case 'default':
+                return chalk_1.default.yellow('🛡️ Default');
+            case 'developer':
+                return chalk_1.default.red('🛠️ Developer');
+            default:
+                return chalk_1.default.gray(mode);
+        }
     }
 }
 exports.SlashCommandHandler = SlashCommandHandler;

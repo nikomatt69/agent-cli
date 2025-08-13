@@ -85,7 +85,7 @@ export class ContextAwareRAGSystem {
 
   private loadMemory(): void {
     const memoryFile = join(this.memoryPath, 'workspace-memory.json');
-    
+
     if (existsSync(memoryFile)) {
       try {
         const data = JSON.parse(readFileSync(memoryFile, 'utf-8'));
@@ -161,7 +161,7 @@ export class ContextAwareRAGSystem {
 
     const hash = createHash('md5').update(content).digest('hex');
     const language = this.detectLanguage(extname(filePath));
-    
+
     // Check if file changed
     const existingMemory = this.memory.files.get(relativePath);
     if (existingMemory && existingMemory.hash === hash) {
@@ -189,10 +189,10 @@ export class ContextAwareRAGSystem {
     };
 
     this.memory.files.set(relativePath, fileMemory);
-    
+
     // Create embedding for semantic search
     await this.createEmbedding(relativePath, content, summary);
-    
+
     this.saveMemory();
     return fileMemory;
   }
@@ -206,7 +206,7 @@ export class ContextAwareRAGSystem {
     if (existsSync(packagePath)) {
       const packageContent = readFileSync(packagePath, 'utf-8');
       const packageJson = JSON.parse(packageContent);
-      
+
       this.memory.context.projectName = packageJson.name || 'Unknown';
       this.memory.context.dependencies = {
         ...packageJson.dependencies,
@@ -217,7 +217,7 @@ export class ContextAwareRAGSystem {
 
     // Scan and analyze important files
     const importantFiles = await this.findImportantFiles();
-    
+
     for (const filePath of importantFiles) {
       try {
         await this.analyzeFile(filePath);
@@ -229,7 +229,7 @@ export class ContextAwareRAGSystem {
     // Update context with findings
     this.memory.context.languages = this.extractLanguages();
     this.memory.context.structure = this.buildProjectStructure();
-    
+
     this.saveMemory();
     return this.memory.context;
   }
@@ -242,7 +242,7 @@ export class ContextAwareRAGSystem {
     for (const [path, file] of this.memory.files) {
       // Simple text similarity (in production, use proper embeddings)
       const similarity = this.calculateSimilarity(query, file.content + ' ' + file.summary);
-      
+
       if (similarity > 0.1) {
         results.push({ file, similarity });
       }
@@ -267,7 +267,7 @@ export class ContextAwareRAGSystem {
     };
 
     this.memory.interactions.push(interaction);
-    
+
     // Keep only last 100 interactions
     if (this.memory.interactions.length > 100) {
       this.memory.interactions = this.memory.interactions.slice(-100);
@@ -286,7 +286,7 @@ export class ContextAwareRAGSystem {
     knownProblems: string[];
   } {
     let relevantFiles: FileMemory[] = [];
-    
+
     if (query) {
       // Get semantically relevant files
       relevantFiles = Array.from(this.memory.files.values())
@@ -334,22 +334,22 @@ export class ContextAwareRAGSystem {
 
   addRecentChange(change: string): void {
     this.memory.context.recentChanges.push(change);
-    
+
     // Keep only last 20 changes
     if (this.memory.context.recentChanges.length > 20) {
       this.memory.context.recentChanges = this.memory.context.recentChanges.slice(-20);
     }
-    
+
     this.saveMemory();
   }
 
   // Helper methods
   private performCodeAnalysis(content: string, language: string): any {
     const analysis = {
-      imports: [],
-      exports: [],
-      functions: [],
-      classes: [],
+      imports: [] as string[],
+      exports: [] as string[],
+      functions: [] as string[],
+      classes: [] as string[],
       lines: content.split('\n').length,
       complexity: 0
     };
@@ -377,7 +377,7 @@ export class ContextAwareRAGSystem {
     // Simple rule-based summary (in production, use AI)
     const lines = content.split('\n').length;
     const summary = `${language} file with ${analysis.functions.length} functions, ${analysis.classes.length} classes (${lines} lines)`;
-    
+
     // Add specific insights based on content
     if (content.includes('useState') || content.includes('useEffect')) {
       return `React ${summary} with hooks`;
@@ -388,13 +388,13 @@ export class ContextAwareRAGSystem {
     if (content.includes('test(') || content.includes('describe(')) {
       return `Test ${summary}`;
     }
-    
+
     return summary;
   }
 
   private calculateImportance(path: string, analysis: any): number {
     let importance = 0;
-    
+
     // Path-based importance
     if (path.includes('index.')) importance += 20;
     if (path.includes('app.') || path.includes('main.')) importance += 25;
@@ -402,33 +402,33 @@ export class ContextAwareRAGSystem {
     if (path.includes('tsconfig.json')) importance += 15;
     if (path.includes('src/')) importance += 10;
     if (path.includes('components/')) importance += 5;
-    
+
     // Content-based importance
     importance += Math.min(analysis.functions.length * 2, 20);
     importance += Math.min(analysis.classes.length * 3, 15);
     importance += Math.min(analysis.imports.length, 10);
-    
+
     return Math.min(importance, 100);
   }
 
   private async findImportantFiles(): Promise<string[]> {
     const important: string[] = [];
     const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.json', '.md'];
-    
+
     const scan = (dir: string, depth: number = 0) => {
       if (depth > 3) return; // Limit depth
-      
+
       try {
         const items = readdirSync(dir, { withFileTypes: true });
-        
+
         for (const item of items) {
           const fullPath = join(dir, item.name);
           const relativePath = relative(this.workingDir, fullPath);
-          
+
           // Skip common ignored directories
           if (item.name.startsWith('.') && item.name !== '.env') continue;
           if (['node_modules', 'dist', 'build', '.git'].includes(item.name)) continue;
-          
+
           if (item.isDirectory()) {
             scan(fullPath, depth + 1);
           } else if (item.isFile() && extensions.includes(extname(item.name))) {
@@ -459,13 +459,31 @@ export class ContextAwareRAGSystem {
 
   private detectFramework(packageJson: any): string {
     const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
-    
+
     if (deps.next) return 'Next.js';
     if (deps.react) return 'React';
     if (deps.vue) return 'Vue.js';
     if (deps.express) return 'Express';
     if (deps.fastify) return 'Fastify';
-    
+    if (deps.nestjs) return 'Nest.js';
+    if (deps.bun) return 'Bun';
+    if (deps.deno) return 'Deno';
+    if (deps.rails) return 'Ruby on Rails';
+    if (deps.spring) return 'Spring Boot';
+    if (deps.aspnet) return 'ASP.NET';
+    if (deps.laravel) return 'Laravel';
+    if (deps.yii) return 'Yii';
+    if (deps.symfony) return 'Symfony';
+    if (deps.elixir) return 'Elixir';
+    if (deps.phoenix) return 'Phoenix';
+    if (deps.flutter) return 'Flutter';
+    if (deps.swift) return 'Swift';
+    if (deps.kotlin) return 'Kotlin';
+    if (deps.golang) return 'Go';
+    if (deps.erlang) return 'Erlang';
+    if (deps.elixir) return 'Elixir';
+
+
     return 'Node.js';
   }
 
@@ -482,20 +500,20 @@ export class ContextAwareRAGSystem {
   private buildProjectStructure(): any {
     // Build simplified structure from memory
     const structure: any = {};
-    
+
     for (const file of this.memory.files.values()) {
       const parts = file.path.split('/');
       let current = structure;
-      
+
       for (let i = 0; i < parts.length - 1; i++) {
         if (!current[parts[i]]) current[parts[i]] = {};
         current = current[parts[i]];
       }
-      
+
       if (!current._files) current._files = [];
       current._files.push(parts[parts.length - 1]);
     }
-    
+
     return structure;
   }
 
@@ -503,19 +521,19 @@ export class ContextAwareRAGSystem {
     // Simple embedding - in production use proper embeddings
     const words = text.toLowerCase().split(/\W+/);
     const vector = new Array(100).fill(0);
-    
+
     for (let i = 0; i < words.length; i++) {
       const hash = this.simpleHash(words[i]);
       vector[hash % 100] += 1;
     }
-    
+
     return vector;
   }
 
   private async createEmbedding(path: string, content: string, summary: string): Promise<void> {
     const text = `${path} ${summary} ${content.substring(0, 500)}`;
     const vector = this.createSimpleEmbedding(text);
-    
+
     const embedding: EmbeddingVector = {
       id: path,
       content: summary,
@@ -523,7 +541,7 @@ export class ContextAwareRAGSystem {
       metadata: { path, language: this.detectLanguage(extname(path)) },
       timestamp: new Date()
     };
-    
+
     // Replace existing embedding
     this.memory.embeddings = this.memory.embeddings.filter(e => e.id !== path);
     this.memory.embeddings.push(embedding);
@@ -532,23 +550,23 @@ export class ContextAwareRAGSystem {
   private calculateSimilarity(query: string, content: string): number {
     const queryWords = new Set(query.toLowerCase().split(/\W+/));
     const contentWords = new Set(content.toLowerCase().split(/\W+/));
-    
+
     const intersection = new Set([...queryWords].filter(x => contentWords.has(x)));
     const union = new Set([...queryWords, ...contentWords]);
-    
+
     return intersection.size / union.size;
   }
 
   private calculateComplexity(content: string): number {
     let complexity = 0;
-    
+
     // Simple complexity metrics
     complexity += (content.match(/if\s*\(/g) || []).length;
     complexity += (content.match(/for\s*\(/g) || []).length * 2;
     complexity += (content.match(/while\s*\(/g) || []).length * 2;
     complexity += (content.match(/switch\s*\(/g) || []).length * 3;
     complexity += (content.match(/catch\s*\(/g) || []).length;
-    
+
     return complexity;
   }
 

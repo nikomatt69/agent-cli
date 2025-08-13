@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { EventEmitter } from 'events';
 import { toolService } from './tool-service';
 import { planningService } from './planning-service';
+import { simpleConfigManager } from '../core/config-manager';
 
 export interface AgentTask {
   id: string;
@@ -152,10 +153,14 @@ export class AgentService extends EventEmitter {
     this.emit('task_start', agentTask);
 
     try {
+      // Create secure tool wrapper based on current security mode
+      const config = simpleConfigManager.getAll();
+      const secureTools = this.createSecureToolWrapper(toolService, config.securityMode);
+      
       const context = {
         taskId: agentTask.id,
         workingDirectory: process.cwd(),
-        tools: toolService,
+        tools: secureTools,
         planning: planningService
       };
 
@@ -353,6 +358,88 @@ export class AgentService extends EventEmitter {
 
     yield { type: 'progress', progress: 100 };
     yield { type: 'result', data: { plan, completed: true } };
+  }
+
+  /**
+   * Create a secure tool wrapper that implements approval logic based on security mode
+   */
+  private createSecureToolWrapper(originalToolService: any, securityMode: 'safe' | 'default' | 'developer'): any {
+    return {
+      // Pass through all original methods
+      ...originalToolService,
+      
+      // Override executeTool to add security logic
+      async executeTool(toolName: string, args: any): Promise<any> {
+        const operation = this.inferOperationFromArgs(toolName, args);
+        
+        // Determine if we should use secure execution
+        const shouldUseSecure = this.shouldUseSecureExecution(toolName, securityMode);
+        
+        if (shouldUseSecure) {
+          console.log(chalk.yellow(`🛡️ Security check: ${toolName}`));
+          return await originalToolService.executeToolSafely(toolName, operation, args);
+        } else {
+          // Use original method for safe/read-only operations or in developer mode
+          return await originalToolService.executeTool(toolName, args);
+        }
+      }
+    };
+  }
+
+  /**
+   * Determine if secure execution should be used based on tool and security mode
+   */
+  private shouldUseSecureExecution(toolName: string, securityMode: 'safe' | 'default' | 'developer'): boolean {
+    // Always use secure execution in safe mode
+    if (securityMode === 'safe') {
+      return !this.isReadOnlyTool(toolName);
+    }
+    
+    // Use secure execution for risky operations in default mode
+    if (securityMode === 'default') {
+      return this.isRiskyTool(toolName);
+    }
+    
+    // Developer mode - only secure for high-risk operations
+    if (securityMode === 'developer') {
+      return this.isHighRiskTool(toolName);
+    }
+    
+    return false; // Fallback
+  }
+
+  /**
+   * Check if tool is read-only (safe)
+   */
+  private isReadOnlyTool(toolName: string): boolean {
+    const readOnlyTools = ['read_file', 'list_files', 'find_files', 'analyze_project', 'git_status', 'git_diff'];
+    return readOnlyTools.includes(toolName);
+  }
+
+  /**
+   * Check if tool is risky (modifies files/system)
+   */
+  private isRiskyTool(toolName: string): boolean {
+    const riskyTools = ['write_file', 'edit_file', 'multi_edit', 'git_commit', 'git_push', 'npm_install', 'execute_command'];
+    return riskyTools.includes(toolName);
+  }
+
+  /**
+   * Check if tool is high-risk (dangerous operations)
+   */
+  private isHighRiskTool(toolName: string): boolean {
+    const highRiskTools = ['execute_command', 'delete_file', 'git_reset', 'network_request'];
+    return highRiskTools.includes(toolName);
+  }
+
+  /**
+   * Infer operation type from tool name and arguments
+   */
+  private inferOperationFromArgs(toolName: string, args: any): string {
+    if (args.operation) return args.operation;
+    if (args.command) return `execute: ${args.command}`;
+    if (args.filePath) return `file-op: ${args.filePath}`;
+    return 'general';
   }
 }
 

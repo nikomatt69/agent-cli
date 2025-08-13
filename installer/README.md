@@ -1,6 +1,6 @@
 # NikCLI Installer (curl)
 
-This folder contains simple shell scripts to install or uninstall the `niko-cli` package using npm, convenient for curl piping.
+This folder contains simple shell scripts to install or uninstall the `nikcli` package using npm, convenient for curl piping.
 
 > Beta: This project is currently at `0.1.0-beta`. Interfaces and behavior may change.
 
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer
 ## What the installer does
 
 - Verifies Node.js (>= 18) and npm availability
-- Installs `niko-cli` globally via npm
+- Installs `nikcli` globally via npm
 - Summarizes PATH/bin location
 
 ## Notes & risks

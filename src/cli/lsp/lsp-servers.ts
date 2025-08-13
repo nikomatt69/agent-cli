@@ -1,10 +1,10 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { resolve, join, dirname, extname } from 'path';
 import { existsSync, readdirSync } from 'fs';
 import chalk from 'chalk';
 
 export interface LSPServerHandle {
-  process: ChildProcessWithoutNullStreams;
+  process: ChildProcess;
   initialization?: Record<string, any>;
 }
 

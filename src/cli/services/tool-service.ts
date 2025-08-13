@@ -2,6 +2,9 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { ExecutionPolicyManager, ToolApprovalRequest } from '../policies/execution-policy';
+import { ApprovalSystem, ApprovalRequest, ApprovalResponse } from '../ui/approval-system';
+import { simpleConfigManager } from '../core/config-manager';
 
 export interface ToolExecution {
   id: string;
@@ -25,8 +28,25 @@ export class ToolService {
   private tools: Map<string, ToolCapability> = new Map();
   private executions: Map<string, ToolExecution> = new Map();
   private workingDirectory: string = process.cwd();
+  private policyManager: ExecutionPolicyManager;
+  private approvalSystem: ApprovalSystem;
 
   constructor() {
+    this.policyManager = new ExecutionPolicyManager(simpleConfigManager);
+    this.approvalSystem = new ApprovalSystem({
+      autoApprove: {
+        lowRisk: false,
+        mediumRisk: false,
+        fileOperations: false,
+        packageInstalls: false,
+      },
+      requireConfirmation: {
+        destructiveOperations: true,
+        networkRequests: true,
+        systemCommands: true,
+      },
+      timeout: 30000, // 30 seconds timeout
+    });
     this.registerDefaultTools();
   }
 
@@ -109,6 +129,101 @@ export class ToolService {
     console.log(chalk.dim(`🔧 Registered tool: ${tool.name}`));
   }
 
+  /**
+   * Execute tool with security checks and approval process
+   */
+  async executeToolSafely(toolName: string, operation: string, args: any): Promise<any> {
+    try {
+      // Check if approval is needed
+      const approvalRequest = await this.policyManager.shouldApproveToolOperation(toolName, operation, args);
+      
+      if (approvalRequest) {
+        // Request user approval
+        const approval = await this.requestToolApproval(approvalRequest);
+        
+        if (!approval.approved) {
+          await this.policyManager.logPolicyDecision(
+            `tool:${toolName}`, 
+            'denied', 
+            { operation, args, userComments: approval.userComments }
+          );
+          throw new Error(`Operation cancelled by user: ${toolName} - ${operation}`);
+        }
+
+        // Log approval decision
+        await this.policyManager.logPolicyDecision(
+          `tool:${toolName}`, 
+          'requires_approval', 
+          { operation, args, approved: true, userComments: approval.userComments }
+        );
+
+        // Add to session approvals if requested
+        if (approval.userComments?.includes('approve-session')) {
+          this.policyManager.addSessionApproval(toolName, operation);
+        }
+      } else {
+        // Log auto-approval
+        await this.policyManager.logPolicyDecision(
+          `tool:${toolName}`, 
+          'allowed', 
+          { operation, args, reason: 'auto-approved by policy' }
+        );
+      }
+
+      // Execute the tool
+      return await this.executeTool(toolName, args);
+
+    } catch (error: any) {
+      // Log execution error
+      await this.policyManager.logPolicyDecision(
+        `tool:${toolName}`, 
+        'denied', 
+        { operation, args, error: error.message }
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Request approval for tool operation
+   */
+  private async requestToolApproval(toolRequest: ToolApprovalRequest): Promise<ApprovalResponse> {
+    const approvalRequest: ApprovalRequest = {
+      id: `tool-${Date.now()}`,
+      title: `Tool Operation: ${toolRequest.toolName}`,
+      description: `Operation: ${toolRequest.operation}\n\nRisk Level: ${toolRequest.riskAssessment.level}\n\nReasons:\n${toolRequest.riskAssessment.reasons.map(r => `• ${r}`).join('\n')}`,
+      riskLevel: toolRequest.riskAssessment.level === 'low' ? 'low' :
+                 toolRequest.riskAssessment.level === 'medium' ? 'medium' : 'high',
+      actions: [{
+        type: this.getActionType(toolRequest.toolName),
+        description: `Execute ${toolRequest.toolName} with operation: ${toolRequest.operation}`,
+        details: toolRequest.args,
+        riskLevel: toolRequest.riskAssessment.level === 'low' ? 'low' :
+                   toolRequest.riskAssessment.level === 'medium' ? 'medium' : 'high'
+      }],
+      context: {
+        workingDirectory: this.workingDirectory,
+        affectedFiles: toolRequest.riskAssessment.affectedFiles,
+        estimatedDuration: 5000, // 5 seconds default
+      },
+      timeout: simpleConfigManager.getAll().sessionSettings.approvalTimeoutMs
+    };
+
+    return await this.approvalSystem.requestApproval(approvalRequest);
+  }
+
+  /**
+   * Map tool name to approval action type
+   */
+  private getActionType(toolName: string): 'file_create' | 'file_modify' | 'file_delete' | 'command_execute' | 'package_install' | 'network_request' {
+    if (toolName.includes('write') || toolName.includes('create')) return 'file_create';
+    if (toolName.includes('edit') || toolName.includes('modify')) return 'file_modify';
+    if (toolName.includes('delete') || toolName.includes('remove')) return 'file_delete';
+    if (toolName.includes('install') || toolName.includes('package')) return 'package_install';
+    if (toolName.includes('network') || toolName.includes('fetch')) return 'network_request';
+    return 'command_execute';
+  }
+
   async executeTool(toolName: string, args: any): Promise<any> {
     const tool = this.tools.get(toolName);
     if (!tool) {
@@ -148,6 +263,9 @@ export class ToolService {
     }
   }
 
+  /**
+   * Get available tools (original method for compatibility)
+   */
   getAvailableTools(): ToolCapability[] {
     return Array.from(this.tools.values());
   }
@@ -409,6 +527,85 @@ export class ToolService {
     } catch (error: any) {
       throw new Error(`Failed to analyze project: ${error.message}`);
     }
+  }
+
+  /**
+   * Enable developer mode for current session
+   */
+  enableDevMode(timeoutMs?: number): void {
+    this.policyManager.enableDevMode(timeoutMs);
+    console.log(chalk.yellow('🛠️ Developer mode enabled - reduced security restrictions'));
+  }
+
+  /**
+   * Check if developer mode is active
+   */
+  isDevModeActive(): boolean {
+    return this.policyManager.isDevModeActive();
+  }
+
+  /**
+   * Get current security mode status
+   */
+  getSecurityStatus(): {
+    mode: string;
+    devModeActive: boolean;
+    sessionApprovals: number;
+    toolPolicies: { name: string; risk: string; requiresApproval: boolean }[];
+  } {
+    const config = simpleConfigManager.getAll();
+    const toolsWithSecurity = this.getAvailableToolsWithSecurity();
+
+    return {
+      mode: config.securityMode,
+      devModeActive: this.isDevModeActive(),
+      sessionApprovals: this.policyManager['sessionApprovals'].size,
+      toolPolicies: toolsWithSecurity.map(tool => ({
+        name: tool.name,
+        risk: tool.riskLevel || 'unknown',
+        requiresApproval: tool.requiresApproval || false
+      }))
+    };
+  }
+
+  /**
+   * Clear all session approvals
+   */
+  clearSessionApprovals(): void {
+    this.policyManager.clearSessionApprovals();
+    console.log(chalk.blue('🔄 Session approvals cleared'));
+  }
+
+  /**
+   * Add a tool to session approvals
+   */
+  addSessionApproval(toolName: string, operation: string): void {
+    this.policyManager.addSessionApproval(toolName, operation);
+    console.log(chalk.green(`✅ Added session approval for ${toolName}:${operation}`));
+  }
+
+  /**
+   * Get available tools with their security status
+   */
+  getAvailableToolsWithSecurity(): Array<{
+    name: string;
+    description: string;
+    category: string;
+    riskLevel?: string;
+    requiresApproval?: boolean;
+    allowedInSafeMode?: boolean;
+  }> {
+    return Array.from(this.tools.values()).map(tool => {
+      const policy = this.policyManager.getToolPolicy(tool.name);
+      return {
+        name: tool.name,
+        description: tool.description,
+        category: tool.category,
+        riskLevel: policy?.riskLevel,
+        requiresApproval: policy?.requiresApproval,
+        allowedInSafeMode: policy?.allowedInSafeMode
+      };
+    });
   }
 }
 

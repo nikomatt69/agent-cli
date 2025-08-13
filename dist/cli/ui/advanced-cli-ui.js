@@ -42,13 +42,18 @@ const boxen_1 = __importDefault(require("boxen"));
 const ora_1 = __importDefault(require("ora"));
 const cli_progress_1 = __importDefault(require("cli-progress"));
 const readline = __importStar(require("readline"));
+const cli_highlight_1 = require("cli-highlight");
+const path = __importStar(require("path"));
 class AdvancedCliUI {
     constructor() {
         this.indicators = new Map();
         this.liveUpdates = [];
+        this.backgroundAgents = new Map();
         this.spinners = new Map();
         this.progressBars = new Map();
         this.isInteractiveMode = false;
+        this.panels = new Map();
+        this.layoutMode = 'dual';
         this.theme = {
             primary: chalk_1.default.blue,
             secondary: chalk_1.default.cyan,
@@ -64,8 +69,6 @@ class AdvancedCliUI {
      */
     startInteractiveMode() {
         this.isInteractiveMode = true;
-        console.clear();
-        this.showHeader();
     }
     /**
      * Stop interactive mode
@@ -77,19 +80,6 @@ class AdvancedCliUI {
     /**
      * Show application header
      */
-    showHeader() {
-        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.2-beta')}\\n` +
-            `${chalk_1.default.gray('Autonomous AI Developer Assistant')}\\n\\n` +
-            `${chalk_1.default.blue('Status:')} ${this.getOverallStatus()}  ${chalk_1.default.blue('Active Tasks:')} ${this.indicators.size}\\n` +
-            `${chalk_1.default.blue('Mode:')} Interactive  ${chalk_1.default.blue('Live Updates:')} Enabled`, {
-            padding: 1,
-            margin: { top: 0, bottom: 1, left: 0, right: 0 },
-            borderStyle: 'round',
-            borderColor: 'cyan',
-            textAlignment: 'center',
-        });
-        console.log(header);
-    }
     /**
      * Create a new status indicator
      */
@@ -304,33 +294,22 @@ class AdvancedCliUI {
         });
     }
     /**
-     * Ask user for confirmation with enhanced UI
+     * Ask user for confirmation (non-blocking in chat mode)
      */
     async askConfirmation(question, details, defaultValue = false) {
+        // In chat mode, just return default to avoid blocking
+        // Log the question for user awareness but don't block execution
         const icon = defaultValue ? '✅' : '❓';
-        const prompt = `${icon} ${chalk_1.default.cyan(question)}`;
+        console.log(`${icon} ${chalk_1.default.cyan(question)} ${chalk_1.default.yellow.bold(`(auto-${defaultValue ? 'approved' : 'rejected'})`)}`);
         if (details) {
             console.log(chalk_1.default.gray(`   ${details}`));
         }
-        return new Promise((resolve) => {
-            const rl = readline.createInterface({
-                input: process.stdin,
-                output: process.stdout,
-            });
-            rl.question(`${prompt} ${chalk_1.default.gray(defaultValue ? '(Y/n)' : '(y/N)')}: `, (answer) => {
-                rl.close();
-                const normalized = answer.toLowerCase().trim();
-                if (normalized === '') {
-                    resolve(defaultValue);
-                }
-                else {
-                    resolve(normalized.startsWith('y'));
-                }
-            });
-        });
+        console.log(chalk_1.default.gray(`   → Using default value: ${defaultValue}`));
+        // Auto-approve to prevent blocking in chat mode
+        return defaultValue;
     }
     /**
-     * Show multi-choice selection
+     * Show multi-choice selection (simple readline, no panels)
      */
     async showSelection(title, choices, defaultIndex = 0) {
         console.log(chalk_1.default.cyan.bold(`\\n${title}`));
@@ -347,7 +326,7 @@ class AdvancedCliUI {
                 input: process.stdin,
                 output: process.stdout,
             });
-            const prompt = `\\nSelect option (1-${choices.length}, default ${defaultIndex + 1}): `;
+            const prompt = `\nSelect option (1-${choices.length}, default ${defaultIndex + 1}): `;
             rl.question(prompt, (answer) => {
                 rl.close();
                 let selection = defaultIndex;
@@ -389,8 +368,7 @@ class AdvancedCliUI {
         if (!this.isInteractiveMode)
             return;
         // Move cursor to top and clear
-        process.stdout.write('\\x1B[2J\\x1B[H');
-        this.showHeader();
+        process.stdout.write('\x1B[2J\x1B[H');
         this.showActiveIndicators();
         this.showRecentUpdates();
     }
@@ -573,6 +551,516 @@ class AdvancedCliUI {
         }
     }
     /**
+     * Show file diff in structured panel
+     */
+    showFileDiff(filePath, oldContent, newContent) {
+        const diffContent = this.generateDiffContent(oldContent, newContent);
+        this.panels.set('diff', {
+            id: 'diff',
+            title: `📝 ${path.basename(filePath)}`,
+            content: diffContent,
+            type: 'diff',
+            filePath,
+            visible: true,
+            borderColor: 'yellow'
+        });
+        this.autoLayout();
+    }
+    /**
+     * Show Todos panel with real items
+     */
+    showTodos(todos, title = 'Update Todos') {
+        const lines = [];
+        for (const t of todos) {
+            const text = (t.title || t.content || '').trim();
+            if (!text)
+                continue;
+            const icon = t.status === 'completed' ? '☑' : t.status === 'in_progress' ? '⚡' : '☐';
+            const styled = t.status === 'completed' ? this.theme.success.strikethrough(text) : this.theme.info(text);
+            lines.push(`${icon} ${styled}`);
+        }
+        const content = lines.join('\n');
+        this.panels.set('todos', {
+            id: 'todos',
+            title: `📝 ${title}`,
+            content,
+            type: 'todos',
+            visible: true,
+            borderColor: 'yellow',
+        });
+        this.autoLayout();
+    }
+    /**
+     * Parse a markdown Todo file (todo.md) and render as Todos panel
+     */
+    showTodosFromMarkdown(markdown, title = 'Todo Plan') {
+        try {
+            const items = [];
+            const lines = markdown.split(/\r?\n/);
+            let inTodos = false;
+            let currentTitle = null;
+            let currentStatus = undefined;
+            const flush = () => {
+                if (currentTitle) {
+                    items.push({ content: currentTitle.trim(), status: currentStatus });
+                }
+                currentTitle = null;
+                currentStatus = undefined;
+            };
+            for (const raw of lines) {
+                const line = raw.trim();
+                if (line.startsWith('## ')) {
+                    const isTodoHeader = /#+\s*Todo Items/i.test(line);
+                    if (!inTodos && isTodoHeader) {
+                        inTodos = true;
+                        continue;
+                    }
+                    if (inTodos && !isTodoHeader) {
+                        // end of todo section
+                        break;
+                    }
+                }
+                if (!inTodos)
+                    continue;
+                const mTitle = line.match(/^###\s*\d+\.\s*(.+)$/);
+                if (mTitle) {
+                    flush();
+                    currentTitle = mTitle[1];
+                    continue;
+                }
+                const mStatus = line.match(/^Status:\s*(.+)$/i);
+                if (mStatus) {
+                    const s = mStatus[1].toLowerCase();
+                    if (s.includes('complete') || s.includes('done') || s.includes('✅'))
+                        currentStatus = 'completed';
+                    else if (s.includes('progress'))
+                        currentStatus = 'in_progress';
+                    else if (s.includes('pending') || s.includes('todo'))
+                        currentStatus = 'pending';
+                    else
+                        currentStatus = undefined;
+                    continue;
+                }
+            }
+            flush();
+            if (items.length > 0) {
+                this.showTodos(items, title);
+            }
+            else {
+                this.showFileContent('todo.md', markdown);
+            }
+        }
+        catch {
+            this.showFileContent('todo.md', markdown);
+        }
+    }
+    /**
+     * Show file content with syntax highlighting
+     */
+    showFileContent(filePath, content, highlightLines) {
+        const language = this.detectLanguage(filePath);
+        const formattedContent = this.formatCodeContent(content, language, highlightLines);
+        this.panels.set('file', {
+            id: 'file',
+            title: `📄 ${path.basename(filePath)}`,
+            content: formattedContent,
+            type: 'file',
+            language,
+            filePath,
+            visible: true,
+            borderColor: 'green'
+        });
+        this.showCodingLayout();
+    }
+    /**
+     * Show file list (grep/find results)
+     */
+    showFileList(files, title = '📁 Files') {
+        const listContent = files.map((file, index) => {
+            const icon = this.getFileIcon(path.extname(file));
+            return `${icon} ${file}`;
+        }).join('\n');
+        this.panels.set('list', {
+            id: 'list',
+            title,
+            content: listContent,
+            type: 'list',
+            visible: true,
+            borderColor: 'magenta'
+        });
+        this.autoLayout();
+    }
+    /**
+     * Show coding layout (file content + status)
+     */
+    showCodingLayout() {
+        this.hidePanel('diff');
+        this.hidePanel('list');
+        this.layoutMode = 'single';
+        this.renderStructuredLayout();
+    }
+    /**
+     * Show diff layout (diff + status)
+     */
+    showDiffLayout() {
+        this.hidePanel('file');
+        this.hidePanel('list');
+        this.layoutMode = 'dual';
+        this.renderStructuredLayout();
+    }
+    /**
+     * Show search layout (list + file + status)
+     */
+    showSearchLayout() {
+        this.layoutMode = 'triple';
+        this.renderStructuredLayout();
+    }
+    /**
+     * Auto-layout based on current visible panels
+     */
+    autoLayout() {
+        const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+        if (visiblePanels.length <= 1) {
+            this.layoutMode = 'single';
+        }
+        else if (visiblePanels.length === 2) {
+            this.layoutMode = 'dual';
+        }
+        else {
+            this.layoutMode = 'triple';
+        }
+        this.renderStructuredLayout();
+    }
+    /**
+     * Show grep results in structured format
+     */
+    showGrepResults(pattern, matches) {
+        const grepContent = matches.map(match => {
+            const fileName = chalk_1.default.blue(match.file || match.filePath);
+            const lineNum = chalk_1.default.yellow(`${match.lineNumber || match.line}`);
+            const line = (match.content || match.match || '').replace(new RegExp(pattern, 'gi'), chalk_1.default.bgYellow.black('$&'));
+            return `${fileName}:${lineNum}: ${line}`;
+        }).join('\n');
+        this.panels.set('list', {
+            id: 'list',
+            title: `🔍 Grep: ${pattern}`,
+            content: grepContent,
+            type: 'list',
+            visible: true,
+            borderColor: 'cyan'
+        });
+        this.showSearchLayout();
+    }
+    /**
+     * Hide panel
+     */
+    hidePanel(panelId) {
+        const panel = this.panels.get(panelId);
+        if (panel) {
+            panel.visible = false;
+            this.adjustLayout();
+        }
+    }
+    /**
+     * Clear all panels
+     */
+    clearPanels() {
+        this.panels.clear();
+        this.layoutMode = 'single';
+    }
+    /**
+     * Show persistent todos (disabled in simple mode)
+     */
+    /**
+     * Render structured layout with panels
+     */
+    renderStructuredLayout() {
+        if (!this.isInteractiveMode) {
+            this.renderSimpleLayout();
+            return;
+        }
+        console.clear();
+        const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+        if (visiblePanels.length === 0) {
+            this.showActiveIndicators();
+            return;
+        }
+        // Promote layout based on visible panel count
+        if (visiblePanels.length >= 3) {
+            this.renderTripleLayout(visiblePanels);
+            return;
+        }
+        if (this.layoutMode === 'single' || visiblePanels.length === 1) {
+            this.renderSinglePanel(visiblePanels[0]);
+        }
+        else if (this.layoutMode === 'dual' || visiblePanels.length === 2) {
+            this.renderDualLayout(visiblePanels);
+        }
+        else {
+            this.renderTripleLayout(visiblePanels);
+        }
+        this.showActiveIndicators();
+    }
+    renderSimpleLayout() {
+        const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+        visiblePanels.forEach(panel => {
+            console.log((0, boxen_1.default)(this.formatPanelContent(panel), {
+                title: panel.title,
+                titleAlignment: 'left',
+                padding: 1,
+                borderStyle: 'round',
+                borderColor: panel.borderColor || 'white'
+            }));
+        });
+    }
+    renderSinglePanel(panel) {
+        const terminalWidth = process.stdout.columns || 80;
+        console.log((0, boxen_1.default)(this.formatPanelContent(panel), {
+            title: panel.title,
+            titleAlignment: 'left',
+            padding: 1,
+            borderStyle: 'round',
+            borderColor: panel.borderColor || 'white',
+            width: Math.min(terminalWidth - 4, 120)
+        }));
+    }
+    renderDualLayout(panels) {
+        const terminalWidth = process.stdout.columns || 80;
+        const panelWidth = Math.floor((terminalWidth - 6) / 2);
+        panels.slice(0, 2).forEach(panel => {
+            console.log((0, boxen_1.default)(this.formatPanelContent(panel), {
+                title: panel.title,
+                titleAlignment: 'left',
+                padding: 1,
+                borderStyle: 'round',
+                borderColor: panel.borderColor || 'white',
+                width: Math.max(panelWidth, 30),
+                margin: { left: 1, right: 1 }
+            }));
+        });
+    }
+    renderTripleLayout(panels) {
+        const terminalWidth = process.stdout.columns || 80;
+        const panelWidth = Math.floor((terminalWidth - 8) / 3);
+        panels.slice(0, 3).forEach(panel => {
+            console.log((0, boxen_1.default)(this.formatPanelContent(panel), {
+                title: panel.title,
+                titleAlignment: 'left',
+                padding: 1,
+                borderStyle: 'round',
+                borderColor: panel.borderColor || 'white',
+                width: Math.max(panelWidth, 25),
+                margin: { left: 1, right: 1 }
+            }));
+        });
+    }
+    formatPanelContent(panel) {
+        switch (panel.type) {
+            case 'diff':
+                return this.formatDiffContent(panel.content);
+            case 'file':
+                return panel.content; // Already formatted in showFileContent
+            case 'list':
+                return this.formatListContent(panel.content);
+            default:
+                return panel.content;
+        }
+    }
+    formatDiffContent(content) {
+        return content.split('\n').map(line => {
+            if (line.startsWith('+')) {
+                return chalk_1.default.green(line);
+            }
+            else if (line.startsWith('-')) {
+                return chalk_1.default.red(line);
+            }
+            else if (line.startsWith('@@')) {
+                return chalk_1.default.cyan(line);
+            }
+            else {
+                return chalk_1.default.gray(line);
+            }
+        }).join('\n');
+    }
+    formatCodeContent(content, language, highlightLines) {
+        try {
+            let formatted = language ? (0, cli_highlight_1.highlight)(content, { language }) : content;
+            if (highlightLines && highlightLines.length > 0) {
+                const lines = formatted.split('\n');
+                formatted = lines.map((line, index) => {
+                    const lineNum = (index + 1).toString().padStart(4, ' ');
+                    const isHighlighted = highlightLines.includes(index + 1);
+                    if (isHighlighted) {
+                        return chalk_1.default.bgYellow.black(`${lineNum}`) + ` ${line}`;
+                    }
+                    else {
+                        return chalk_1.default.gray(`${lineNum}`) + ` ${line}`;
+                    }
+                }).join('\n');
+            }
+            return formatted;
+        }
+        catch (error) {
+            return content;
+        }
+    }
+    formatListContent(content) {
+        return content.split('\n').map(line => {
+            if (line.trim()) {
+                return line.startsWith('•') ? line : `${chalk_1.default.blue('•')} ${line}`;
+            }
+            return line;
+        }).join('\n');
+    }
+    generateDiffContent(oldContent, newContent) {
+        const lines1 = oldContent.split('\n');
+        const lines2 = newContent.split('\n');
+        let diff = '';
+        const maxLines = Math.max(lines1.length, lines2.length);
+        for (let i = 0; i < maxLines; i++) {
+            const line1 = lines1[i] || '';
+            const line2 = lines2[i] || '';
+            if (line1 !== line2) {
+                if (line1)
+                    diff += `-${line1}\n`;
+                if (line2)
+                    diff += `+${line2}\n`;
+            }
+            else if (line1) {
+                diff += ` ${line1}\n`;
+            }
+        }
+        return diff;
+    }
+    detectLanguage(filePath) {
+        const ext = path.extname(filePath).toLowerCase();
+        const basename = path.basename(filePath).toLowerCase();
+        // Special filenames
+        if (basename === 'dockerfile')
+            return 'dockerfile';
+        if (basename === 'makefile')
+            return 'makefile';
+        if (basename === 'rakefile')
+            return 'ruby';
+        if (basename === 'gemfile')
+            return 'ruby';
+        if (basename === 'package.json')
+            return 'json';
+        if (basename === 'composer.json')
+            return 'json';
+        if (basename === 'tsconfig.json')
+            return 'json';
+        if (basename.endsWith('.config.js'))
+            return 'javascript';
+        if (basename.endsWith('.config.ts'))
+            return 'typescript';
+        const languageMap = {
+            // JavaScript family
+            '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
+            '.ts': 'typescript', '.tsx': 'typescript', '.mts': 'typescript', '.cts': 'typescript',
+            '.vue': 'vue', '.svelte': 'svelte',
+            // Web technologies
+            '.html': 'html', '.htm': 'html', '.xhtml': 'html',
+            '.css': 'css', '.scss': 'scss', '.sass': 'sass', '.less': 'less', '.styl': 'stylus',
+            // Backend languages
+            '.py': 'python', '.pyx': 'python', '.pyi': 'python', '.pyw': 'python',
+            '.java': 'java', '.scala': 'scala', '.kt': 'kotlin', '.kts': 'kotlin',
+            '.rb': 'ruby', '.rbx': 'ruby', '.gemspec': 'ruby',
+            '.php': 'php', '.phtml': 'php', '.php3': 'php', '.php4': 'php', '.php5': 'php',
+            '.go': 'go', '.rs': 'rust', '.swift': 'swift',
+            '.cs': 'csharp', '.vb': 'vbnet', '.fs': 'fsharp',
+            // Systems programming
+            '.c': 'c', '.h': 'c',
+            '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp', '.hxx': 'cpp',
+            '.m': 'objectivec', '.mm': 'objectivec',
+            // Shell and scripting
+            '.sh': 'bash', '.bash': 'bash', '.zsh': 'bash', '.fish': 'bash',
+            '.ps1': 'powershell', '.psm1': 'powershell',
+            '.bat': 'batch', '.cmd': 'batch',
+            // Data formats
+            '.json': 'json', '.jsonc': 'json', '.json5': 'json',
+            '.xml': 'xml', '.xsd': 'xml', '.xsl': 'xml',
+            '.yaml': 'yaml', '.yml': 'yaml',
+            '.toml': 'toml', '.ini': 'ini', '.conf': 'ini', '.cfg': 'ini',
+            '.env': 'bash', '.properties': 'properties',
+            // Documentation
+            '.md': 'markdown', '.markdown': 'markdown', '.mdown': 'markdown',
+            '.rst': 'rst', '.tex': 'latex',
+            // Database
+            '.sql': 'sql', '.mysql': 'sql', '.pgsql': 'sql', '.sqlite': 'sql',
+            // Other languages
+            '.r': 'r', '.R': 'r', '.rmd': 'r',
+            '.lua': 'lua', '.pl': 'perl', '.pm': 'perl',
+            '.dart': 'dart', '.elm': 'elm', '.ex': 'elixir', '.exs': 'elixir',
+            '.clj': 'clojure', '.cljs': 'clojure', '.cljc': 'clojure',
+            '.hs': 'haskell', '.lhs': 'haskell',
+            '.ml': 'ocaml', '.mli': 'ocaml',
+            '.jl': 'julia',
+            // Config and DevOps
+            '.dockerfile': 'dockerfile',
+            '.dockerignore': 'gitignore',
+            '.gitignore': 'gitignore',
+            '.gitattributes': 'gitattributes',
+            '.editorconfig': 'editorconfig',
+            '.prettierrc': 'json',
+            '.eslintrc': 'json',
+            // Templates
+            '.hbs': 'handlebars', '.handlebars': 'handlebars',
+            '.mustache': 'mustache',
+            '.jinja': 'jinja2', '.j2': 'jinja2',
+            '.ejs': 'ejs', '.erb': 'erb'
+        };
+        return languageMap[ext] || 'text';
+    }
+    getFileIcon(ext) {
+        const iconMap = {
+            // JavaScript ecosystem
+            '.js': '📄', '.jsx': '⚛️', '.ts': '📘', '.tsx': '⚛️',
+            '.vue': '💚', '.svelte': '🧡', '.mjs': '📄', '.cjs': '📄',
+            // Web technologies
+            '.html': '🌐', '.htm': '🌐', '.css': '🎨', '.scss': '🎨', '.sass': '🎨', '.less': '🎨',
+            // Backend languages
+            '.py': '🐍', '.java': '☕', '.scala': '🔴', '.kt': '🟣',
+            '.rb': '💎', '.php': '🐘', '.go': '🐹', '.rs': '🦀', '.swift': '🦉',
+            '.cs': '🔷', '.vb': '🔵', '.fs': '🔸',
+            // Systems programming
+            '.c': '⚙️', '.h': '⚙️', '.cpp': '⚙️', '.hpp': '⚙️',
+            '.m': '🍎', '.mm': '🍎',
+            // Shell and config
+            '.sh': '📜', '.bash': '📜', '.zsh': '📜', '.fish': '🐠',
+            '.ps1': '💙', '.bat': '⚫', '.cmd': '⚫',
+            // Data formats
+            '.json': '📋', '.xml': '📄', '.yaml': '⚙️', '.yml': '⚙️',
+            '.toml': '📝', '.ini': '⚙️', '.env': '🔑',
+            // Documentation
+            '.md': '📝', '.rst': '📄', '.tex': '📄',
+            // Database
+            '.sql': '🗃️',
+            // Other languages
+            '.r': '📊', '.lua': '🌙', '.pl': '🐪', '.dart': '🎯',
+            '.elm': '🌳', '.ex': '💧', '.clj': '🔵', '.hs': '🎩',
+            '.ml': '🐪', '.jl': '🟢',
+            // DevOps
+            '.dockerfile': '🐳', '.dockerignore': '🐳',
+            '.gitignore': '📋', '.gitattributes': '📋',
+            // Templates
+            '.hbs': '🔧', '.mustache': '👨', '.ejs': '📄', '.erb': '💎'
+        };
+        return iconMap[ext.toLowerCase()] || '📄';
+    }
+    adjustLayout() {
+        const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
+        if (visiblePanels.length <= 1) {
+            this.layoutMode = 'single';
+        }
+        else if (visiblePanels.length === 2) {
+            this.layoutMode = 'dual';
+        }
+        else {
+            this.layoutMode = 'triple';
+        }
+    }
+    /**
      * Cleanup resources
      */
     cleanup() {
@@ -582,6 +1070,109 @@ class AdvancedCliUI {
         // Stop all progress bars
         this.progressBars.forEach(bar => bar.stop());
         this.progressBars.clear();
+        // Clear panels
+        this.panels.clear();
+    }
+    /**
+     * Background Agents Management
+     */
+    /**
+     * Register or update a background agent
+     */
+    updateBackgroundAgent(agentInfo) {
+        agentInfo.lastUpdate = new Date();
+        this.backgroundAgents.set(agentInfo.id, agentInfo);
+        // Update the agents panel
+        this.updateAgentsPanel();
+    }
+    /**
+     * Show background agents activity in real-time
+     */
+    showBackgroundAgentsActivity(agents) {
+        agents.forEach(agent => this.updateBackgroundAgent(agent));
+    }
+    /**
+     * Get agent status icon
+     */
+    getAgentStatusIcon(status) {
+        switch (status) {
+            case 'idle': return '⏸️';
+            case 'working': return '🔄';
+            case 'completed': return '✅';
+            case 'error': return '❌';
+            default: return '🤖';
+        }
+    }
+    /**
+     * Update the agents panel
+     */
+    updateAgentsPanel() {
+        const agents = Array.from(this.backgroundAgents.values());
+        if (agents.length === 0) {
+            this.panels.delete('agents');
+            return;
+        }
+        const content = agents.map(agent => {
+            const statusIcon = this.getAgentStatusIcon(agent.status);
+            const progressBar = agent.progress ?
+                `${'█'.repeat(Math.floor(agent.progress / 10))}${'░'.repeat(10 - Math.floor(agent.progress / 10))} ${agent.progress}%` :
+                '';
+            const timeInfo = agent.startTime ?
+                ` (${this.formatDuration(Date.now() - agent.startTime.getTime())})` : '';
+            let line = `${statusIcon} ${chalk_1.default.cyan(agent.name)}${timeInfo}`;
+            if (agent.currentTask) {
+                line += `\n    Task: ${agent.currentTask}`;
+            }
+            if (progressBar) {
+                line += `\n    Progress: [${progressBar}]`;
+            }
+            return line;
+        }).join('\n\n');
+        this.panels.set('agents', {
+            id: 'agents',
+            title: '🤖 Background Agents',
+            content,
+            type: 'agents',
+            visible: true,
+            borderColor: 'blue'
+        });
+        this.autoLayout();
+    }
+    /**
+     * Format duration for display
+     */
+    formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        if (seconds < 60) {
+            return `${seconds}s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds}s`;
+    }
+    /**
+     * Clear completed background agents
+     */
+    clearCompletedAgents() {
+        for (const [id, agent] of this.backgroundAgents.entries()) {
+            if (agent.status === 'completed' || agent.status === 'error') {
+                this.backgroundAgents.delete(id);
+            }
+        }
+        this.updateAgentsPanel();
+    }
+    /**
+     * Get background agents status summary
+     */
+    getAgentsStatusSummary() {
+        const agents = Array.from(this.backgroundAgents.values());
+        return {
+            total: agents.length,
+            working: agents.filter(a => a.status === 'working').length,
+            idle: agents.filter(a => a.status === 'idle').length,
+            completed: agents.filter(a => a.status === 'completed').length,
+            errors: agents.filter(a => a.status === 'error').length
+        };
     }
 }
 exports.AdvancedCliUI = AdvancedCliUI;

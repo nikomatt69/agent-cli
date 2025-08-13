@@ -16,7 +16,7 @@ class ModelProvider {
                 if (!apiKey) {
                     throw new Error(`API key not found for model: ${currentModelName} (OpenAI). Use /set-key to configure.`);
                 }
-                const openaiProvider = (0, openai_1.createOpenAI)({ apiKey });
+                const openaiProvider = (0, openai_1.createOpenAI)({ apiKey, compatibility: 'strict' });
                 return openaiProvider(config.model);
             }
             case 'anthropic': {
@@ -52,15 +52,22 @@ class ModelProvider {
             throw new Error(`Model configuration not found for: ${currentModelName}`);
         }
         const model = this.getModel(currentModelConfig);
-        const { text } = await (0, ai_1.generateText)({
+        const baseOptions = {
             model: model,
-            messages: options.messages.map(msg => ({
-                role: msg.role,
-                content: msg.content,
-            })),
-            temperature: options.temperature ?? config_manager_1.configManager.get('temperature'),
-            maxTokens: options.maxTokens ?? 4000,
-        });
+            messages: options.messages.map((msg) => ({ role: msg.role, content: msg.content })),
+        };
+        // Always honor explicit user settings for all providers
+        if (options.maxTokens != null) {
+            baseOptions.maxTokens = options.maxTokens;
+        }
+        else if (currentModelConfig.provider !== 'openai') {
+            baseOptions.maxTokens = 4000; // provider-specific default when not supplied
+        }
+        const resolvedTemp = options.temperature ?? config_manager_1.configManager.get('temperature');
+        if (resolvedTemp != null) {
+            baseOptions.temperature = resolvedTemp;
+        }
+        const { text } = await (0, ai_1.generateText)(baseOptions);
         return text;
     }
     async *streamResponse(options) {
@@ -71,15 +78,15 @@ class ModelProvider {
             throw new Error(`Model configuration not found for: ${currentModelName}`);
         }
         const model = this.getModel(currentModelConfig);
-        const result = await (0, ai_1.streamText)({
+        const streamOptions = {
             model: model,
-            messages: options.messages.map(msg => ({
-                role: msg.role,
-                content: msg.content,
-            })),
-            temperature: options.temperature ?? config_manager_1.configManager.get('temperature'),
-            maxTokens: options.maxTokens ?? 4000,
-        });
+            messages: options.messages.map(msg => ({ role: msg.role, content: msg.content })),
+        };
+        if (currentModelConfig.provider !== 'openai') {
+            streamOptions.maxTokens = options.maxTokens ?? 1000;
+            streamOptions.temperature = options.temperature ?? config_manager_1.configManager.get('temperature');
+        }
+        const result = await (0, ai_1.streamText)(streamOptions);
         for await (const delta of result.textStream) {
             yield delta;
         }

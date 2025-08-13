@@ -64,8 +64,8 @@ class Logger {
             maxFiles: 10,
             format: 'json'
         };
-        this.logDir = path.join(os.homedir(), '.ai-coder-cli', 'logs');
-        this.auditDir = path.join(os.homedir(), '.ai-coder-cli', 'audit');
+        this.logDir = path.join(os.homedir(), '.nikcli', 'logs');
+        this.auditDir = path.join(os.homedir(), '.nikcli', 'audit');
         this.ensureDirectories();
         this.setupPeriodicFlush();
     }

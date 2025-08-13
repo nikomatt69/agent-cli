@@ -497,6 +497,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log(chalk_1.default.white.bold('\\nKeyboard shortcuts:'));
         console.log('• / - Show command menu');
         console.log('• Shift+Tab - Cycle modes (manual → plan → auto-accept)');
+        console.log('• ESC - Return to default chat');
         console.log('• Ctrl+C - Stop agents or exit');
         console.log(chalk_1.default.white.bold('\\nModes:'));
         console.log('• Manual - Ask for confirmation');

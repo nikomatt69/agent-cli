@@ -41,11 +41,29 @@ const chalk_1 = __importDefault(require("chalk"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
+const execution_policy_1 = require("../policies/execution-policy");
+const approval_system_1 = require("../ui/approval-system");
+const config_manager_1 = require("../core/config-manager");
 class ToolService {
     constructor() {
         this.tools = new Map();
         this.executions = new Map();
         this.workingDirectory = process.cwd();
+        this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
+        this.approvalSystem = new approval_system_1.ApprovalSystem({
+            autoApprove: {
+                lowRisk: false,
+                mediumRisk: false,
+                fileOperations: false,
+                packageInstalls: false,
+            },
+            requireConfirmation: {
+                destructiveOperations: true,
+                networkRequests: true,
+                systemCommands: true,
+            },
+            timeout: 30000, // 30 seconds timeout
+        });
         this.registerDefaultTools();
     }
     setWorkingDirectory(dir) {
@@ -116,6 +134,82 @@ class ToolService {
         this.tools.set(tool.name, tool);
         console.log(chalk_1.default.dim(`🔧 Registered tool: ${tool.name}`));
     }
+    /**
+     * Execute tool with security checks and approval process
+     */
+    async executeToolSafely(toolName, operation, args) {
+        try {
+            // Check if approval is needed
+            const approvalRequest = await this.policyManager.shouldApproveToolOperation(toolName, operation, args);
+            if (approvalRequest) {
+                // Request user approval
+                const approval = await this.requestToolApproval(approvalRequest);
+                if (!approval.approved) {
+                    await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'denied', { operation, args, userComments: approval.userComments });
+                    throw new Error(`Operation cancelled by user: ${toolName} - ${operation}`);
+                }
+                // Log approval decision
+                await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'requires_approval', { operation, args, approved: true, userComments: approval.userComments });
+                // Add to session approvals if requested
+                if (approval.userComments?.includes('approve-session')) {
+                    this.policyManager.addSessionApproval(toolName, operation);
+                }
+            }
+            else {
+                // Log auto-approval
+                await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'allowed', { operation, args, reason: 'auto-approved by policy' });
+            }
+            // Execute the tool
+            return await this.executeTool(toolName, args);
+        }
+        catch (error) {
+            // Log execution error
+            await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'denied', { operation, args, error: error.message });
+            throw error;
+        }
+    }
+    /**
+     * Request approval for tool operation
+     */
+    async requestToolApproval(toolRequest) {
+        const approvalRequest = {
+            id: `tool-${Date.now()}`,
+            title: `Tool Operation: ${toolRequest.toolName}`,
+            description: `Operation: ${toolRequest.operation}\n\nRisk Level: ${toolRequest.riskAssessment.level}\n\nReasons:\n${toolRequest.riskAssessment.reasons.map(r => `• ${r}`).join('\n')}`,
+            riskLevel: toolRequest.riskAssessment.level === 'low' ? 'low' :
+                toolRequest.riskAssessment.level === 'medium' ? 'medium' : 'high',
+            actions: [{
+                    type: this.getActionType(toolRequest.toolName),
+                    description: `Execute ${toolRequest.toolName} with operation: ${toolRequest.operation}`,
+                    details: toolRequest.args,
+                    riskLevel: toolRequest.riskAssessment.level === 'low' ? 'low' :
+                        toolRequest.riskAssessment.level === 'medium' ? 'medium' : 'high'
+                }],
+            context: {
+                workingDirectory: this.workingDirectory,
+                affectedFiles: toolRequest.riskAssessment.affectedFiles,
+                estimatedDuration: 5000, // 5 seconds default
+            },
+            timeout: config_manager_1.simpleConfigManager.getAll().sessionSettings.approvalTimeoutMs
+        };
+        return await this.approvalSystem.requestApproval(approvalRequest);
+    }
+    /**
+     * Map tool name to approval action type
+     */
+    getActionType(toolName) {
+        if (toolName.includes('write') || toolName.includes('create'))
+            return 'file_create';
+        if (toolName.includes('edit') || toolName.includes('modify'))
+            return 'file_modify';
+        if (toolName.includes('delete') || toolName.includes('remove'))
+            return 'file_delete';
+        if (toolName.includes('install') || toolName.includes('package'))
+            return 'package_install';
+        if (toolName.includes('network') || toolName.includes('fetch'))
+            return 'network_request';
+        return 'command_execute';
+    }
     async executeTool(toolName, args) {
         const tool = this.tools.get(toolName);
         if (!tool) {
@@ -147,6 +241,9 @@ class ToolService {
             throw error;
         }
     }
+    /**
+     * Get available tools (original method for compatibility)
+     */
     getAvailableTools() {
         return Array.from(this.tools.values());
     }
@@ -373,6 +470,66 @@ class ToolService {
         catch (error) {
             throw new Error(`Failed to analyze project: ${error.message}`);
         }
+    }
+    /**
+     * Enable developer mode for current session
+     */
+    enableDevMode(timeoutMs) {
+        this.policyManager.enableDevMode(timeoutMs);
+        console.log(chalk_1.default.yellow('🛠️ Developer mode enabled - reduced security restrictions'));
+    }
+    /**
+     * Check if developer mode is active
+     */
+    isDevModeActive() {
+        return this.policyManager.isDevModeActive();
+    }
+    /**
+     * Get current security mode status
+     */
+    getSecurityStatus() {
+        const config = config_manager_1.simpleConfigManager.getAll();
+        const toolsWithSecurity = this.getAvailableToolsWithSecurity();
+        return {
+            mode: config.securityMode,
+            devModeActive: this.isDevModeActive(),
+            sessionApprovals: this.policyManager['sessionApprovals'].size,
+            toolPolicies: toolsWithSecurity.map(tool => ({
+                name: tool.name,
+                risk: tool.riskLevel || 'unknown',
+                requiresApproval: tool.requiresApproval || false
+            }))
+        };
+    }
+    /**
+     * Clear all session approvals
+     */
+    clearSessionApprovals() {
+        this.policyManager.clearSessionApprovals();
+        console.log(chalk_1.default.blue('🔄 Session approvals cleared'));
+    }
+    /**
+     * Add a tool to session approvals
+     */
+    addSessionApproval(toolName, operation) {
+        this.policyManager.addSessionApproval(toolName, operation);
+        console.log(chalk_1.default.green(`✅ Added session approval for ${toolName}:${operation}`));
+    }
+    /**
+     * Get available tools with their security status
+     */
+    getAvailableToolsWithSecurity() {
+        return Array.from(this.tools.values()).map(tool => {
+            const policy = this.policyManager.getToolPolicy(tool.name);
+            return {
+                name: tool.name,
+                description: tool.description,
+                category: tool.category,
+                riskLevel: policy?.riskLevel,
+                requiresApproval: policy?.requiresApproval,
+                allowedInSafeMode: policy?.allowedInSafeMode
+            };
+        });
     }
 }
 exports.ToolService = ToolService;

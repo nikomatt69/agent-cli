@@ -19,7 +19,7 @@ class TextWrapper {
      * Wrap long blue text with proper line breaks and indentation
      */
     static wrapBlueText(text, indent = '  ', maxWidth) {
-        const terminalWidth = maxWidth || this.defaultWidth;
+        const terminalWidth = maxWidth || 80;
         const availableWidth = terminalWidth - indent.length - 4; // Account for colors and padding
         if (text.length <= availableWidth) {
             return chalk_1.default.blue(text);
@@ -136,27 +136,28 @@ class TextWrapper {
      */
     static formatStatus(icon, message, details) {
         const fullText = details ? `${message} - ${details}` : message;
-        return `${icon} ${this.wrapBlueText(fullText)}`;
+        return `${icon} ${TextWrapper.wrapBlueText(fullText)}`;
     }
     /**
      * Format command execution messages with proper wrapping
      */
     static formatCommand(command, args) {
         const fullCommand = args ? `${command} ${args.join(' ')}` : command;
-        return this.wrapBlueText(`⚡ Running: ${fullCommand}`);
+        return TextWrapper.wrapBlueText(`⚡ Running: ${fullCommand}`);
     }
     /**
      * Format file operation messages with proper wrapping
      */
     static formatFileOperation(operation, filePath, details) {
         const message = details ? `${operation} ${filePath} - ${details}` : `${operation} ${filePath}`;
-        return this.wrapBlueText(message);
+        return TextWrapper.wrapBlueText(message);
     }
     /**
      * Format progress messages with proper wrapping
      */
     static formatProgress(current, total, operation) {
-        const baseMessage = `📊 Progress: ${current}/${total} (${Math.round((current / total) * 100)}%)`;
+        const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+        const baseMessage = `📊 Progress: ${current}/${total} (${percentage}%)`;
         const fullMessage = operation ? `${baseMessage} - ${operation}` : baseMessage;
         return this.wrapBlueText(fullMessage);
     }
@@ -170,7 +171,7 @@ class TextWrapper {
         const truncatedMessage = fullMessage.length > 150
             ? fullMessage.substring(0, 147) + '...'
             : fullMessage;
-        return this.wrapBlueText(truncatedMessage);
+        return TextWrapper.wrapBlueText(truncatedMessage);
     }
     /**
      * Format search/find operations with proper wrapping
@@ -180,7 +181,7 @@ class TextWrapper {
         const fullMessage = results !== undefined
             ? `${baseMessage} (${results} results)`
             : baseMessage;
-        return this.wrapBlueText(fullMessage);
+        return TextWrapper.wrapBlueText(fullMessage);
     }
 }
 exports.TextWrapper = TextWrapper;

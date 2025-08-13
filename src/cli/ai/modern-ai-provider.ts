@@ -10,6 +10,7 @@ import { execSync } from 'child_process';
 import chalk from 'chalk';
 import { modelProvider } from './model-provider';
 import { simpleConfigManager } from '../core/config-manager';
+import { PromptManager } from '../prompts/prompt-manager';
 
 export interface ModelConfig {
   provider: 'openai' | 'anthropic' | 'google';
@@ -21,10 +22,27 @@ export interface ModelConfig {
 export class ModernAIProvider {
   private currentModel: string;
   private workingDirectory: string = process.cwd();
-
+  private promptManager: PromptManager;
 
   constructor() {
     this.currentModel = simpleConfigManager.get('currentModel');
+    this.promptManager = PromptManager.getInstance(process.cwd());
+  }
+
+  // Load tool-specific prompts for enhanced execution
+  private async getToolPrompt(toolName: string, parameters: any = {}): Promise<string> {
+    try {
+      return await this.promptManager.loadPromptForContext({
+        toolName,
+        parameters: {
+          workingDirectory: this.workingDirectory,
+          ...parameters
+        }
+      });
+    } catch (error) {
+      // Return fallback prompt if file prompt fails
+      return `Execute ${toolName} with the provided parameters. Follow best practices and provide clear, helpful output.`;
+    }
   }
 
   // Core file operations tools - Claude Code style
@@ -37,6 +55,9 @@ export class ModernAIProvider {
         }),
         execute: async ({ path }) => {
           try {
+            // Load tool-specific prompt for context
+            const toolPrompt = await this.getToolPrompt('read_file', { path });
+            
             const fullPath = resolve(this.workingDirectory, path);
             if (!existsSync(fullPath)) {
               return { error: `File not found: ${path}` };
@@ -63,6 +84,9 @@ export class ModernAIProvider {
         }),
         execute: async ({ path, content }) => {
           try {
+            // Load tool-specific prompt for context
+            const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...' });
+            
             const fullPath = resolve(this.workingDirectory, path);
             const dir = dirname(fullPath);
 
@@ -73,7 +97,7 @@ export class ModernAIProvider {
             writeFileSync(fullPath, content, 'utf-8');
             const stats = statSync(fullPath);
 
-            console.log(chalk.green(`✓ Created/updated: ${path}`));
+            // File operation completed
 
             return {
               path: relative(this.workingDirectory, fullPath),
@@ -144,7 +168,7 @@ export class ModernAIProvider {
           try {
             const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
-            console.log(chalk.blue(`$ ${fullCommand}`));
+            // Executing command
 
             const output = execSync(fullCommand, {
               cwd: this.workingDirectory,
@@ -158,7 +182,7 @@ export class ModernAIProvider {
               success: true
             };
           } catch (error: any) {
-            console.log(chalk.red(`Command failed: ${error.message}`));
+            // Command failed
             return {
               command: `${command} ${args.join(' ')}`,
               error: error.message,
@@ -360,6 +384,7 @@ export class ModernAIProvider {
 
     switch (config.provider) {
       case 'openai':
+        // OpenAI provider is already response-API compatible via model options; no chainable helper here.
         return openai(config.model);
       case 'anthropic':
         return anthropic(config.model);
@@ -386,8 +411,9 @@ export class ModernAIProvider {
         model,
         messages,
         tools,
-        maxTokens: 4000,
-        temperature: 0.7,
+        maxTokens: 8000,
+        temperature: 1,
+
       });
 
       for await (const delta of result.textStream) {
@@ -422,8 +448,8 @@ export class ModernAIProvider {
         model,
         messages,
         tools,
-        maxToolRoundtrips: 5,
-        maxTokens: 4000,
+        maxToolRoundtrips: 25,
+        maxTokens: 12000,
         temperature: 0.7,
       });
 

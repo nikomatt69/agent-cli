@@ -113,9 +113,26 @@ export class EnhancedPlanningSystem {
 
     this.activePlans.set(plan.id, plan);
 
-    // Show plan details
+    // Show plan details and real todos in structured UI
     if (showDetails) {
       this.displayPlan(plan);
+      try {
+        const mod: any = await import('../ui/advanced-cli-ui');
+        const ui: any = mod?.advancedUI ?? mod?.default?.advancedUI ?? mod?.default ?? mod;
+        const todoItems = plan.todos.map(t => ({
+          content: t.title || t.description || 'Untitled',
+          status: t.status,
+        }));
+        ui?.showTodos?.(todoItems, plan.title);
+      } catch (e: any) {
+        const msg = String(e?.message ?? '');
+        const code = (e as any)?.code;
+        const isModuleNotFound =
+          code === 'ERR_MODULE_NOT_FOUND' || /Cannot find module/.test(msg);
+        if (!isModuleNotFound) {
+          console.debug(chalk.gray(`Advanced UI not shown: ${msg}`));
+        }
+      }
     }
 
     // Save todo.md file

@@ -42,6 +42,7 @@ const boxen_1 = __importDefault(require("boxen"));
 const diff_1 = require("diff");
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const advanced_cli_ui_1 = require("./advanced-cli-ui");
 class DiffManager {
     constructor() {
         this.pendingDiffs = new Map();
@@ -66,6 +67,13 @@ class DiffManager {
             status: this.autoAccept ? 'accepted' : 'pending'
         };
         this.pendingDiffs.set(filePath, fileDiff);
+        // Show diff in structured UI when interactive and not auto-accept; guard and swallow UI errors
+        if (!this.autoAccept && process.stdout.isTTY && typeof advanced_cli_ui_1.advancedUI?.showFileDiff === 'function') {
+            void Promise.resolve(advanced_cli_ui_1.advancedUI.showFileDiff(filePath, oldContent, newContent))
+                .catch((err) => {
+                console.log(chalk_1.default.yellow(`⚠ Advanced UI failed for ${filePath}: ${err?.message ?? String(err)}`));
+            });
+        }
         if (this.autoAccept) {
             this.applyDiff(filePath);
         }

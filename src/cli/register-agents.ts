@@ -8,7 +8,7 @@ export function registerAgents(agentManager: AgentManager): void {
     name: 'Universal Agent',
     description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
     specialization: 'universal',
-    version: '0.1.2-beta',
+    version: '0.1.4-beta',
     capabilities: [
       // Core capabilities
       'code-generation',

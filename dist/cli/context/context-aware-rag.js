@@ -357,6 +357,40 @@ class ContextAwareRAGSystem {
             return 'Express';
         if (deps.fastify)
             return 'Fastify';
+        if (deps.nestjs)
+            return 'Nest.js';
+        if (deps.bun)
+            return 'Bun';
+        if (deps.deno)
+            return 'Deno';
+        if (deps.rails)
+            return 'Ruby on Rails';
+        if (deps.spring)
+            return 'Spring Boot';
+        if (deps.aspnet)
+            return 'ASP.NET';
+        if (deps.laravel)
+            return 'Laravel';
+        if (deps.yii)
+            return 'Yii';
+        if (deps.symfony)
+            return 'Symfony';
+        if (deps.elixir)
+            return 'Elixir';
+        if (deps.phoenix)
+            return 'Phoenix';
+        if (deps.flutter)
+            return 'Flutter';
+        if (deps.swift)
+            return 'Swift';
+        if (deps.kotlin)
+            return 'Kotlin';
+        if (deps.golang)
+            return 'Go';
+        if (deps.erlang)
+            return 'Erlang';
+        if (deps.elixir)
+            return 'Elixir';
         return 'Node.js';
     }
     extractLanguages() {

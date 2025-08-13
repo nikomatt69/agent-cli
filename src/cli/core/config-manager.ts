@@ -15,7 +15,7 @@ const ModelConfigSchema = z.object({
 const ConfigSchema = z.object({
   currentModel: z.string(),
   temperature: z.number().min(0).max(2).default(0.7),
-  maxTokens: z.number().min(1).max(8000).default(4000),
+  maxTokens: z.number().min(1).max(16000).default(12000),
   chatHistory: z.boolean().default(true),
   maxHistoryLength: z.number().min(1).max(1000).default(100),
   // Optional system prompt for general chat mode
@@ -55,6 +55,33 @@ const ConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   requireApprovalForNetwork: z.boolean().default(true),
   approvalPolicy: z.enum(['strict', 'moderate', 'permissive']).default('moderate'),
+  // Security configuration for different modes
+  securityMode: z.enum(['safe', 'default', 'developer']).default('safe'),
+  toolApprovalPolicies: z.object({
+    fileOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    gitOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    packageOperations: z.enum(['always', 'risky', 'never']).default('risky'),
+    systemCommands: z.enum(['always', 'risky', 'never']).default('always'),
+    networkRequests: z.enum(['always', 'risky', 'never']).default('always'),
+  }).default({
+    fileOperations: 'risky',
+    gitOperations: 'risky', 
+    packageOperations: 'risky',
+    systemCommands: 'always',
+    networkRequests: 'always',
+  }),
+  // Session-based settings
+  sessionSettings: z.object({
+    approvalTimeoutMs: z.number().min(5000).max(300000).default(30000),
+    devModeTimeoutMs: z.number().min(60000).max(7200000).default(3600000),
+    batchApprovalEnabled: z.boolean().default(true),
+    autoApproveReadOnly: z.boolean().default(true),
+  }).default({
+    approvalTimeoutMs: 30000,
+    devModeTimeoutMs: 3600000,
+    batchApprovalEnabled: true,
+    autoApproveReadOnly: true,
+  }),
   sandbox: z.object({
     enabled: z.boolean().default(true),
     allowFileSystem: z.boolean().default(true),
@@ -139,7 +166,7 @@ export class SimpleConfigManager {
   private defaultConfig: ConfigType = {
     currentModel: 'claude-sonnet-4-20250514',
     temperature: 0.7,
-    maxTokens: 4000,
+    maxTokens: 12000,
     chatHistory: true,
     maxHistoryLength: 100,
     systemPrompt: undefined,
@@ -154,6 +181,20 @@ export class SimpleConfigManager {
     logLevel: 'info' as const,
     requireApprovalForNetwork: true,
     approvalPolicy: 'moderate' as const,
+    securityMode: 'safe' as const,
+    toolApprovalPolicies: {
+      fileOperations: 'risky' as const,
+      gitOperations: 'risky' as const,
+      packageOperations: 'risky' as const,
+      systemCommands: 'always' as const,
+      networkRequests: 'always' as const,
+    },
+    sessionSettings: {
+      approvalTimeoutMs: 30000,
+      devModeTimeoutMs: 3600000,
+      batchApprovalEnabled: true,
+      autoApproveReadOnly: true,
+    },
     sandbox: {
       enabled: true,
       allowFileSystem: true,
@@ -211,6 +252,11 @@ export class SimpleConfigManager {
 
   getAll(): ConfigType {
     return { ...this.config };
+  }
+
+  setAll(newConfig: ConfigType): void {
+    this.config = { ...newConfig };
+    this.saveConfig();
   }
 
   // API Key management

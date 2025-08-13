@@ -8,6 +8,7 @@ const chalk_1 = __importDefault(require("chalk"));
 const events_1 = require("events");
 const tool_service_1 = require("./tool-service");
 const planning_service_1 = require("./planning-service");
+const config_manager_1 = require("../core/config-manager");
 class AgentService extends events_1.EventEmitter {
     constructor() {
         super();
@@ -119,10 +120,13 @@ class AgentService extends events_1.EventEmitter {
         console.log(chalk_1.default.blue(`🤖 Starting ${agentTask.agentType} agent...`));
         this.emit('task_start', agentTask);
         try {
+            // Create secure tool wrapper based on current security mode
+            const config = config_manager_1.simpleConfigManager.getAll();
+            const secureTools = this.createSecureToolWrapper(tool_service_1.toolService, config.securityMode);
             const context = {
                 taskId: agentTask.id,
                 workingDirectory: process.cwd(),
-                tools: tool_service_1.toolService,
+                tools: secureTools,
                 planning: planning_service_1.planningService
             };
             // Execute agent with streaming updates
@@ -281,6 +285,80 @@ class AgentService extends events_1.EventEmitter {
         }
         yield { type: 'progress', progress: 100 };
         yield { type: 'result', data: { plan, completed: true } };
+    }
+    /**
+     * Create a secure tool wrapper that implements approval logic based on security mode
+     */
+    createSecureToolWrapper(originalToolService, securityMode) {
+        return {
+            // Pass through all original methods
+            ...originalToolService,
+            // Override executeTool to add security logic
+            async executeTool(toolName, args) {
+                const operation = this.inferOperationFromArgs(toolName, args);
+                // Determine if we should use secure execution
+                const shouldUseSecure = this.shouldUseSecureExecution(toolName, securityMode);
+                if (shouldUseSecure) {
+                    console.log(chalk_1.default.yellow(`🛡️ Security check: ${toolName}`));
+                    return await originalToolService.executeToolSafely(toolName, operation, args);
+                }
+                else {
+                    // Use original method for safe/read-only operations or in developer mode
+                    return await originalToolService.executeTool(toolName, args);
+                }
+            }
+        };
+    }
+    /**
+     * Determine if secure execution should be used based on tool and security mode
+     */
+    shouldUseSecureExecution(toolName, securityMode) {
+        // Always use secure execution in safe mode
+        if (securityMode === 'safe') {
+            return !this.isReadOnlyTool(toolName);
+        }
+        // Use secure execution for risky operations in default mode
+        if (securityMode === 'default') {
+            return this.isRiskyTool(toolName);
+        }
+        // Developer mode - only secure for high-risk operations
+        if (securityMode === 'developer') {
+            return this.isHighRiskTool(toolName);
+        }
+        return false; // Fallback
+    }
+    /**
+     * Check if tool is read-only (safe)
+     */
+    isReadOnlyTool(toolName) {
+        const readOnlyTools = ['read_file', 'list_files', 'find_files', 'analyze_project', 'git_status', 'git_diff'];
+        return readOnlyTools.includes(toolName);
+    }
+    /**
+     * Check if tool is risky (modifies files/system)
+     */
+    isRiskyTool(toolName) {
+        const riskyTools = ['write_file', 'edit_file', 'multi_edit', 'git_commit', 'git_push', 'npm_install', 'execute_command'];
+        return riskyTools.includes(toolName);
+    }
+    /**
+     * Check if tool is high-risk (dangerous operations)
+     */
+    isHighRiskTool(toolName) {
+        const highRiskTools = ['execute_command', 'delete_file', 'git_reset', 'network_request'];
+        return highRiskTools.includes(toolName);
+    }
+    /**
+     * Infer operation type from tool name and arguments
+     */
+    inferOperationFromArgs(toolName, args) {
+        if (args.operation)
+            return args.operation;
+        if (args.command)
+            return `execute: ${args.command}`;
+        if (args.filePath)
+            return `file-op: ${args.filePath}`;
+        return 'general';
     }
 }
 exports.AgentService = AgentService;

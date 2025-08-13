@@ -53,7 +53,7 @@ class GuidanceManager {
         this.guidanceFiles = new Map();
         this.currentContext = null;
         this.workingDirectory = workingDirectory;
-        this.globalGuidanceDir = globalGuidanceDir || path.join(require('os').homedir(), '.ai-cli');
+        this.globalGuidanceDir = globalGuidanceDir || path.join(require('os').homedir(), '.nikcli');
         this.ensureGlobalGuidanceDir();
     }
     ensureGlobalGuidanceDir() {

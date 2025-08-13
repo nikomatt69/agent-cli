@@ -1,9 +1,45 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.indexProject = indexProject;
 exports.search = search;
 const chromadb_1 = require("chromadb");
-const glob_1 = require("glob");
+// Register default embed provider for CloudClient (server-side embeddings)
+// This package is a side-effect import that wires up default embeddings
+// when using Chroma Cloud.
+require("@chroma-core/default-embed");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const cli_ui_1 = require("../utils/cli-ui");
@@ -52,7 +88,6 @@ class OpenAIEmbeddingFunction {
             body: JSON.stringify({
                 model: this.model,
                 input: processedTexts,
-                encoding_format: 'float', // More efficient than base64
             }),
         });
         if (!response.ok) {
@@ -71,15 +106,45 @@ class OpenAIEmbeddingFunction {
         return text.substring(0, maxChars - 50) + '\n[... content truncated ...]';
     }
     // Utility method to estimate cost
-    static estimateCost(texts) {
-        const totalChars = texts.reduce((sum, text) => sum + text.length, 0);
+    static estimateCost(input) {
+        // Validate input
+        if (typeof input === 'number' && input < 0) {
+            throw new Error('Character count cannot be negative');
+        }
+        if (Array.isArray(input) && input.length === 0) {
+            return 0;
+        }
+        const totalChars = typeof input === 'number'
+            ? input
+            : input.reduce((sum, text) => sum + text.length, 0);
         const estimatedTokens = Math.ceil(totalChars / 4); // Rough estimation
         const costPer1KTokens = 0.00002; // $0.00002 per 1K tokens for text-embedding-3-small
         return (estimatedTokens / 1000) * costPer1KTokens;
     }
 }
-const embedder = new OpenAIEmbeddingFunction();
-const client = new chromadb_1.ChromaClient();
+// Lazy embedder initialization to avoid throwing at import time
+let _embedder = null;
+function getEmbedder() {
+    if (_embedder)
+        return _embedder;
+    _embedder = new OpenAIEmbeddingFunction();
+    return _embedder;
+}
+// Resolve Chroma client: prefer CloudClient (if API key present), otherwise local ChromaClient
+function getClient() {
+    const apiKey = process.env.CHROMA_API_KEY || process.env.CHROMA_CLOUD_API_KEY;
+    const tenant = process.env.CHROMA_TENANT;
+    const database = process.env.CHROMA_DATABASE || 'agent-cli';
+    if (apiKey && tenant) {
+        return new chromadb_1.CloudClient({
+            apiKey,
+            tenant,
+            database,
+        });
+    }
+    // Fallback to local server
+    return new chromadb_1.ChromaClient({ path: process.env.CHROMA_URL || undefined });
+}
 // Utility functions
 async function estimateIndexingCost(files, projectPath) {
     let totalChars = 0;
@@ -102,7 +167,7 @@ async function estimateIndexingCost(files, projectPath) {
     // Estimate total based on sample
     const avgCharsPerFile = totalChars / processedFiles;
     const estimatedTotalChars = avgCharsPerFile * files.length;
-    return OpenAIEmbeddingFunction.estimateCost([{ length: estimatedTotalChars }]);
+    return OpenAIEmbeddingFunction.estimateCost(estimatedTotalChars);
 }
 function isBinaryFile(content) {
     // Simple heuristic: if more than 1% of characters are null bytes or non-printable, consider it binary
@@ -115,15 +180,22 @@ async function indexProject(projectPath) {
     cli_ui_1.CliUI.logSection('Project Indexing');
     cli_ui_1.CliUI.startSpinner('Starting project indexing...');
     try {
+        // ESM-only import handled via dynamic import to keep CJS build settings
+        const { globby } = await Promise.resolve().then(() => __importStar(require('globby')));
+        const client = getClient();
         const collection = await client.getOrCreateCollection({
             name: "project_index",
-            embeddingFunction: embedder,
+            // For CloudClient, embeddings are handled by the default embed provider
+            // For local ChromaClient, we provide our OpenAI embedder
+            ...(!process.env.CHROMA_API_KEY || !process.env.CHROMA_TENANT
+                ? { embeddingFunction: getEmbedder() }
+                : {}),
         });
         cli_ui_1.CliUI.updateSpinner('Finding files to index...');
-        const files = glob_1.glob.sync("**/*", {
+        const files = await globby("**/*", {
             cwd: projectPath,
             ignore: ["node_modules/**", ".git/**", "*.log", "dist/**", "build/**"],
-            nodir: true,
+            onlyFiles: true,
         });
         cli_ui_1.CliUI.stopSpinner();
         cli_ui_1.CliUI.logInfo(`Found ${cli_ui_1.CliUI.highlight(files.length.toString())} files to index`);
@@ -163,9 +235,10 @@ async function indexProject(projectPath) {
     }
 }
 async function search(query) {
+    const client = getClient();
     const collection = await client.getOrCreateCollection({
         name: "project_index",
-        embeddingFunction: embedder,
+        ...(client instanceof chromadb_1.ChromaClient ? { embeddingFunction: getEmbedder() } : {}),
     });
     const results = await collection.query({
         nResults: 5,

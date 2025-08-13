@@ -48,9 +48,9 @@ const chalk_1 = __importDefault(require("chalk"));
 class TokenCacheManager {
     constructor(cacheDir = './.nikcli') {
         this.cache = new Map();
-        this.maxCacheSize = 1000;
-        this.similarityThreshold = 0.85;
-        this.maxCacheAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+        this.maxCacheSize = 100; // Ridotto ulteriormente
+        this.similarityThreshold = 0.98; // Praticamente uguale
+        this.maxCacheAge = 1 * 24 * 60 * 60 * 1000; // 1 giorno
         this.cacheFile = path.join(cacheDir, 'token-cache.json');
         this.loadCache();
     }
@@ -105,16 +105,13 @@ class TokenCacheManager {
     async getCachedResponse(prompt, context = '', tags = []) {
         // First try exact match
         const exactKey = this.generateExactKey(prompt, context);
-        if (this.cache.has(exactKey)) {
-            const entry = this.cache.get(exactKey);
-            entry.hitCount++;
-            entry.similarity = 1.0;
-            console.log(chalk_1.default.green(`🎯 Cache HIT (exact): saved ~${entry.tokensSaved} tokens`));
-            return entry;
+        const exactEntry = this.cache.get(exactKey);
+        if (exactEntry) {
+            exactEntry.hitCount++;
+            exactEntry.exactMatch = true;
+            return exactEntry;
         }
-        // Then try semantic similarity
-        const semanticKey = this.generateSemanticKey(prompt, context);
-        // Find similar entries
+        // Then try very similar match (98% similarity)
         const similarEntries = Array.from(this.cache.values())
             .filter(entry => {
             // Check if entry is not expired
@@ -131,14 +128,15 @@ class TokenCacheManager {
         })
             .map(entry => ({
             ...entry,
-            similarity: this.calculateSimilarity(prompt, entry.userInput)
+            similarity: this.calculateSimilarity(prompt + context, entry.userInput)
         }))
-            .filter(entry => entry.similarity >= this.similarityThreshold)
+            .filter(entry => entry.similarity >= this.similarityThreshold) // 98% similarity
             .sort((a, b) => b.similarity - a.similarity);
         if (similarEntries.length > 0) {
             const bestMatch = similarEntries[0];
             bestMatch.hitCount++;
-            console.log(chalk_1.default.cyan(`🎯 Cache HIT (similar ${Math.round(bestMatch.similarity * 100)}%): saved ~${bestMatch.tokensSaved} tokens`));
+            bestMatch.exactMatch = bestMatch.similarity >= 0.99; // Esatto se >= 99%
+            console.log(chalk_1.default.cyan(`🎯 Similarity: ${(bestMatch.similarity * 100).toFixed(1)}%`));
             return bestMatch;
         }
         return null;
@@ -166,7 +164,7 @@ class TokenCacheManager {
         if (this.cache.size % 10 === 0) {
             await this.saveCache();
         }
-        console.log(chalk_1.default.blue(`💾 Cached response (${this.cache.size} entries)`));
+        console.log(chalk_1.default.blue(`💾`));
     }
     /**
      * Estimate token count from text

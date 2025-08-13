@@ -137,24 +137,27 @@ class ApprovalSystem {
         return response.approved;
     }
     /**
-     * Display approval request to user
+     * Display approval request to user with improved formatting
      */
     displayApprovalRequest(request) {
         const riskColor = this.getRiskColor(request.riskLevel);
         const riskIcon = this.getRiskIcon(request.riskLevel);
-        console.log((0, boxen_1.default)(`${riskIcon} ${chalk_1.default.bold(request.title)}\\n\\n` +
-            `${chalk_1.default.gray('Description:')} ${request.description}\\n` +
-            `${chalk_1.default.gray('Risk Level:')} ${riskColor(request.riskLevel.toUpperCase())}\\n` +
+        // Add clear visual separation
+        console.log(chalk_1.default.gray('─'.repeat(60)));
+        console.log();
+        console.log((0, boxen_1.default)(`${riskIcon} ${chalk_1.default.bold(request.title)}\n\n` +
+            `${chalk_1.default.gray('Description:')} ${request.description}\n` +
+            `${chalk_1.default.gray('Risk Level:')} ${riskColor(request.riskLevel.toUpperCase())}\n` +
             `${chalk_1.default.gray('Actions:')} ${request.actions.length}`, {
             padding: 1,
-            margin: { top: 1, bottom: 0, left: 0, right: 0 },
+            margin: { top: 0, bottom: 1, left: 0, right: 0 },
             borderStyle: 'round',
             borderColor: request.riskLevel === 'critical' ? 'red' :
                 request.riskLevel === 'high' ? 'yellow' : 'blue',
         }));
         // Show detailed actions
         if (request.actions.length > 0) {
-            console.log(chalk_1.default.blue.bold('\\n📋 Planned Actions:'));
+            console.log(chalk_1.default.blue.bold('\n📋 Planned Actions:'));
             request.actions.forEach((action, index) => {
                 const actionRisk = this.getRiskColor(action.riskLevel);
                 const actionIcon = this.getActionIcon(action.type);
@@ -163,7 +166,7 @@ class ApprovalSystem {
         }
         // Show context if available
         if (request.context) {
-            console.log(chalk_1.default.blue.bold('\\n🔍 Context:'));
+            console.log(chalk_1.default.blue.bold('\n🔍 Context:'));
             if (request.context.workingDirectory) {
                 console.log(`  📁 Working Directory: ${request.context.workingDirectory}`);
             }
@@ -182,15 +185,18 @@ class ApprovalSystem {
         }
     }
     /**
-     * Prompt user for approval
+     * Prompt user for approval with improved formatting
      */
     async promptForApproval(request) {
+        // Add spacing before the prompt
+        console.log();
         const questions = [
             {
                 type: 'confirm',
                 name: 'approved',
-                message: chalk_1.default.cyan('Do you approve this operation?'),
+                message: chalk_1.default.cyan.bold('\n❓ Do you approve this operation?'),
                 default: request.riskLevel === 'low',
+                prefix: '  ',
             },
         ];
         // For high-risk operations, ask for additional confirmation
@@ -198,8 +204,9 @@ class ApprovalSystem {
             questions.push({
                 type: 'confirm',
                 name: 'confirmHighRisk',
-                message: chalk_1.default.red('This is a high-risk operation. Are you sure?'),
+                message: chalk_1.default.red.bold('⚠️  This is a high-risk operation. Are you absolutely sure?'),
                 default: false,
+                prefix: '  ',
                 when: (answers) => answers.approved,
             });
         }
@@ -215,12 +222,16 @@ class ApprovalSystem {
         try {
             const answers = await inquirer_1.default.prompt(questions);
             const approved = answers.approved && (answers.confirmHighRisk !== false);
+            // Add spacing and clear result
+            console.log();
             if (approved) {
-                console.log(chalk_1.default.green('✅ Operation approved'));
+                console.log(chalk_1.default.green.bold('✅ Operation approved'));
             }
             else {
-                console.log(chalk_1.default.yellow('❌ Operation cancelled'));
+                console.log(chalk_1.default.yellow.bold('❌ Operation cancelled'));
             }
+            // Add final spacing
+            console.log();
             return {
                 approved,
                 userComments: answers.userComments,
@@ -229,7 +240,7 @@ class ApprovalSystem {
         }
         catch (error) {
             // Handle Ctrl+C or other interruption
-            console.log(chalk_1.default.red('\\n❌ Operation cancelled by user'));
+            console.log(chalk_1.default.red('\n❌ Operation cancelled by user'));
             return {
                 approved: false,
                 timestamp: new Date(),
