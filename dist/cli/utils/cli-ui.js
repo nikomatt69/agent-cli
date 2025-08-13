@@ -6,12 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.logCommandError = exports.logCommandSuccess = exports.logCommandStart = exports.formatError = exports.logKeyValue = exports.logProgress = exports.logSubsection = exports.logSection = exports.logInfo = exports.logWarning = exports.logError = exports.logSuccess = exports.stopSpinner = exports.failSpinner = exports.succeedSpinner = exports.updateSpinner = exports.startSpinner = exports.subsection = exports.section = exports.bold = exports.dim = exports.highlight = exports.info = exports.warning = exports.error = exports.success = exports.CliUI = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const ora_1 = __importDefault(require("ora"));
-/**
- * CLI UI utilities for enhanced user experience
- * Provides colored output and loading spinners
- */
 class CliUI {
-    // Color utilities
     static success(message) {
         return chalk_1.default.green(`✓ ${message}`);
     }
@@ -33,14 +28,12 @@ class CliUI {
     static bold(message) {
         return chalk_1.default.bold(message);
     }
-    // Section headers
     static section(title) {
         return chalk_1.default.bold.magenta(`\n=== ${title} ===\n`);
     }
     static subsection(title) {
         return chalk_1.default.bold.blue(`\n--- ${title} ---`);
     }
-    // Spinner utilities
     static startSpinner(message) {
         if (this.spinner) {
             this.spinner.stop();
@@ -74,7 +67,6 @@ class CliUI {
             this.spinner = null;
         }
     }
-    // Logging methods that combine colors with console output
     static logSuccess(message) {
         console.log(this.success(message));
     }
@@ -101,7 +93,6 @@ class CliUI {
     static logSubsection(title) {
         console.log(this.subsection(title));
     }
-    // Progress indication for multi-step operations
     static logProgress(current, total, message) {
         const percentage = Math.round((current / total) * 100);
         const progressBar = this.createProgressBar(current, total);
@@ -114,12 +105,10 @@ class CliUI {
         const emptyBar = chalk_1.default.gray('░'.repeat(empty));
         return `[${filledBar}${emptyBar}]`;
     }
-    // Table-like output for structured data
     static logKeyValue(key, value, indent = 0) {
         const spaces = ' '.repeat(indent);
         console.log(`${spaces}${chalk_1.default.bold(key)}: ${chalk_1.default.white(value)}`);
     }
-    // Error formatting with context
     static formatError(error, context) {
         let message = this.error(`Error: ${error.message}`);
         if (context) {
@@ -130,7 +119,6 @@ class CliUI {
         }
         return message;
     }
-    // Command execution feedback
     static logCommandStart(command) {
         console.log(this.info(`Executing: ${this.highlight(command)}`));
     }
@@ -148,5 +136,4 @@ class CliUI {
 }
 exports.CliUI = CliUI;
 CliUI.spinner = null;
-// Convenience exports for direct usage
 exports.success = CliUI.success, exports.error = CliUI.error, exports.warning = CliUI.warning, exports.info = CliUI.info, exports.highlight = CliUI.highlight, exports.dim = CliUI.dim, exports.bold = CliUI.bold, exports.section = CliUI.section, exports.subsection = CliUI.subsection, exports.startSpinner = CliUI.startSpinner, exports.updateSpinner = CliUI.updateSpinner, exports.succeedSpinner = CliUI.succeedSpinner, exports.failSpinner = CliUI.failSpinner, exports.stopSpinner = CliUI.stopSpinner, exports.logSuccess = CliUI.logSuccess, exports.logError = CliUI.logError, exports.logWarning = CliUI.logWarning, exports.logInfo = CliUI.logInfo, exports.logSection = CliUI.logSection, exports.logSubsection = CliUI.logSubsection, exports.logProgress = CliUI.logProgress, exports.logKeyValue = CliUI.logKeyValue, exports.formatError = CliUI.formatError, exports.logCommandStart = CliUI.logCommandStart, exports.logCommandSuccess = CliUI.logCommandSuccess, exports.logCommandError = CliUI.logCommandError;

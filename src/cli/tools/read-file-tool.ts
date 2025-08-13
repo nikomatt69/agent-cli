@@ -208,8 +208,12 @@ export class ReadFileTool extends BaseTool {
                 break;
             case '.html':
             case '.xml':
-                // Remove HTML/XML comments
-                content = content.replace(/<!--[\s\S]*?-->/g, '');
+                // Remove HTML/XML comments with complete sanitization
+                let previousContent;
+                do {
+                    previousContent = content;
+                    content = content.replace(/<!--[\s\S]*?-->/g, '');
+                } while (content !== previousContent);
                 break;
         }
 

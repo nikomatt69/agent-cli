@@ -11,9 +11,6 @@ const http_1 = __importDefault(require("http"));
 const chalk_1 = __importDefault(require("chalk"));
 const events_1 = require("events");
 const completion_protocol_cache_1 = require("./completion-protocol-cache");
-/**
- * Enhanced MCP Client with connection pooling, caching, and robust error handling
- */
 class McpClient extends events_1.EventEmitter {
     constructor() {
         super();
@@ -24,26 +21,19 @@ class McpClient extends events_1.EventEmitter {
         this.requestQueue = new Map();
         this.retryAttempts = new Map();
         this.lastHealthCheck = new Map();
-        this.DEFAULT_TIMEOUT = 30000; // 30 seconds
+        this.DEFAULT_TIMEOUT = 30000;
         this.DEFAULT_RETRIES = 3;
-        this.HEALTH_CHECK_INTERVAL = 60000; // 1 minute
+        this.HEALTH_CHECK_INTERVAL = 60000;
         this.MAX_POOL_SIZE = 5;
         this.startHealthChecker();
     }
-    /**
-     * Get configured MCP servers
-     */
     getConfiguredServers() {
         const config = this.configManager.get('mcpServers') || {};
         return Object.values(config).filter(server => server.enabled);
     }
-    /**
-     * Call the specified MCP server with caching and error handling
-     */
     async call(serverName, request) {
         const startTime = Date.now();
         try {
-            // Check cache first for GET-like operations
             if (this.isCacheable(request)) {
                 const cacheKey = this.generateCacheKey(serverName, request);
                 const cachedResponse = await completion_protocol_cache_1.completionCache.getCompletion({
@@ -63,18 +53,14 @@ class McpClient extends events_1.EventEmitter {
                     };
                 }
             }
-            // Get server configuration
             const server = await this.getServerConfig(serverName);
             if (!server) {
                 throw new Error(`MCP server '${serverName}' not found or disabled`);
             }
-            // Check server health
             if (!await this.checkServerHealth(serverName)) {
                 throw new Error(`MCP server '${serverName}' is unhealthy`);
             }
-            // Execute the request
             const response = await this.executeRequest(server, request);
-            // Cache successful responses
             if (response.result && this.isCacheable(request)) {
                 const cacheKey = this.generateCacheKey(serverName, request);
                 await completion_protocol_cache_1.completionCache.storeCompletion({
@@ -94,14 +80,12 @@ class McpClient extends events_1.EventEmitter {
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ MCP Error: ${serverName} - ${error.message}`));
-            // Attempt retry logic
             const retryCount = this.retryAttempts.get(serverName) || 0;
             const server = await this.getServerConfig(serverName);
             const maxRetries = server?.retries || this.DEFAULT_RETRIES;
             if (retryCount < maxRetries) {
                 this.retryAttempts.set(serverName, retryCount + 1);
                 console.log(chalk_1.default.yellow(`🔄 Retrying MCP call to ${serverName} (${retryCount + 1}/${maxRetries})`));
-                // Exponential backoff
                 await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
                 return this.call(serverName, request);
             }
@@ -109,9 +93,6 @@ class McpClient extends events_1.EventEmitter {
             throw error;
         }
     }
-    /**
-     * Execute request based on server type
-     */
     async executeRequest(server, request) {
         switch (server.type) {
             case 'http':
@@ -125,9 +106,6 @@ class McpClient extends events_1.EventEmitter {
                 throw new Error(`Unsupported MCP server type: ${server.type}`);
         }
     }
-    /**
-     * Execute HTTP-based MCP request
-     */
     async executeHttpRequest(server, request) {
         if (!server.endpoint) {
             throw new Error('HTTP server requires endpoint configuration');
@@ -135,20 +113,17 @@ class McpClient extends events_1.EventEmitter {
         const url = new URL(server.endpoint);
         const isHttps = url.protocol === 'https:';
         const httpModule = isHttps ? https_1.default : http_1.default;
-        // Prepare request payload
         const payload = {
             jsonrpc: '2.0',
             id: request.id || Date.now().toString(),
             method: request.method,
             params: request.params
         };
-        // Prepare headers
         const headers = {
             'Content-Type': 'application/json',
             'User-Agent': 'NikCLI-MCP-Client/1.0',
             ...server.headers
         };
-        // Add authentication
         if (server.authentication) {
             this.addAuthHeaders(headers, server.authentication);
         }
@@ -190,17 +165,9 @@ class McpClient extends events_1.EventEmitter {
             req.end();
         });
     }
-    /**
-     * Execute WebSocket-based MCP request
-     */
     async executeWebSocketRequest(server, request) {
-        // WebSocket implementation would go here
-        // For now, throw not implemented error
         throw new Error('WebSocket MCP servers not yet implemented');
     }
-    /**
-     * Execute command-based MCP request
-     */
     async executeCommandRequest(server, request) {
         if (!server.command) {
             throw new Error('Command server requires command configuration');
@@ -243,10 +210,8 @@ class McpClient extends events_1.EventEmitter {
                 }
             });
             process.on('error', reject);
-            // Send request
             process.stdin.write(JSON.stringify(payload));
             process.stdin.end();
-            // Timeout handling
             setTimeout(() => {
                 if (!process.killed) {
                     process.kill();
@@ -255,9 +220,6 @@ class McpClient extends events_1.EventEmitter {
             }, server.timeout || this.DEFAULT_TIMEOUT);
         });
     }
-    /**
-     * Add authentication headers
-     */
     addAuthHeaders(headers, auth) {
         if (!auth)
             return;
@@ -281,37 +243,23 @@ class McpClient extends events_1.EventEmitter {
                 break;
         }
     }
-    /**
-     * Check if request is cacheable
-     */
     isCacheable(request) {
-        // Cache read-only operations
         const cacheableMethods = [
             'list', 'get', 'read', 'search', 'query', 'find',
             'describe', 'status', 'info', 'help'
         ];
         return cacheableMethods.some(method => request.method.toLowerCase().includes(method));
     }
-    /**
-     * Generate cache key for request
-     */
     generateCacheKey(serverName, request) {
         return `mcp:${serverName}:${request.method}:${JSON.stringify(request.params || {})}`;
     }
-    /**
-     * Get server configuration
-     */
     async getServerConfig(serverName) {
         const servers = this.getConfiguredServers();
         return servers.find(server => server.name === serverName) || null;
     }
-    /**
-     * Check server health
-     */
     async checkServerHealth(serverName) {
         const now = Date.now();
         const lastCheck = this.lastHealthCheck.get(serverName) || 0;
-        // Return cached health status if checked recently
         if (now - lastCheck < this.HEALTH_CHECK_INTERVAL) {
             return this.healthStatus.get(serverName) || false;
         }
@@ -321,7 +269,6 @@ class McpClient extends events_1.EventEmitter {
             return false;
         }
         try {
-            // Try a simple health check request
             const healthRequest = {
                 method: 'ping',
                 params: {},
@@ -338,9 +285,6 @@ class McpClient extends events_1.EventEmitter {
             return false;
         }
     }
-    /**
-     * List available servers with status
-     */
     async listServers() {
         const servers = this.getConfiguredServers();
         const serverStatuses = await Promise.all(servers.map(async (server) => ({
@@ -349,9 +293,6 @@ class McpClient extends events_1.EventEmitter {
         })));
         return serverStatuses;
     }
-    /**
-     * Test server connection
-     */
     async testServer(serverName) {
         const startTime = Date.now();
         try {
@@ -372,24 +313,16 @@ class McpClient extends events_1.EventEmitter {
             };
         }
     }
-    /**
-     * Start background health checker
-     */
     startHealthChecker() {
         setInterval(async () => {
             const servers = this.getConfiguredServers();
             for (const server of servers) {
-                // Reset last check to force recheck
                 this.lastHealthCheck.delete(server.name);
                 await this.checkServerHealth(server.name);
             }
         }, this.HEALTH_CHECK_INTERVAL);
     }
-    /**
-     * Clean up connections on shutdown
-     */
     async shutdown() {
-        // Close all active connections
         for (const [serverName, connection] of this.connections.entries()) {
             try {
                 if (connection && typeof connection.kill === 'function') {
@@ -406,5 +339,4 @@ class McpClient extends events_1.EventEmitter {
     }
 }
 exports.McpClient = McpClient;
-// Export singleton instance
 exports.mcpClient = new McpClient();

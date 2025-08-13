@@ -5,10 +5,6 @@ const promises_1 = require("fs/promises");
 const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
 const cli_ui_1 = require("../utils/cli-ui");
-/**
- * Production-ready Replace In File Tool
- * Safely performs content replacements with validation and rollback
- */
 class ReplaceInFileTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
         super('replace-in-file-tool', workingDirectory);
@@ -17,14 +13,10 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
         const startTime = Date.now();
         let backupContent;
         try {
-            // Sanitize and validate file path
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
-            // Read original content
             const originalContent = await (0, promises_1.readFile)(sanitizedPath, 'utf8');
             backupContent = originalContent;
-            // Perform replacement
             const replaceResult = this.performReplacement(originalContent, searchPattern, replacement, options);
-            // Validate replacement if validators provided
             if (options.validators) {
                 for (const validator of options.validators) {
                     const validation = await validator(originalContent, replaceResult.newContent, replaceResult.matches);
@@ -33,11 +25,9 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                     }
                 }
             }
-            // Check if any changes were made
             if (replaceResult.matchCount === 0 && options.requireMatch) {
                 throw new Error('No matches found for the search pattern');
             }
-            // Write modified content if changes were made
             if (replaceResult.matchCount > 0) {
                 await (0, promises_1.writeFile)(sanitizedPath, replaceResult.newContent, 'utf8');
             }
@@ -105,9 +95,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Replace in multiple files
-     */
     async replaceInMultiple(filePaths, searchPattern, replacement, options = {}) {
         const results = [];
         let totalReplacements = 0;
@@ -155,9 +142,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             summary: this.generateSummary(results)
         };
     }
-    /**
-     * Replace with context-aware matching
-     */
     async replaceWithContext(filePath, searchPattern, replacement, context) {
         try {
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
@@ -168,12 +152,10 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 let shouldReplace = false;
-                // Check if line matches the pattern
                 const hasMatch = typeof searchPattern === 'string'
                     ? line.includes(searchPattern)
                     : searchPattern.test(line);
                 if (hasMatch) {
-                    // Check context conditions
                     shouldReplace = this.checkContext(lines, i, context);
                 }
                 if (shouldReplace) {
@@ -213,28 +195,22 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             throw new Error(`Context-aware replacement failed: ${error.message}`);
         }
     }
-    /**
-     * Perform the actual replacement operation
-     */
     performReplacement(content, searchPattern, replacement, options) {
         let newContent;
         let matchCount = 0;
         const matches = [];
         if (typeof searchPattern === 'string') {
-            // String replacement
             const regex = new RegExp(this.escapeRegex(searchPattern), options.caseSensitive === false ? 'gi' : 'g');
             newContent = content.replace(regex, (match, ...args) => {
                 matchCount++;
                 matches.push(match);
-                // Apply max replacements limit
                 if (options.maxReplacements && matchCount > options.maxReplacements) {
-                    return match; // Don't replace beyond limit
+                    return match;
                 }
                 return replacement;
             });
         }
         else {
-            // RegExp replacement
             const globalRegex = new RegExp(searchPattern.source, searchPattern.flags.includes('g') ? searchPattern.flags : searchPattern.flags + 'g');
             newContent = content.replace(globalRegex, (match, ...args) => {
                 matchCount++;
@@ -251,11 +227,7 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             matches
         };
     }
-    /**
-     * Check if replacement should occur based on context
-     */
     checkContext(lines, lineIndex, context) {
-        // Check preceding lines
         if (context.beforeLines) {
             for (let i = 1; i <= context.beforeLines.length; i++) {
                 const beforeIndex = lineIndex - i;
@@ -273,7 +245,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 }
             }
         }
-        // Check following lines
         if (context.afterLines) {
             for (let i = 1; i <= context.afterLines.length; i++) {
                 const afterIndex = lineIndex + i;
@@ -291,7 +262,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 }
             }
         }
-        // Check exclusion patterns
         if (context.excludeIfContains) {
             const currentLine = lines[lineIndex];
             for (const excludePattern of context.excludeIfContains) {
@@ -307,9 +277,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
         }
         return true;
     }
-    /**
-     * Generate a preview of changes
-     */
     generatePreview(originalContent, newContent, maxLines = 10) {
         const originalLines = originalContent.split('\n');
         const newLines = newContent.split('\n');
@@ -333,9 +300,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
             hasMoreChanges: changes.length === maxLines && originalContent !== newContent
         };
     }
-    /**
-     * Generate summary for multiple file operations
-     */
     generateSummary(results) {
         const filesWithChanges = results.filter(r => r.success && r.replacementsMade > 0);
         const filesWithErrors = results.filter(r => !r.success);
@@ -349,9 +313,6 @@ class ReplaceInFileTool extends base_tool_1.BaseTool {
                 : 0
         };
     }
-    /**
-     * Escape special regex characters in string
-     */
     escapeRegex(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }

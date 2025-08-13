@@ -62,7 +62,7 @@ class ToolService {
                 networkRequests: true,
                 systemCommands: true,
             },
-            timeout: 30000, // 30 seconds timeout
+            timeout: 30000,
         });
         this.registerDefaultTools();
     }
@@ -70,7 +70,6 @@ class ToolService {
         this.workingDirectory = dir;
     }
     registerDefaultTools() {
-        // File operations
         this.registerTool({
             name: 'read_file',
             description: 'Read file contents',
@@ -95,14 +94,12 @@ class ToolService {
             category: 'file',
             handler: this.findFiles.bind(this)
         });
-        // Command execution
         this.registerTool({
             name: 'execute_command',
             description: 'Execute shell command',
             category: 'command',
             handler: this.executeCommand.bind(this)
         });
-        // Git operations
         this.registerTool({
             name: 'git_status',
             description: 'Get git repository status',
@@ -115,14 +112,12 @@ class ToolService {
             category: 'git',
             handler: this.gitDiff.bind(this)
         });
-        // Package management
         this.registerTool({
             name: 'npm_install',
             description: 'Install npm package',
             category: 'package',
             handler: this.npmInstall.bind(this)
         });
-        // Project analysis
         this.registerTool({
             name: 'analyze_project',
             description: 'Analyze project structure',
@@ -134,43 +129,30 @@ class ToolService {
         this.tools.set(tool.name, tool);
         console.log(chalk_1.default.dim(`🔧 Registered tool: ${tool.name}`));
     }
-    /**
-     * Execute tool with security checks and approval process
-     */
     async executeToolSafely(toolName, operation, args) {
         try {
-            // Check if approval is needed
             const approvalRequest = await this.policyManager.shouldApproveToolOperation(toolName, operation, args);
             if (approvalRequest) {
-                // Request user approval
                 const approval = await this.requestToolApproval(approvalRequest);
                 if (!approval.approved) {
                     await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'denied', { operation, args, userComments: approval.userComments });
                     throw new Error(`Operation cancelled by user: ${toolName} - ${operation}`);
                 }
-                // Log approval decision
                 await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'requires_approval', { operation, args, approved: true, userComments: approval.userComments });
-                // Add to session approvals if requested
                 if (approval.userComments?.includes('approve-session')) {
                     this.policyManager.addSessionApproval(toolName, operation);
                 }
             }
             else {
-                // Log auto-approval
                 await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'allowed', { operation, args, reason: 'auto-approved by policy' });
             }
-            // Execute the tool
             return await this.executeTool(toolName, args);
         }
         catch (error) {
-            // Log execution error
             await this.policyManager.logPolicyDecision(`tool:${toolName}`, 'denied', { operation, args, error: error.message });
             throw error;
         }
     }
-    /**
-     * Request approval for tool operation
-     */
     async requestToolApproval(toolRequest) {
         const approvalRequest = {
             id: `tool-${Date.now()}`,
@@ -188,15 +170,12 @@ class ToolService {
             context: {
                 workingDirectory: this.workingDirectory,
                 affectedFiles: toolRequest.riskAssessment.affectedFiles,
-                estimatedDuration: 5000, // 5 seconds default
+                estimatedDuration: 5000,
             },
             timeout: config_manager_1.simpleConfigManager.getAll().sessionSettings.approvalTimeoutMs
         };
         return await this.approvalSystem.requestApproval(approvalRequest);
     }
-    /**
-     * Map tool name to approval action type
-     */
     getActionType(toolName) {
         if (toolName.includes('write') || toolName.includes('create'))
             return 'file_create';
@@ -241,16 +220,12 @@ class ToolService {
             throw error;
         }
     }
-    /**
-     * Get available tools (original method for compatibility)
-     */
     getAvailableTools() {
         return Array.from(this.tools.values());
     }
     getExecutionHistory() {
         return Array.from(this.executions.values());
     }
-    // Tool implementations
     async readFile(args) {
         const fullPath = path.resolve(this.workingDirectory, args.filePath);
         if (!fs.existsSync(fullPath)) {
@@ -265,7 +240,6 @@ class ToolService {
     async writeFile(args) {
         const fullPath = path.resolve(this.workingDirectory, args.filePath);
         const dir = path.dirname(fullPath);
-        // Ensure directory exists
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
@@ -292,7 +266,6 @@ class ToolService {
                     result.size = stats.size;
                 }
                 catch {
-                    // Ignore stat errors
                 }
             }
             return result;
@@ -317,7 +290,6 @@ class ToolService {
                 }
             }
             catch {
-                // Ignore directory access errors
             }
         };
         searchRecursive(searchPath);
@@ -403,7 +375,6 @@ class ToolService {
     }
     async analyzeProject(args) {
         try {
-            // Read package.json if available
             let projectName = path.basename(this.workingDirectory);
             let projectType = 'unknown';
             try {
@@ -415,14 +386,12 @@ class ToolService {
                 }
             }
             catch {
-                // Ignore package.json errors
             }
-            // Detect languages
             const languages = new Set();
             let fileCount = 0;
             const analyzeDir = (dir, depth = 0) => {
                 if (depth > 3)
-                    return; // Limit recursion depth
+                    return;
                 try {
                     const items = fs.readdirSync(dir, { withFileTypes: true });
                     for (const item of items) {
@@ -435,7 +404,6 @@ class ToolService {
                         else {
                             fileCount++;
                             const ext = path.extname(item.name);
-                            // Map extensions to languages
                             const langMap = {
                                 '.js': 'JavaScript',
                                 '.ts': 'TypeScript',
@@ -455,7 +423,6 @@ class ToolService {
                     }
                 }
                 catch {
-                    // Ignore directory access errors
                 }
             };
             analyzeDir(this.workingDirectory);
@@ -464,29 +431,20 @@ class ToolService {
                 type: projectType,
                 languages: Array.from(languages),
                 fileCount,
-                structure: {} // Could be expanded
+                structure: {}
             };
         }
         catch (error) {
             throw new Error(`Failed to analyze project: ${error.message}`);
         }
     }
-    /**
-     * Enable developer mode for current session
-     */
     enableDevMode(timeoutMs) {
         this.policyManager.enableDevMode(timeoutMs);
         console.log(chalk_1.default.yellow('🛠️ Developer mode enabled - reduced security restrictions'));
     }
-    /**
-     * Check if developer mode is active
-     */
     isDevModeActive() {
         return this.policyManager.isDevModeActive();
     }
-    /**
-     * Get current security mode status
-     */
     getSecurityStatus() {
         const config = config_manager_1.simpleConfigManager.getAll();
         const toolsWithSecurity = this.getAvailableToolsWithSecurity();
@@ -501,23 +459,14 @@ class ToolService {
             }))
         };
     }
-    /**
-     * Clear all session approvals
-     */
     clearSessionApprovals() {
         this.policyManager.clearSessionApprovals();
         console.log(chalk_1.default.blue('🔄 Session approvals cleared'));
     }
-    /**
-     * Add a tool to session approvals
-     */
     addSessionApproval(toolName, operation) {
         this.policyManager.addSessionApproval(toolName, operation);
         console.log(chalk_1.default.green(`✅ Added session approval for ${toolName}:${operation}`));
     }
-    /**
-     * Get available tools with their security status
-     */
     getAvailableToolsWithSecurity() {
         return Array.from(this.tools.values()).map(tool => {
             const policy = this.policyManager.getToolPolicy(tool.name);

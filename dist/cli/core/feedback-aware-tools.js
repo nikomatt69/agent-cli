@@ -6,27 +6,19 @@ const intelligent_feedback_wrapper_1 = require("./intelligent-feedback-wrapper")
 const smart_docs_tool_1 = require("../tools/smart-docs-tool");
 const docs_request_tool_1 = require("../tools/docs-request-tool");
 const documentation_tool_1 = require("./documentation-tool");
-/**
- * Wrapper che aggiunge feedback automatico ai tools esistenti
- */
 class FeedbackAwareTools {
-    /**
-     * Wrappa un tool esistente con intelligence feedback
-     */
     static wrapTool(toolName, originalTool, agentType) {
         return {
             ...originalTool,
             execute: async (parameters) => {
                 const context = this.extractContextFromParameters(parameters);
                 return await intelligent_feedback_wrapper_1.intelligentFeedbackWrapper.executeToolWithFeedback(toolName, async () => {
-                    // Esegui il tool originale
                     return await originalTool?.execute?.(parameters, {});
                 }, parameters, context, agentType);
             }
         };
     }
     static extractContextFromParameters(parameters) {
-        // Estrae contesto dai parametri del tool
         if (parameters.query)
             return `Query: ${parameters.query}`;
         if (parameters.concept)
@@ -39,48 +31,32 @@ class FeedbackAwareTools {
             return `Code analysis`;
         return `Tool execution: ${Object.keys(parameters).join(', ')}`;
     }
-    /**
-     * Crea versioni feedback-aware di tutti i documentation tools
-     */
     static getEnhancedDocumentationTools(agentType) {
         return {
-            // Smart docs tools con feedback
             smart_docs_search: this.wrapTool('smart_docs_search', smart_docs_tool_1.smartDocsTools.search, agentType),
             smart_docs_load: this.wrapTool('smart_docs_load', smart_docs_tool_1.smartDocsTools.load, agentType),
             smart_docs_context: this.wrapTool('smart_docs_context', smart_docs_tool_1.smartDocsTools.context, agentType),
-            // AI docs tools con feedback
             docs_request: this.wrapTool('docs_request', docs_request_tool_1.aiDocsTools.request, agentType),
             docs_gap_report: this.wrapTool('docs_gap_report', docs_request_tool_1.aiDocsTools.gapReport, agentType),
-            // Documentation tools standard con feedback
             doc_search: this.wrapTool('doc_search', documentation_tool_1.documentationTools.search, agentType),
             doc_add: this.wrapTool('doc_add', documentation_tool_1.documentationTools.add, agentType),
             doc_stats: this.wrapTool('doc_stats', documentation_tool_1.documentationTools.stats, agentType),
         };
     }
-    /**
-     * Wrapper generico per qualsiasi tool
-     */
     static enhanceAllTools(tools, agentType) {
         const enhancedTools = {};
         for (const [toolName, tool] of Object.entries(tools)) {
-            // Non wrappare due volte i tools già enhanced
             if (toolName.includes('enhanced_')) {
                 enhancedTools[toolName] = tool;
                 continue;
             }
             enhancedTools[`enhanced_${toolName}`] = this.wrapTool(toolName, tool, agentType);
-            // Mantieni anche la versione originale per compatibility
             enhancedTools[toolName] = tool;
         }
         return enhancedTools;
     }
-    /**
-     * Analizza pattern di feedback per suggerimenti di miglioramento
-     */
     static async generateImprovementSuggestions() {
-        // Ottieni statistiche di apprendimento
         const learningStats = intelligent_feedback_wrapper_1.intelligentFeedbackWrapper.getLearningStats();
-        // Ottieni top gaps dal feedback system
         const topGaps = global.feedbackSystem?.getTopGaps?.(10) || [];
         const gapAnalysis = topGaps.map((gap) => ({
             concept: gap.concept,
@@ -121,11 +97,7 @@ class FeedbackAwareTools {
             learningInsights
         };
     }
-    /**
-     * Feedback-aware execution tracking per agenti specifici
-     */
     static trackAgentPerformance(agentType) {
-        // TODO: Implementare tracking specifico per agente
         return {
             successRate: 0.85,
             averageExecutionTime: 1200,
@@ -133,11 +105,7 @@ class FeedbackAwareTools {
             commonFailures: ['permission_errors', 'network_timeouts']
         };
     }
-    /**
-     * Sistema di raccomandazioni adattive
-     */
     static getAdaptiveRecommendations(context, agentType) {
-        // Analizza il contesto e suggerisci tools più appropriati
         const contextLower = context.toLowerCase();
         let recommendedTools = [];
         let alternativeApproaches = [];
@@ -189,9 +157,6 @@ class FeedbackAwareTools {
     }
 }
 exports.FeedbackAwareTools = FeedbackAwareTools;
-/**
- * Decorator per tools che aggiunge automaticamente feedback tracking
- */
 function withFeedbackTracking(toolName, agentType) {
     return function (target, propertyKey, descriptor) {
         const originalMethod = descriptor.value;

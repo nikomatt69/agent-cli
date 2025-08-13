@@ -20,7 +20,6 @@ class AgentService extends events_1.EventEmitter {
         this.registerDefaultAgents();
     }
     registerDefaultAgents() {
-        // AI Analysis Agent
         this.registerAgent({
             name: 'ai-analysis',
             description: 'AI code analysis and review',
@@ -28,7 +27,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.aiAnalysisHandler.bind(this)
         });
-        // Code Review Agent
         this.registerAgent({
             name: 'code-review',
             description: 'Code review and suggestions',
@@ -36,7 +34,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.codeReviewHandler.bind(this)
         });
-        // Backend Expert Agent
         this.registerAgent({
             name: 'backend-expert',
             description: 'Backend development specialist',
@@ -44,7 +41,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.backendExpertHandler.bind(this)
         });
-        // Frontend Expert Agent
         this.registerAgent({
             name: 'frontend-expert',
             description: 'Frontend/UI development expert',
@@ -52,7 +48,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.frontendExpertHandler.bind(this)
         });
-        // React Expert Agent
         this.registerAgent({
             name: 'react-expert',
             description: 'React and Next.js specialist',
@@ -60,7 +55,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.reactExpertHandler.bind(this)
         });
-        // DevOps Expert Agent
         this.registerAgent({
             name: 'devops-expert',
             description: 'DevOps and infrastructure expert',
@@ -68,7 +62,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.devopsExpertHandler.bind(this)
         });
-        // System Admin Agent
         this.registerAgent({
             name: 'system-admin',
             description: 'System administration tasks',
@@ -76,7 +69,6 @@ class AgentService extends events_1.EventEmitter {
             maxConcurrency: 1,
             handler: this.systemAdminHandler.bind(this)
         });
-        // Autonomous Coder Agent
         this.registerAgent({
             name: 'autonomous-coder',
             description: 'Full autonomous coding agent',
@@ -102,7 +94,6 @@ class AgentService extends events_1.EventEmitter {
             status: 'pending'
         };
         this.activeTasks.set(taskId, agentTask);
-        // Check if we can run immediately or need to queue
         if (this.runningCount < this.maxConcurrentAgents) {
             await this.runTask(agentTask);
         }
@@ -120,7 +111,6 @@ class AgentService extends events_1.EventEmitter {
         console.log(chalk_1.default.blue(`🤖 Starting ${agentTask.agentType} agent...`));
         this.emit('task_start', agentTask);
         try {
-            // Create secure tool wrapper based on current security mode
             const config = config_manager_1.simpleConfigManager.getAll();
             const secureTools = this.createSecureToolWrapper(tool_service_1.toolService, config.securityMode);
             const context = {
@@ -129,7 +119,6 @@ class AgentService extends events_1.EventEmitter {
                 tools: secureTools,
                 planning: planning_service_1.planningService
             };
-            // Execute agent with streaming updates
             for await (const update of agent.handler(agentTask.task, context)) {
                 if (update.type === 'progress') {
                     agentTask.progress = update.progress;
@@ -161,7 +150,6 @@ class AgentService extends events_1.EventEmitter {
         finally {
             this.runningCount--;
             this.emit('task_complete', agentTask);
-            // Start next queued task if available
             if (this.taskQueue.length > 0 && this.runningCount < this.maxConcurrentAgents) {
                 const nextTask = this.taskQueue.shift();
                 await this.runTask(nextTask);
@@ -185,7 +173,6 @@ class AgentService extends events_1.EventEmitter {
         if (!task)
             return false;
         if (task.status === 'pending') {
-            // Remove from queue
             const queueIndex = this.taskQueue.findIndex(t => t.id === taskId);
             if (queueIndex >= 0) {
                 this.taskQueue.splice(queueIndex, 1);
@@ -194,24 +181,19 @@ class AgentService extends events_1.EventEmitter {
                 return true;
             }
         }
-        // Cannot cancel running tasks easily
         return false;
     }
-    // Agent implementations (simplified for now)
     async *aiAnalysisHandler(task, context) {
         yield { type: 'progress', progress: 10 };
-        // Analyze project structure
         yield { type: 'tool_use', tool: 'analyze_project', description: 'Analyzing project structure' };
         const projectAnalysis = await context.tools.executeTool('analyze_project', {});
         yield { type: 'progress', progress: 50 };
-        // Read key files for analysis
         yield { type: 'tool_use', tool: 'find_files', description: 'Finding relevant code files' };
         const files = await context.tools.executeTool('find_files', { pattern: '.ts' });
         yield { type: 'progress', progress: 80 };
-        // Perform analysis
         const analysis = {
             project: projectAnalysis,
-            files: files.matches.slice(0, 5), // Limit for demo
+            files: files.matches.slice(0, 5),
             recommendations: [
                 'Consider adding TypeScript strict mode',
                 'Add unit tests for critical functions',
@@ -223,11 +205,9 @@ class AgentService extends events_1.EventEmitter {
     }
     async *codeReviewHandler(task, context) {
         yield { type: 'progress', progress: 20 };
-        // Get git status
         yield { type: 'tool_use', tool: 'git_status', description: 'Checking git status' };
         const gitStatus = await context.tools.executeTool('git_status', {});
         yield { type: 'progress', progress: 60 };
-        // Get diff for review
         if (gitStatus.files.length > 0) {
             yield { type: 'tool_use', tool: 'git_diff', description: 'Getting code changes' };
             const diff = await context.tools.executeTool('git_diff', {});
@@ -238,7 +218,6 @@ class AgentService extends events_1.EventEmitter {
     async *backendExpertHandler(task, context) {
         yield { type: 'progress', progress: 25 };
         yield { type: 'tool_use', tool: 'find_files', description: 'Finding backend files' };
-        // Simulate backend analysis
         await new Promise(resolve => setTimeout(resolve, 1000));
         yield { type: 'progress', progress: 100 };
         yield { type: 'result', data: { expertise: 'backend', recommendations: ['Use proper error handling', 'Add request validation'] } };
@@ -273,11 +252,9 @@ class AgentService extends events_1.EventEmitter {
     }
     async *autonomousCoderHandler(task, context) {
         yield { type: 'progress', progress: 10 };
-        // Create execution plan
         yield { type: 'tool_use', tool: 'planning', description: 'Creating execution plan' };
         const plan = await context.planning.createPlan(task, { showProgress: false, autoExecute: false, confirmSteps: false });
         yield { type: 'progress', progress: 50 };
-        // Execute plan steps
         for (let i = 0; i < Math.min(plan.steps.length, 3); i++) {
             const step = plan.steps[i];
             yield { type: 'tool_use', tool: step.toolName || 'general', description: step.description };
@@ -286,71 +263,46 @@ class AgentService extends events_1.EventEmitter {
         yield { type: 'progress', progress: 100 };
         yield { type: 'result', data: { plan, completed: true } };
     }
-    /**
-     * Create a secure tool wrapper that implements approval logic based on security mode
-     */
     createSecureToolWrapper(originalToolService, securityMode) {
         return {
-            // Pass through all original methods
             ...originalToolService,
-            // Override executeTool to add security logic
             async executeTool(toolName, args) {
                 const operation = this.inferOperationFromArgs(toolName, args);
-                // Determine if we should use secure execution
                 const shouldUseSecure = this.shouldUseSecureExecution(toolName, securityMode);
                 if (shouldUseSecure) {
                     console.log(chalk_1.default.yellow(`🛡️ Security check: ${toolName}`));
                     return await originalToolService.executeToolSafely(toolName, operation, args);
                 }
                 else {
-                    // Use original method for safe/read-only operations or in developer mode
                     return await originalToolService.executeTool(toolName, args);
                 }
             }
         };
     }
-    /**
-     * Determine if secure execution should be used based on tool and security mode
-     */
     shouldUseSecureExecution(toolName, securityMode) {
-        // Always use secure execution in safe mode
         if (securityMode === 'safe') {
             return !this.isReadOnlyTool(toolName);
         }
-        // Use secure execution for risky operations in default mode
         if (securityMode === 'default') {
             return this.isRiskyTool(toolName);
         }
-        // Developer mode - only secure for high-risk operations
         if (securityMode === 'developer') {
             return this.isHighRiskTool(toolName);
         }
-        return false; // Fallback
+        return false;
     }
-    /**
-     * Check if tool is read-only (safe)
-     */
     isReadOnlyTool(toolName) {
         const readOnlyTools = ['read_file', 'list_files', 'find_files', 'analyze_project', 'git_status', 'git_diff'];
         return readOnlyTools.includes(toolName);
     }
-    /**
-     * Check if tool is risky (modifies files/system)
-     */
     isRiskyTool(toolName) {
         const riskyTools = ['write_file', 'edit_file', 'multi_edit', 'git_commit', 'git_push', 'npm_install', 'execute_command'];
         return riskyTools.includes(toolName);
     }
-    /**
-     * Check if tool is high-risk (dangerous operations)
-     */
     isHighRiskTool(toolName) {
         const highRiskTools = ['execute_command', 'delete_file', 'git_reset', 'network_request'];
         return highRiskTools.includes(toolName);
     }
-    /**
-     * Infer operation type from tool name and arguments
-     */
     inferOperationFromArgs(toolName, args) {
         if (args.operation)
             return args.operation;

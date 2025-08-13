@@ -7,11 +7,9 @@ class PerformanceOptimizer {
         this.metrics = new Map();
         this.startTime = 0;
     }
-    // Start performance monitoring
     startMonitoring() {
         this.startTime = perf_hooks_1.performance.now();
     }
-    // End monitoring and collect metrics
     endMonitoring(sessionId, metrics) {
         const processingTime = perf_hooks_1.performance.now() - this.startTime;
         const fullMetrics = {
@@ -24,10 +22,8 @@ class PerformanceOptimizer {
         this.metrics.set(sessionId, fullMetrics);
         return fullMetrics;
     }
-    // Optimize messages for better performance
     optimizeMessages(messages) {
         const optimized = [...messages];
-        // Remove redundant system messages
         const systemMessages = optimized.filter(msg => msg.role === 'system');
         if (systemMessages.length > 1) {
             const mergedSystemContent = systemMessages.map(msg => msg.content).join('\n\n');
@@ -36,7 +32,6 @@ class PerformanceOptimizer {
                 content: mergedSystemContent
             });
         }
-        // Truncate very long messages
         optimized.forEach(msg => {
             if (typeof msg.content === 'string' && msg.content.length > 5000) {
                 msg.content = msg.content.substring(0, 5000) + '... [truncated]';
@@ -44,7 +39,6 @@ class PerformanceOptimizer {
         });
         return optimized;
     }
-    // Get performance recommendations
     getRecommendations(sessionId) {
         const metrics = this.metrics.get(sessionId);
         if (!metrics)
@@ -64,27 +58,20 @@ class PerformanceOptimizer {
         }
         return recommendations;
     }
-    // Analyze response quality
     analyzeResponseQuality(response) {
         let quality = 0;
-        // Check for structured content
         if (response.includes('```') || response.includes('**'))
             quality += 20;
-        // Check for actionable content
         if (response.includes('1.') || response.includes('•') || response.includes('-'))
             quality += 20;
-        // Check for code examples
         if (response.includes('const ') || response.includes('function ') || response.includes('import '))
             quality += 20;
-        // Check for explanations
         if (response.includes('because') || response.includes('therefore') || response.includes('however'))
             quality += 20;
-        // Check for appropriate length
         if (response.length > 100 && response.length < 2000)
             quality += 20;
         return Math.min(100, quality);
     }
-    // Get performance summary
     getPerformanceSummary() {
         const sessions = Array.from(this.metrics.values());
         if (sessions.length === 0)

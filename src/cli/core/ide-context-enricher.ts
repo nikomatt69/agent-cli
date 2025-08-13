@@ -189,11 +189,34 @@ export class IDEContextEnricher {
   private async getOpenFiles(): Promise<string[]> {
     try {
       // This is an approximation - in a real implementation you'd integrate with the IDE's API
-      const { stdout } = await execAsync('lsof +D . 2>/dev/null | grep -E "\\.(ts|js|tsx|jsx)$" | head -5');
-      return stdout.split('\n').filter(line => line.trim()).map(line => {
-        const match = line.match(/\.\/([^\s]+)/);
-        return match ? match[1] : '';
-      }).filter(file => file);
+      // Use safer approach by avoiding shell metacharacters and using spawn instead of exec
+      const { spawn } = await import('child_process');
+      const { promisify } = await import('util');
+      
+      // Safer implementation: read directory instead of using lsof with shell pipes
+      const workspaceFiles = this.getWorkspaceFiles('.', ['.ts', '.js', '.tsx', '.jsx']).slice(0, 5);
+      return workspaceFiles;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  // Helper method to safely get workspace files
+  private getWorkspaceFiles(dir: string, extensions: string[]): string[] {
+    try {
+      const files: string[] = [];
+      const entries = readdirSync(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          const subFiles = this.getWorkspaceFiles(join(dir, entry.name), extensions);
+          files.push(...subFiles);
+        } else if (entry.isFile() && extensions.includes(extname(entry.name))) {
+          files.push(join(dir, entry.name));
+        }
+      }
+      
+      return files;
     } catch (error) {
       return [];
     }

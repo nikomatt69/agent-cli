@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -13,7 +46,6 @@ const util_1 = require("util");
 const chalk_1 = __importDefault(require("chalk"));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class IDEContextEnricher {
-    // IDE context enrichment tool
     getIDEContextTool() {
         return (0, ai_1.tool)({
             description: 'Analyze and enrich IDE context including editor, workspace, project structure, and development environment',
@@ -54,25 +86,20 @@ class IDEContextEnricher {
             }
         });
     }
-    // Detect current editor/IDE
     async detectEditor() {
         try {
-            // Check for common editor environment variables
             const editorVars = ['EDITOR', 'VISUAL', 'VSCODE_PID', 'INTELLIJ_IDEA_PID'];
             for (const varName of editorVars) {
                 if (process.env[varName]) {
                     return process.env[varName] || 'unknown';
                 }
             }
-            // Check for VS Code
             if (process.env.VSCODE_PID || process.env.VSCODE_EXTENSION_HOST) {
                 return 'VS Code';
             }
-            // Check for IntelliJ/WebStorm
             if (process.env.INTELLIJ_IDEA_PID || process.env.WEBSTORM_PID) {
                 return 'IntelliJ IDEA/WebStorm';
             }
-            // Check for Vim/Neovim
             if (process.env.VIM || process.env.NVIM) {
                 return 'Vim/Neovim';
             }
@@ -82,7 +109,6 @@ class IDEContextEnricher {
             return 'unknown';
         }
     }
-    // Detect project type based on files
     async detectProjectType() {
         const files = (0, fs_1.readdirSync)(process.cwd());
         if (files.includes('package.json')) {
@@ -117,7 +143,6 @@ class IDEContextEnricher {
         }
         return 'Unknown';
     }
-    // Analyze dependencies
     async analyzeDependencies() {
         try {
             if ((0, fs_1.existsSync)('package.json')) {
@@ -137,7 +162,6 @@ class IDEContextEnricher {
             return null;
         }
     }
-    // Get Git information
     async getGitInfo() {
         try {
             const { stdout: branch } = await execAsync('git branch --show-current');
@@ -154,7 +178,6 @@ class IDEContextEnricher {
             return null;
         }
     }
-    // Get recently modified files
     async getRecentFiles() {
         try {
             const { stdout } = await execAsync('find . -type f -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" | head -10');
@@ -164,21 +187,36 @@ class IDEContextEnricher {
             return [];
         }
     }
-    // Get currently open files (approximation)
     async getOpenFiles() {
         try {
-            // This is an approximation - in a real implementation you'd integrate with the IDE's API
-            const { stdout } = await execAsync('lsof +D . 2>/dev/null | grep -E "\\.(ts|js|tsx|jsx)$" | head -5');
-            return stdout.split('\n').filter(line => line.trim()).map(line => {
-                const match = line.match(/\.\/([^\s]+)/);
-                return match ? match[1] : '';
-            }).filter(file => file);
+            const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));
+            const { promisify } = await Promise.resolve().then(() => __importStar(require('util')));
+            const workspaceFiles = this.getWorkspaceFiles('.', ['.ts', '.js', '.tsx', '.jsx']).slice(0, 5);
+            return workspaceFiles;
         }
         catch (error) {
             return [];
         }
     }
-    // Generate context analysis
+    getWorkspaceFiles(dir, extensions) {
+        try {
+            const files = [];
+            const entries = (0, fs_1.readdirSync)(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                    const subFiles = this.getWorkspaceFiles((0, path_1.join)(dir, entry.name), extensions);
+                    files.push(...subFiles);
+                }
+                else if (entry.isFile() && extensions.includes((0, path_1.extname)(entry.name))) {
+                    files.push((0, path_1.join)(dir, entry.name));
+                }
+            }
+            return files;
+        }
+        catch (error) {
+            return [];
+        }
+    }
     generateContextAnalysis(context) {
         let analysis = `📊 **IDE Context Analysis**\n\n`;
         analysis += `**Editor**: ${context.editor}\n`;
@@ -200,7 +238,6 @@ class IDEContextEnricher {
         }
         return analysis;
     }
-    // Generate recommendations based on context
     generateRecommendations(context) {
         const recommendations = [];
         if (context.projectType === 'Next.js') {

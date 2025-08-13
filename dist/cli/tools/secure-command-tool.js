@@ -42,10 +42,8 @@ const util_1 = require("util");
 const inquirer_1 = __importDefault(require("inquirer"));
 const chalk_1 = __importDefault(require("chalk"));
 const path = __importStar(require("path"));
+const crypto_1 = require("crypto");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
-/**
- * Safe commands that can be executed without user confirmation
- */
 const SAFE_COMMANDS = new Set([
     'ls', 'dir', 'pwd', 'whoami', 'date', 'echo', 'cat', 'head', 'tail',
     'grep', 'find', 'which', 'type', 'node', 'npm', 'yarn', 'pnpm',
@@ -53,49 +51,32 @@ const SAFE_COMMANDS = new Set([
     'docker ps', 'docker images', 'docker version',
     'ps', 'top', 'df', 'free', 'uptime', 'uname'
 ]);
-/**
- * Commands that should never be executed automatically
- */
 const DANGEROUS_COMMANDS = new Set([
     'rm', 'del', 'rmdir', 'mv', 'cp', 'chmod', 'chown', 'sudo',
     'curl', 'wget', 'ssh', 'scp', 'rsync', 'dd', 'fdisk',
     'format', 'mkfs', 'mount', 'umount', 'kill', 'killall',
     'systemctl', 'service', 'crontab', 'at', 'batch'
 ]);
-/**
- * Secure command execution tool with allow-listing and user confirmation
- */
 class SecureCommandTool {
     constructor(workingDir) {
         this.commandHistory = [];
         this.batchSessions = new Map();
         this.workingDirectory = workingDir || process.cwd();
     }
-    /**
-     * Check if a command is considered safe for automatic execution
-     */
     isSafeCommand(command) {
         const baseCommand = command.trim().split(' ')[0];
         const fullCommand = command.trim();
-        // Check if the base command or full command is in the safe list
         return SAFE_COMMANDS.has(baseCommand) || SAFE_COMMANDS.has(fullCommand);
     }
-    /**
-     * Check if a command is considered dangerous and should be blocked
-     */
     isDangerousCommand(command) {
         const baseCommand = command.trim().split(' ')[0];
         return DANGEROUS_COMMANDS.has(baseCommand);
     }
-    /**
-     * Analyze command for potential security risks
-     */
     analyzeCommand(command) {
         const risks = [];
         const suggestions = [];
         const safe = this.isSafeCommand(command);
         const dangerous = this.isDangerousCommand(command);
-        // Check for common risky patterns
         if (command.includes('rm -rf')) {
             risks.push('Recursive file deletion detected');
             suggestions.push('Consider using a more specific path or --interactive flag');
@@ -118,22 +99,17 @@ class SecureCommandTool {
         }
         return { safe, dangerous, risks, suggestions };
     }
-    /**
-     * Create a batch session for one-time approval of multiple commands
-     */
     async createBatchSession(commands, options = {}) {
-        const sessionId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const sessionDuration = options.sessionDuration || 30; // 30 minutes default
+        const sessionId = `batch_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`;
+        const sessionDuration = options.sessionDuration || 30;
         const expiresAt = new Date(Date.now() + sessionDuration * 60 * 1000);
         console.log(chalk_1.default.blue.bold('\n🔄 Creating Batch Execution Session'));
         console.log(chalk_1.default.gray(`Session ID: ${sessionId}`));
         console.log(chalk_1.default.gray(`Commands: ${commands.length}`));
         console.log(chalk_1.default.gray(`Expires: ${expiresAt.toLocaleTimeString()}`));
-        // Analyze all commands for security
         const analyses = commands.map(cmd => ({ command: cmd, analysis: this.analyzeCommand(cmd) }));
         const dangerousCommands = analyses.filter(a => a.analysis.dangerous);
         const riskyCommands = analyses.filter(a => a.analysis.risks.length > 0);
-        // Show security summary
         console.log(chalk_1.default.blue('\n📋 Batch Security Analysis:'));
         console.log(chalk_1.default.gray('─'.repeat(50)));
         commands.forEach((cmd, index) => {
@@ -147,7 +123,6 @@ class SecureCommandTool {
                 });
             }
         });
-        // Block if dangerous commands present and not explicitly allowed
         if (dangerousCommands.length > 0 && !options.allowDangerous) {
             console.log(chalk_1.default.red(`\n🚫 Batch contains ${dangerousCommands.length} dangerous command(s)`));
             dangerousCommands.forEach(({ command }) => {
@@ -155,11 +130,9 @@ class SecureCommandTool {
             });
             throw new Error('Batch contains dangerous commands. Use allowDangerous: true to override.');
         }
-        // Show warnings for risky commands
         if (riskyCommands.length > 0) {
             console.log(chalk_1.default.yellow(`\n⚠️  ${riskyCommands.length} command(s) have security risks`));
         }
-        // Request one-time approval for the entire batch
         console.log(chalk_1.default.blue('\n🔐 One-Time Batch Approval'));
         console.log(chalk_1.default.gray('Once approved, all commands will execute asynchronously without further confirmation.'));
         const { approved } = await inquirer_1.default.prompt([{
@@ -190,9 +163,6 @@ class SecureCommandTool {
         }
         return session;
     }
-    /**
-     * Execute a batch session asynchronously
-     */
     async executeBatchAsync(sessionId, options = {}) {
         const session = this.batchSessions.get(sessionId);
         if (!session) {
@@ -212,19 +182,16 @@ class SecureCommandTool {
         session.status = 'executing';
         console.log(chalk_1.default.blue.bold(`\n🚀 Starting Async Batch Execution: ${sessionId}`));
         console.log(chalk_1.default.gray(`Commands: ${session.commands.length}`));
-        // Execute commands asynchronously
         setImmediate(async () => {
             try {
                 for (let i = 0; i < session.commands.length; i++) {
                     const command = session.commands[i];
-                    // Progress callback
                     session.onProgress?.(command, i + 1, session.commands.length);
                     console.log(chalk_1.default.blue(`[${i + 1}/${session.commands.length}] Executing: ${command}`));
                     try {
                         const result = await this.execute(command, { ...options, skipConfirmation: true });
                         session.results.push(result);
                         console.log(chalk_1.default.green(`✅ [${i + 1}/${session.commands.length}] Completed: ${command}`));
-                        // Stop on first failure unless continuing
                         if (result.exitCode !== 0) {
                             console.log(chalk_1.default.red(`❌ Command failed, stopping batch execution`));
                             session.status = 'failed';
@@ -243,7 +210,6 @@ class SecureCommandTool {
                 session.status = 'completed';
                 console.log(chalk_1.default.green.bold(`\n✅ Batch Execution Complete: ${sessionId}`));
                 console.log(chalk_1.default.gray(`Executed: ${session.results.length}/${session.commands.length} commands`));
-                // Completion callback
                 session.onComplete?.(session.results);
             }
             catch (error) {
@@ -254,21 +220,12 @@ class SecureCommandTool {
         });
         console.log(chalk_1.default.blue('⏳ Batch execution started in background...'));
     }
-    /**
-     * Get batch session status
-     */
     getBatchSession(sessionId) {
         return this.batchSessions.get(sessionId);
     }
-    /**
-     * List all batch sessions
-     */
     listBatchSessions() {
         return Array.from(this.batchSessions.values());
     }
-    /**
-     * Clean up expired batch sessions
-     */
     cleanupExpiredSessions() {
         const now = new Date();
         let cleaned = 0;
@@ -283,20 +240,15 @@ class SecureCommandTool {
         }
         return cleaned;
     }
-    /**
-     * Execute a command with security checks and user confirmation
-     */
     async execute(command, options = {}) {
         const startTime = Date.now();
         const analysis = this.analyzeCommand(command);
         console.log(chalk_1.default.blue(`🔍 Analyzing command: ${command}`));
-        // Block dangerous commands unless explicitly allowed
         if (analysis.dangerous && !options.allowDangerous) {
             const error = `Dangerous command blocked: ${command}`;
             console.log(chalk_1.default.red(`🚫 ${error}`));
             throw new Error(error);
         }
-        // Show security analysis if there are risks
         if (analysis.risks.length > 0) {
             console.log(chalk_1.default.yellow('\n⚠️  Security Analysis:'));
             analysis.risks.forEach(risk => {
@@ -309,7 +261,6 @@ class SecureCommandTool {
                 });
             }
         }
-        // Request user confirmation for non-safe commands
         if (!analysis.safe && !options.skipConfirmation) {
             console.log(chalk_1.default.yellow(`\n⚠️  Command requires confirmation: ${command}`));
             const { confirmed } = await inquirer_1.default.prompt([{
@@ -326,7 +277,7 @@ class SecureCommandTool {
         try {
             const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
             const env = { ...process.env, ...options.env };
-            const timeout = options.timeout || 30000; // 30 second default timeout
+            const timeout = options.timeout || 30000;
             console.log(chalk_1.default.blue(`⚡ Executing: ${command}`));
             console.log(chalk_1.default.gray(`📁 Working directory: ${cwd}`));
             const { stdout, stderr } = await execAsync(command, {
@@ -337,7 +288,6 @@ class SecureCommandTool {
             });
             const duration = Date.now() - startTime;
             const success = true;
-            // Add to history
             this.commandHistory.push({
                 command,
                 timestamp: new Date(),
@@ -364,7 +314,6 @@ class SecureCommandTool {
         }
         catch (error) {
             const duration = Date.now() - startTime;
-            // Add to history
             this.commandHistory.push({
                 command,
                 timestamp: new Date(),
@@ -383,12 +332,8 @@ class SecureCommandTool {
             };
         }
     }
-    /**
-     * Execute multiple commands in sequence with confirmation
-     */
     async executeSequence(commands, options = {}) {
         console.log(chalk_1.default.blue(`📋 Executing ${commands.length} commands in sequence`));
-        // Show all commands for review
         console.log(chalk_1.default.blue('\nCommands to execute:'));
         commands.forEach((cmd, index) => {
             console.log(chalk_1.default.gray(`  ${index + 1}. ${cmd}`));
@@ -412,7 +357,6 @@ class SecureCommandTool {
             try {
                 const result = await this.execute(command, { ...options, skipConfirmation: true });
                 results.push(result);
-                // Stop on first failure unless explicitly continuing
                 if (result.exitCode !== 0) {
                     console.log(chalk_1.default.red(`❌ Command ${i + 1} failed, stopping sequence`));
                     break;
@@ -425,23 +369,14 @@ class SecureCommandTool {
         }
         return results;
     }
-    /**
-     * Get command execution history
-     */
     getHistory(limit) {
         const history = this.commandHistory.slice().reverse();
         return limit ? history.slice(0, limit) : history;
     }
-    /**
-     * Add a command to the safe list (runtime only)
-     */
     addSafeCommand(command) {
         SAFE_COMMANDS.add(command);
         console.log(chalk_1.default.green(`✅ Added to safe commands: ${command}`));
     }
-    /**
-     * Check if a command would be safe to execute
-     */
     checkCommand(command) {
         const analysis = this.analyzeCommand(command);
         return { safe: analysis.safe, analysis };

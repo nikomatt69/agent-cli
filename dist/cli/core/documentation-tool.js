@@ -22,11 +22,9 @@ exports.documentationSearchTool = (0, ai_1.tool)({
             console.log(chalk_1.default.blue(`🔍 Searching documentation for: "${query}"`));
             let results;
             if (includeWeb) {
-                // Cerca con fallback web
                 results = await documentation_library_1.docLibrary.searchWithWebFallback(query, category);
             }
             else {
-                // Solo ricerca locale
                 results = await documentation_library_1.docLibrary.search(query, category, maxResults);
             }
             if (results.length === 0) {
@@ -41,7 +39,6 @@ exports.documentationSearchTool = (0, ai_1.tool)({
                     ]
                 };
             }
-            // Formatta risultati
             const formattedResults = results.slice(0, maxResults).map((result, index) => ({
                 rank: index + 1,
                 title: result.entry.title,
@@ -137,9 +134,7 @@ exports.documentationStatsTool = (0, ai_1.tool)({
                     recentAdditions: [],
                     mostAccessed: []
                 };
-                // Aggiungi statistiche dettagliate se richiesto
                 const entries = Array.from(documentation_library_1.docLibrary['docs'].values());
-                // Per categoria
                 for (const category of stats.categories) {
                     const categoryEntries = entries.filter(e => e.category === category);
                     result.detailedStats.byCategory[category] = {
@@ -147,7 +142,6 @@ exports.documentationStatsTool = (0, ai_1.tool)({
                         avgWords: categoryEntries.reduce((sum, e) => sum + e.metadata.wordCount, 0) / categoryEntries.length || 0
                     };
                 }
-                // Per lingua
                 for (const language of stats.languages) {
                     const languageEntries = entries.filter(e => e.metadata.language === language);
                     result.detailedStats.byLanguage[language] = {
@@ -171,7 +165,6 @@ exports.documentationStatsTool = (0, ai_1.tool)({
         }
     }
 });
-// Export tutti i tools
 exports.documentationTools = {
     search: exports.documentationSearchTool,
     add: exports.addDocumentationTool,

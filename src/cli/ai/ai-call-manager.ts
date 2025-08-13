@@ -5,6 +5,7 @@ import * as ragSystem from "../context/rag-system"
 import chalk from 'chalk';
 import ora from 'ora';
 import { z } from 'zod';
+import { randomBytes } from 'crypto';
 
 /**
  * Tool call request from AI
@@ -156,7 +157,7 @@ Estimate realistic durations and assess risk levels accurately.`;
         });
 
         const plan: ExecutionPlan = {
-          id: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `plan_${Date.now()}_${randomBytes(6).toString('base64url')}`,
           description: planData.description,
           toolCalls: planData.toolCalls.map(tc => ({ ...tc, id: tc.id || "", name: tc.name || "", arguments: tc.arguments || {} })),
           estimatedDuration: planData.estimatedDuration,

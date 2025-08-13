@@ -41,54 +41,37 @@ const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
 const chalk_1 = __importDefault(require("chalk"));
-/**
- * Intelligent Token Cache System
- * Reduces AI API calls by caching similar prompts and responses
- */
 class TokenCacheManager {
     constructor(cacheDir = './.nikcli') {
         this.cache = new Map();
         this.maxCacheSize = 1000;
         this.similarityThreshold = 0.85;
-        this.maxCacheAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+        this.maxCacheAge = 7 * 24 * 60 * 60 * 1000;
         this.cacheFile = path.join(cacheDir, 'token-cache.json');
         this.loadCache();
     }
-    /**
-     * Generate a semantic hash for prompt similarity detection
-     */
     generateSemanticKey(prompt, context = '') {
-        // Normalize text for better matching
         const normalized = this.normalizeText(prompt + context);
-        // Create semantic fingerprint
         const words = normalized.split(/\s+/).filter(w => w.length > 2);
-        const sortedWords = words.sort().slice(0, 20); // Top 20 significant words
+        const sortedWords = words.sort().slice(0, 20);
         return crypto_1.default
             .createHash('md5')
             .update(sortedWords.join('|'))
             .digest('hex')
             .substring(0, 16);
     }
-    /**
-     * Extract signature words used for similarity without storing full text
-     */
     extractSignatureWords(text) {
         const normalized = this.normalizeText(text);
         const all = normalized.split(/\s+/).filter(w => w.length > 2);
-        // Frequency map
         const freq = new Map();
         for (const w of all)
             freq.set(w, (freq.get(w) || 0) + 1);
-        // Sort by frequency then alphabetically
         const sorted = Array.from(freq.entries())
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
             .slice(0, 20)
             .map(([w]) => w);
         return sorted;
     }
-    /**
-     * Generate exact hash for precise matching
-     */
     generateExactKey(prompt, context = '') {
         return crypto_1.default
             .createHash('sha256')
@@ -96,9 +79,6 @@ class TokenCacheManager {
             .digest('hex')
             .substring(0, 32);
     }
-    /**
-     * Normalize text for consistent comparison
-     */
     normalizeText(text) {
         return text
             .toLowerCase()
@@ -106,9 +86,6 @@ class TokenCacheManager {
             .replace(/\s+/g, ' ')
             .trim();
     }
-    /**
-     * Calculate text similarity using Jaccard similarity
-     */
     calculateSimilarity(text1, text2) {
         const words1 = new Set(this.normalizeText(text1).split(/\s+/));
         const words2 = new Set(this.normalizeText(text2).split(/\s+/));
@@ -116,9 +93,6 @@ class TokenCacheManager {
         const union = new Set([...words1, ...words2]);
         return intersection.size / union.size;
     }
-    /**
-     * Similarity using current prompt vs stored signature word set
-     */
     calculateSignatureSimilarity(text, signatureWords) {
         const set1 = new Set(this.normalizeText(text).split(/\s+/).filter(w => w.length > 2));
         const set2 = new Set(signatureWords);
@@ -126,11 +100,7 @@ class TokenCacheManager {
         const union = new Set([...set1, ...set2]);
         return union.size === 0 ? 0 : intersection.size / union.size;
     }
-    /**
-     * Find cached response for similar prompts
-     */
     async getCachedResponse(prompt, context = '', tags = []) {
-        // First try exact match
         const exactKey = this.generateExactKey(prompt, context);
         if (this.cache.has(exactKey)) {
             const entry = this.cache.get(exactKey);
@@ -139,16 +109,12 @@ class TokenCacheManager {
             console.log(chalk_1.default.green(`🎯 Cache HIT (exact): saved ~${entry.tokensSaved} tokens`));
             return entry;
         }
-        // Then try semantic similarity
         const semanticKey = this.generateSemanticKey(prompt, context);
-        // Find similar entries
         const similarEntries = Array.from(this.cache.values())
             .filter(entry => {
-            // Check if entry is not expired
             const age = Date.now() - new Date(entry.timestamp).getTime();
             if (age > this.maxCacheAge)
                 return false;
-            // Check tag overlap if tags provided
             if (tags.length > 0 && entry.tags.length > 0) {
                 const tagOverlap = tags.filter(t => entry.tags.includes(t)).length / Math.max(tags.length, entry.tags.length);
                 if (tagOverlap < 0.3)
@@ -172,9 +138,6 @@ class TokenCacheManager {
         }
         return null;
     }
-    /**
-     * Store response in cache
-     */
     async setCachedResponse(prompt, response, context = '', tokensSaved = 0, tags = []) {
         const exactKey = this.generateExactKey(prompt, context);
         const entry = {
@@ -191,50 +154,35 @@ class TokenCacheManager {
             similarity: 1.0
         };
         this.cache.set(exactKey, entry);
-        // Cleanup old entries if cache is too large
         await this.cleanupCache();
-        // Save to disk periodically
         if (this.cache.size % 10 === 0) {
             await this.saveCache();
         }
         console.log(chalk_1.default.blue(`💾 Cached response (${this.cache.size} entries)`));
     }
-    /**
-     * Estimate token count from text
-     */
     estimateTokens(text) {
         return Math.round(text.length / 4);
     }
-    /**
-     * Clean up old and least used cache entries
-     */
     async cleanupCache() {
         if (this.cache.size <= this.maxCacheSize)
             return;
         const entries = Array.from(this.cache.entries());
-        // Sort by last used (hitCount) and age
         entries.sort(([, a], [, b]) => {
             const scoreA = a.hitCount * 0.7 + (Date.now() - new Date(a.timestamp).getTime()) * -0.3;
             const scoreB = b.hitCount * 0.7 + (Date.now() - new Date(b.timestamp).getTime()) * -0.3;
             return scoreB - scoreA;
         });
-        // Remove oldest/least used entries
         const toRemove = entries.slice(this.maxCacheSize);
         toRemove.forEach(([key]) => this.cache.delete(key));
         if (toRemove.length > 0) {
             console.log(chalk_1.default.yellow(`🧹 Cleaned up ${toRemove.length} old cache entries`));
         }
     }
-    /**
-     * Load cache from disk
-     */
     async loadCache() {
         try {
-            // Ensure cache directory exists
             await fs.mkdir(path.dirname(this.cacheFile), { recursive: true });
             const data = await fs.readFile(this.cacheFile, 'utf8');
             const parsed = JSON.parse(data);
-            // Convert back to Map with Date objects
             parsed.forEach((entry) => {
                 entry.timestamp = new Date(entry.timestamp);
                 this.cache.set(entry.key, entry);
@@ -242,13 +190,9 @@ class TokenCacheManager {
             console.log(chalk_1.default.dim(`📚 Loaded ${this.cache.size} cached responses`));
         }
         catch (error) {
-            // Cache file doesn't exist or is corrupted, start fresh
             console.log(chalk_1.default.dim('💾 Starting with empty cache'));
         }
     }
-    /**
-     * Save cache to disk
-     */
     async saveCache() {
         try {
             const data = Array.from(this.cache.values());
@@ -259,9 +203,6 @@ class TokenCacheManager {
             console.log(chalk_1.default.red(`❌ Failed to save cache: ${error.message}`));
         }
     }
-    /**
-     * Get cache statistics
-     */
     getStats() {
         const entries = Array.from(this.cache.values());
         const totalHits = entries.reduce((sum, entry) => sum + entry.hitCount, 0);
@@ -274,9 +215,6 @@ class TokenCacheManager {
             cacheSize: JSON.stringify(entries).length
         };
     }
-    /**
-     * Clear all cache entries
-     */
     async clearCache() {
         const oldSize = this.cache.size;
         this.cache.clear();
@@ -284,13 +222,9 @@ class TokenCacheManager {
             await fs.unlink(this.cacheFile);
         }
         catch (error) {
-            // File might not exist
         }
         console.log(chalk_1.default.yellow(`🧹 Cleared ${oldSize} cache entries`));
     }
-    /**
-     * Remove expired entries
-     */
     async cleanupExpired() {
         const beforeSize = this.cache.size;
         const now = Date.now();
@@ -307,9 +241,6 @@ class TokenCacheManager {
         }
         return removed;
     }
-    /**
-     * Find similar cached entries for analysis
-     */
     findSimilarEntries(prompt, limit = 5) {
         return Array.from(this.cache.values())
             .map(entry => ({
@@ -320,9 +251,6 @@ class TokenCacheManager {
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit);
     }
-    /**
-     * Update cache settings
-     */
     updateSettings(maxSize, similarityThreshold, maxAge) {
         if (maxSize !== undefined)
             this.maxCacheSize = maxSize;
@@ -332,9 +260,6 @@ class TokenCacheManager {
             this.maxCacheAge = maxAge;
         console.log(chalk_1.default.blue('⚙️ Cache settings updated'));
     }
-    /**
-     * Export cache for analysis
-     */
     async exportCache(filePath) {
         const data = {
             metadata: {
@@ -353,5 +278,4 @@ class TokenCacheManager {
     }
 }
 exports.TokenCacheManager = TokenCacheManager;
-// Export singleton instance
 exports.tokenCache = new TokenCacheManager();

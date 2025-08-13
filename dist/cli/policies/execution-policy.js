@@ -43,11 +43,7 @@ class ExecutionPolicyManager {
         const { sandbox } = await this.getPolicy();
         return sandbox === 'system-write' || sandbox === 'danger-full-access';
     }
-    /**
-     * Initialize command policies
-     */
     initializeCommandPolicies() {
-        // Safe commands
         const safeCommands = ['ls', 'cat', 'pwd', 'echo', 'which', 'whoami', 'date', 'env'];
         safeCommands.forEach(cmd => {
             this.commandPolicies.set(cmd, {
@@ -58,7 +54,6 @@ class ExecutionPolicyManager {
                 sandbox: ['read-only', 'workspace-write', 'system-write', 'danger-full-access']
             });
         });
-        // Development commands
         const devCommands = ['npm', 'yarn', 'git', 'node', 'tsc', 'jest'];
         devCommands.forEach(cmd => {
             this.commandPolicies.set(cmd, {
@@ -69,7 +64,6 @@ class ExecutionPolicyManager {
                 sandbox: ['workspace-write', 'system-write', 'danger-full-access']
             });
         });
-        // System commands
         const systemCommands = ['chmod', 'chown', 'cp', 'mv', 'mkdir', 'rmdir'];
         systemCommands.forEach(cmd => {
             this.commandPolicies.set(cmd, {
@@ -80,7 +74,6 @@ class ExecutionPolicyManager {
                 sandbox: ['system-write', 'danger-full-access']
             });
         });
-        // Dangerous commands
         const dangerousCommands = ['rm', 'sudo', 'su', 'dd', 'mkfs', 'fdisk'];
         dangerousCommands.forEach(cmd => {
             this.commandPolicies.set(cmd, {
@@ -92,11 +85,7 @@ class ExecutionPolicyManager {
             });
         });
     }
-    /**
-     * Initialize tool policies based on security requirements
-     */
     initializeToolPolicies() {
-        // Low-risk tools (analysis, read-only)
         const safePolicies = [
             { category: 'analysis', riskLevel: 'low', requiresApproval: false, allowedInSafeMode: true, description: 'Project analysis and information gathering' },
             { category: 'file', riskLevel: 'low', requiresApproval: false, allowedInSafeMode: true, description: 'Read-only file operations' },
@@ -108,7 +97,6 @@ class ExecutionPolicyManager {
                 ...safePolicies.find(p => tool.includes('file') ? p.category === 'file' : p.category === 'analysis')
             });
         });
-        // Medium-risk tools (file operations, git)
         const riskyTools = [
             { name: 'write_file', category: 'file', description: 'Write content to files', riskyOps: ['system files', 'config files'] },
             { name: 'edit_file', category: 'file', description: 'Edit existing files', riskyOps: ['destructive edits', 'system files'] },
@@ -130,7 +118,6 @@ class ExecutionPolicyManager {
                 riskyOperations: tool.riskyOps
             });
         });
-        // High-risk tools (system commands, dangerous operations)
         const dangerousTools = [
             { name: 'execute_command', category: 'system', description: 'Execute system commands', riskyOps: ['system modification', 'data loss', 'security bypass'] },
             { name: 'delete_file', category: 'file', description: 'Delete files', riskyOps: ['data loss', 'irreversible'] },
@@ -149,21 +136,14 @@ class ExecutionPolicyManager {
             });
         });
     }
-    /**
-     * Get command policy
-     */
     getCommandPolicy(command) {
         const cmdName = command.split(/\s+/)[0];
         return this.commandPolicies.get(cmdName) || null;
     }
-    /**
-     * Check if command is allowed in current sandbox
-     */
     async isCommandAllowed(command) {
         const policy = this.getCommandPolicy(command);
         const { sandbox } = await this.getPolicy();
         if (!policy) {
-            // Unknown command - apply default policy based on sandbox
             switch (sandbox) {
                 case 'read-only':
                     return this.trustedCommands.has(command.split(/\s+/)[0]);
@@ -178,9 +158,6 @@ class ExecutionPolicyManager {
         }
         return policy.allowed && policy.sandbox.includes(sandbox);
     }
-    /**
-     * Evaluate command risk
-     */
     async evaluateCommandRisk(command) {
         const policy = this.getCommandPolicy(command);
         const { sandbox, approval } = await this.getPolicy();
@@ -188,7 +165,6 @@ class ExecutionPolicyManager {
         let riskLevel = 'low';
         let requiresApproval = false;
         let allowed = true;
-        // Check if command exists in policy
         if (policy) {
             riskLevel = policy.riskLevel;
             requiresApproval = policy.requiresApproval;
@@ -199,7 +175,6 @@ class ExecutionPolicyManager {
             }
         }
         else {
-            // Unknown command evaluation
             const cmdName = command.split(/\s+/)[0];
             if (this.dangerousCommands.has(command) || this.dangerousCommands.has(cmdName)) {
                 riskLevel = 'high';
@@ -213,7 +188,6 @@ class ExecutionPolicyManager {
                 reasons.push('Unknown command');
             }
         }
-        // Apply approval policy
         if (approval === 'always') {
             requiresApproval = true;
             reasons.push('Always require approval policy active');
@@ -228,31 +202,22 @@ class ExecutionPolicyManager {
             allowed
         };
     }
-    /**
-     * Get tool policy
-     */
     getToolPolicy(toolName) {
         return this.toolPolicies.get(toolName) || null;
     }
-    /**
-     * Check if tool operation should require approval
-     */
     async shouldApproveToolOperation(toolName, operation, args) {
         const config = this.configManager.getAll();
         const toolPolicy = this.getToolPolicy(toolName);
         const securityMode = config.securityMode;
         const toolApprovalPolicies = config.toolApprovalPolicies;
-        // Check developer mode bypass
         if (this.isDevModeActive() && toolPolicy?.riskLevel !== 'high') {
-            return null; // Skip approval for non-high risk tools in dev mode
+            return null;
         }
-        // Check session approvals
         const sessionKey = `${toolName}:${operation}`;
         if (this.sessionApprovals.has(sessionKey)) {
-            return null; // Already approved for this session
+            return null;
         }
         if (!toolPolicy) {
-            // Unknown tool - treat as medium risk
             return {
                 toolName,
                 operation,
@@ -266,7 +231,6 @@ class ExecutionPolicyManager {
         }
         const riskAssessment = this.assessToolRisk(toolName, operation, args, toolPolicy);
         const categoryPolicy = this.getCategoryApprovalPolicy(toolPolicy.category, toolApprovalPolicies);
-        // Determine if approval is needed
         let needsApproval = false;
         switch (categoryPolicy) {
             case 'always':
@@ -279,7 +243,6 @@ class ExecutionPolicyManager {
                 needsApproval = false;
                 break;
         }
-        // Override based on security mode
         if (securityMode === 'safe') {
             needsApproval = needsApproval || !toolPolicy.allowedInSafeMode;
         }
@@ -293,25 +256,19 @@ class ExecutionPolicyManager {
             riskAssessment
         } : null;
     }
-    /**
-     * Assess risk level for a specific tool operation
-     */
     assessToolRisk(toolName, operation, args, policy) {
         const reasons = [];
         let level = policy.riskLevel;
         let affectedFiles = [];
         let irreversible = false;
-        // File-specific risk assessment
         if (policy.category === 'file') {
             if (args.filePath || args.path) {
                 const filePath = args.filePath || args.path;
                 affectedFiles.push(filePath);
-                // System file detection
                 if (this.isSystemFile(filePath)) {
                     level = 'high';
                     reasons.push('Affects system files');
                 }
-                // Config file detection
                 if (this.isConfigFile(filePath)) {
                     level = 'medium';
                     reasons.push('Affects configuration files');
@@ -322,7 +279,6 @@ class ExecutionPolicyManager {
                 reasons.push('Irreversible file deletion');
             }
         }
-        // Git-specific risk assessment
         if (policy.category === 'git') {
             if (toolName.includes('push') || toolName.includes('commit')) {
                 irreversible = true;
@@ -333,7 +289,6 @@ class ExecutionPolicyManager {
                 reasons.push('Force operation detected');
             }
         }
-        // System command risk assessment
         if (policy.category === 'system') {
             if (args.command) {
                 const command = args.command.toLowerCase();
@@ -346,9 +301,6 @@ class ExecutionPolicyManager {
         }
         return { level, reasons, affectedFiles, irreversible };
     }
-    /**
-     * Get approval policy for tool category
-     */
     getCategoryApprovalPolicy(category, policies) {
         switch (category) {
             case 'file':
@@ -362,55 +314,34 @@ class ExecutionPolicyManager {
             case 'network':
                 return policies.networkRequests;
             default:
-                return 'risky'; // Safe default
+                return 'risky';
         }
     }
-    /**
-     * Check if file is a system file
-     */
     isSystemFile(filePath) {
         const systemPaths = ['/etc', '/usr', '/var', '/bin', '/sbin', '/boot'];
         return systemPaths.some(path => filePath.startsWith(path));
     }
-    /**
-     * Check if file is a configuration file
-     */
     isConfigFile(filePath) {
         const configExtensions = ['.config', '.conf', '.ini', '.env', '.json', '.yaml', '.yml'];
         const configNames = ['Dockerfile', 'Makefile', 'package.json', 'tsconfig.json'];
         return configExtensions.some(ext => filePath.endsWith(ext)) ||
             configNames.some(name => filePath.endsWith(name));
     }
-    /**
-     * Enable developer mode for a session
-     */
     enableDevMode(timeoutMs) {
         const timeout = timeoutMs || this.configManager.getAll().sessionSettings.devModeTimeoutMs;
         this.devModeExpiry = new Date(Date.now() + timeout);
     }
-    /**
-     * Check if developer mode is currently active
-     */
     isDevModeActive() {
         if (!this.devModeExpiry)
             return false;
         return new Date() < this.devModeExpiry;
     }
-    /**
-     * Add session approval (valid until session ends)
-     */
     addSessionApproval(toolName, operation) {
         this.sessionApprovals.add(`${toolName}:${operation}`);
     }
-    /**
-     * Clear session approvals
-     */
     clearSessionApprovals() {
         this.sessionApprovals.clear();
     }
-    /**
-     * Log policy decision for audit trail
-     */
     async logPolicyDecision(command, decision, context = {}) {
         await logger_1.logger.audit('execution_policy_decision', {
             command,
@@ -421,9 +352,6 @@ class ExecutionPolicyManager {
             ...context
         });
     }
-    /**
-     * Get policy summary for display
-     */
     async getPolicySummary() {
         const policy = await this.getPolicy();
         const allowedCommands = Array.from(this.commandPolicies.values())

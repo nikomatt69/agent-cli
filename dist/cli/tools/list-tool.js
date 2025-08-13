@@ -7,7 +7,6 @@ const cli_ui_1 = require("../utils/cli-ui");
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const fs_1 = require("fs");
-// Pattern intelligenti da ignorare automaticamente
 exports.IGNORE_PATTERNS = [
     'node_modules/',
     '__pycache__/',
@@ -47,7 +46,6 @@ class ListTool extends base_tool_1.BaseTool {
     }
     async execute(params) {
         try {
-            // Carica prompt specifico per questo tool
             const promptManager = prompt_manager_1.PromptManager.getInstance();
             const systemPrompt = await promptManager.loadPromptForContext({
                 toolName: 'list-tool',
@@ -57,7 +55,6 @@ class ListTool extends base_tool_1.BaseTool {
             const searchPath = params.path || this.workingDirectory;
             const limit = params.limit || DEFAULT_LIMIT;
             const maxDepth = Math.min(params.maxDepth || 5, MAX_DEPTH);
-            // Validazione sicurezza percorso
             if (!this.isPathSafe(searchPath)) {
                 throw new Error(`Path not safe or outside working directory: ${searchPath}`);
             }
@@ -65,16 +62,13 @@ class ListTool extends base_tool_1.BaseTool {
                 throw new Error(`Directory does not exist: ${searchPath}`);
             }
             cli_ui_1.CliUI.logInfo(`📁 Listing directory: ${(0, path_1.relative)(this.workingDirectory, searchPath)}`);
-            // Scansione intelligente con limiti
             const results = await this.scanDirectory(searchPath, {
                 maxDepth,
                 includeHidden: params.includeHidden || false,
                 ignorePatterns: [...exports.IGNORE_PATTERNS, ...(params.ignore || [])],
                 limit
             });
-            // Ordinamento risultati
             const sortedResults = this.sortResults(results, params.sortBy || 'name');
-            // Costruzione struttura directory per output
             const directoryStructure = this.buildDirectoryStructure(sortedResults, searchPath);
             return {
                 success: true,
@@ -112,9 +106,6 @@ class ListTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Scansione intelligente directory con pattern ignore
-     */
     async scanDirectory(searchPath, options) {
         const results = [];
         const visited = new Set();
@@ -124,7 +115,7 @@ class ListTool extends base_tool_1.BaseTool {
             }
             const realPath = require('fs').realpathSync(currentPath);
             if (visited.has(realPath)) {
-                return; // Evita loop infiniti con symlink
+                return;
             }
             visited.add(realPath);
             try {
@@ -134,11 +125,9 @@ class ListTool extends base_tool_1.BaseTool {
                         break;
                     const fullPath = (0, path_1.join)(currentPath, entry);
                     const relativePath = (0, path_1.relative)(searchPath, fullPath);
-                    // Skip hidden files se non richiesti
                     if (!options.includeHidden && entry.startsWith('.')) {
                         continue;
                     }
-                    // Applica ignore patterns
                     if (this.shouldIgnore(relativePath, options.ignorePatterns)) {
                         continue;
                     }
@@ -154,13 +143,11 @@ class ListTool extends base_tool_1.BaseTool {
                             extension: stats.isFile() ? this.getFileExtension(entry) : undefined
                         };
                         results.push(fileEntry);
-                        // Ricorsione per directory
                         if (stats.isDirectory() && depth < options.maxDepth) {
                             await scanRecursive(fullPath, depth + 1);
                         }
                     }
                     catch (statError) {
-                        // Skip file con errori di accesso
                         cli_ui_1.CliUI.logDebug(`Skipping ${fullPath}: ${statError}`);
                     }
                 }
@@ -172,28 +159,19 @@ class ListTool extends base_tool_1.BaseTool {
         await scanRecursive(searchPath, 0);
         return results;
     }
-    /**
-     * Verifica se un file/directory deve essere ignorato
-     */
     shouldIgnore(relativePath, ignorePatterns) {
         const pathLower = relativePath.toLowerCase();
         return ignorePatterns.some(pattern => {
-            // Pattern directory (terminano con /)
             if (pattern.endsWith('/')) {
                 return pathLower.includes(pattern.toLowerCase());
             }
-            // Pattern file specifici
             if (pattern.includes('*')) {
                 const regex = new RegExp(pattern.replace(/\*/g, '.*'));
                 return regex.test(pathLower);
             }
-            // Pattern esatti
             return pathLower.includes(pattern.toLowerCase());
         });
     }
-    /**
-     * Ordina risultati per criterio specificato
-     */
     sortResults(results, sortBy) {
         return results.sort((a, b) => {
             switch (sortBy) {
@@ -203,7 +181,6 @@ class ListTool extends base_tool_1.BaseTool {
                     return b.modified.getTime() - a.modified.getTime();
                 case 'name':
                 default:
-                    // Directory prima, poi file, entrambi alfabetici
                     if (a.type !== b.type) {
                         return a.type === 'directory' ? -1 : 1;
                     }
@@ -211,9 +188,6 @@ class ListTool extends base_tool_1.BaseTool {
             }
         });
     }
-    /**
-     * Costruisce struttura directory per output user-friendly
-     */
     buildDirectoryStructure(results, basePath) {
         const root = {
             name: (0, path_1.basename)(basePath),
@@ -223,12 +197,10 @@ class ListTool extends base_tool_1.BaseTool {
         };
         const nodeMap = new Map();
         nodeMap.set('', root);
-        // Ordina per depth per costruire struttura corretta
         const sortedResults = results.sort((a, b) => a.relativePath.split('/').length - b.relativePath.split('/').length);
         for (const entry of sortedResults) {
             const pathParts = entry.relativePath.split('/');
             let currentNode = root;
-            // Naviga/crea path fino al parent
             for (let i = 0; i < pathParts.length - 1; i++) {
                 const partialPath = pathParts.slice(0, i + 1).join('/');
                 if (!nodeMap.has(partialPath)) {
@@ -243,7 +215,6 @@ class ListTool extends base_tool_1.BaseTool {
                 }
                 currentNode = nodeMap.get(partialPath);
             }
-            // Aggiungi il file/directory finale
             const finalNode = {
                 name: entry.name,
                 type: entry.type,

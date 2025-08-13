@@ -64,25 +64,13 @@ class AdvancedCliUI {
             muted: chalk_1.default.dim,
         };
     }
-    /**
-     * Start interactive mode with live updates
-     */
     startInteractiveMode() {
         this.isInteractiveMode = true;
     }
-    /**
-     * Stop interactive mode
-     */
     stopInteractiveMode() {
         this.isInteractiveMode = false;
         this.cleanup();
     }
-    /**
-     * Show application header
-     */
-    /**
-     * Create a new status indicator
-     */
     createIndicator(id, title, details) {
         const indicator = {
             id,
@@ -101,9 +89,6 @@ class AdvancedCliUI {
         }
         return indicator;
     }
-    /**
-     * Update status indicator
-     */
     updateIndicator(id, updates) {
         const indicator = this.indicators.get(id);
         if (!indicator)
@@ -119,9 +104,6 @@ class AdvancedCliUI {
             this.logStatusUpdate(indicator);
         }
     }
-    /**
-     * Start a spinner for long-running tasks
-     */
     startSpinner(id, text) {
         if (this.isInteractiveMode) {
             this.updateIndicator(id, { status: 'running' });
@@ -134,9 +116,6 @@ class AdvancedCliUI {
         }).start();
         this.spinners.set(id, spinner);
     }
-    /**
-     * Update spinner text
-     */
     updateSpinner(id, text) {
         const spinner = this.spinners.get(id);
         if (spinner) {
@@ -144,9 +123,6 @@ class AdvancedCliUI {
         }
         this.updateIndicator(id, { details: text });
     }
-    /**
-     * Stop spinner with result
-     */
     stopSpinner(id, success, finalText) {
         const spinner = this.spinners.get(id);
         if (spinner) {
@@ -163,9 +139,6 @@ class AdvancedCliUI {
             details: finalText,
         });
     }
-    /**
-     * Create progress bar
-     */
     createProgressBar(id, title, total) {
         if (this.isInteractiveMode) {
             this.createIndicator(id, title);
@@ -180,9 +153,6 @@ class AdvancedCliUI {
         progressBar.start(total, 0);
         this.progressBars.set(id, progressBar);
     }
-    /**
-     * Update progress bar
-     */
     updateProgress(id, current, total) {
         const progressBar = this.progressBars.get(id);
         if (progressBar) {
@@ -191,9 +161,6 @@ class AdvancedCliUI {
         const progress = total ? Math.round((current / total) * 100) : current;
         this.updateIndicator(id, { progress });
     }
-    /**
-     * Complete progress bar
-     */
     completeProgress(id, message) {
         const progressBar = this.progressBars.get(id);
         if (progressBar) {
@@ -206,16 +173,12 @@ class AdvancedCliUI {
             details: message,
         });
     }
-    /**
-     * Add live update
-     */
     addLiveUpdate(update) {
         const liveUpdate = {
             ...update,
             timestamp: new Date(),
         };
         this.liveUpdates.push(liveUpdate);
-        // Keep only recent updates
         if (this.liveUpdates.length > 50) {
             this.liveUpdates = this.liveUpdates.slice(-50);
         }
@@ -226,9 +189,6 @@ class AdvancedCliUI {
             this.printLiveUpdate(liveUpdate);
         }
     }
-    /**
-     * Log different types of messages
-     */
     logInfo(message, details) {
         this.addLiveUpdate({
             type: 'info',
@@ -257,9 +217,6 @@ class AdvancedCliUI {
             source: details,
         });
     }
-    /**
-     * Show execution summary
-     */
     showExecutionSummary() {
         const indicators = Array.from(this.indicators.values());
         const completed = indicators.filter(i => i.status === 'completed').length;
@@ -278,9 +235,6 @@ class AdvancedCliUI {
         });
         console.log(summary);
     }
-    /**
-     * Show detailed status of all indicators
-     */
     showDetailedStatus() {
         console.log(chalk_1.default.blue.bold('\\n📊 Detailed Status Report'));
         console.log(chalk_1.default.gray('═'.repeat(80)));
@@ -293,24 +247,15 @@ class AdvancedCliUI {
             this.printIndicatorDetails(indicator);
         });
     }
-    /**
-     * Ask user for confirmation (non-blocking in chat mode)
-     */
     async askConfirmation(question, details, defaultValue = false) {
-        // In chat mode, just return default to avoid blocking
-        // Log the question for user awareness but don't block execution
         const icon = defaultValue ? '✅' : '❓';
         console.log(`${icon} ${chalk_1.default.cyan(question)} ${chalk_1.default.yellow.bold(`(auto-${defaultValue ? 'approved' : 'rejected'})`)}`);
         if (details) {
             console.log(chalk_1.default.gray(`   ${details}`));
         }
         console.log(chalk_1.default.gray(`   → Using default value: ${defaultValue}`));
-        // Auto-approve to prevent blocking in chat mode
         return defaultValue;
     }
-    /**
-     * Show multi-choice selection (simple readline, no panels)
-     */
     async showSelection(title, choices, defaultIndex = 0) {
         console.log(chalk_1.default.cyan.bold(`\\n${title}`));
         console.log(chalk_1.default.gray('─'.repeat(50)));
@@ -339,9 +284,6 @@ class AdvancedCliUI {
             });
         });
     }
-    /**
-     * Show real-time file watching
-     */
     startFileWatcher(pattern) {
         const watcherId = `watch-${Date.now()}`;
         this.createIndicator(watcherId, `Watching files: ${pattern}`);
@@ -349,9 +291,6 @@ class AdvancedCliUI {
         this.logInfo(`👀 Started watching: ${pattern}`);
         return watcherId;
     }
-    /**
-     * Report file change
-     */
     reportFileChange(watcherId, filePath, changeType) {
         const emoji = changeType === 'created' ? '📄' :
             changeType === 'modified' ? '✏️' : '🗑️';
@@ -361,20 +300,13 @@ class AdvancedCliUI {
             source: 'file-watcher',
         });
     }
-    /**
-     * Refresh display in interactive mode
-     */
     refreshDisplay() {
         if (!this.isInteractiveMode)
             return;
-        // Move cursor to top and clear
         process.stdout.write('\x1B[2J\x1B[H');
         this.showActiveIndicators();
         this.showRecentUpdates();
     }
-    /**
-     * Show active indicators
-     */
     showActiveIndicators() {
         const indicators = Array.from(this.indicators.values());
         if (indicators.length === 0)
@@ -386,9 +318,6 @@ class AdvancedCliUI {
         });
         console.log();
     }
-    /**
-     * Show recent updates
-     */
     showRecentUpdates() {
         const recentUpdates = this.liveUpdates.slice(-10);
         if (recentUpdates.length === 0)
@@ -399,9 +328,6 @@ class AdvancedCliUI {
             this.printLiveUpdate(update);
         });
     }
-    /**
-     * Print indicator line
-     */
     printIndicatorLine(indicator) {
         const statusIcon = this.getStatusIcon(indicator.status);
         const statusColor = this.getStatusColor(indicator.status);
@@ -419,9 +345,6 @@ class AdvancedCliUI {
             console.log(`   ${chalk_1.default.gray(indicator.details)}`);
         }
     }
-    /**
-     * Print indicator details
-     */
     printIndicatorDetails(indicator) {
         const statusIcon = this.getStatusIcon(indicator.status);
         const statusColor = this.getStatusColor(indicator.status);
@@ -445,9 +368,6 @@ class AdvancedCliUI {
             });
         }
     }
-    /**
-     * Print live update
-     */
     printLiveUpdate(update) {
         const timeStr = update.timestamp.toLocaleTimeString();
         const typeColor = this.getUpdateTypeColor(update.type);
@@ -455,9 +375,6 @@ class AdvancedCliUI {
         const line = `${chalk_1.default.gray(timeStr)} ${sourceStr} ${typeColor(update.content)}`;
         console.log(line);
     }
-    /**
-     * Log status update in non-interactive mode
-     */
     logStatusUpdate(indicator) {
         const statusIcon = this.getStatusIcon(indicator.status);
         const statusColor = this.getStatusColor(indicator.status);
@@ -466,9 +383,6 @@ class AdvancedCliUI {
             console.log(`   ${chalk_1.default.gray(indicator.details)}`);
         }
     }
-    /**
-     * Utility methods
-     */
     getStatusIcon(status) {
         switch (status) {
             case 'pending': return '⏳';
@@ -550,9 +464,6 @@ class AdvancedCliUI {
             return chalk_1.default.blue('Tasks in progress');
         }
     }
-    /**
-     * Show file diff in structured panel
-     */
     showFileDiff(filePath, oldContent, newContent) {
         const diffContent = this.generateDiffContent(oldContent, newContent);
         this.panels.set('diff', {
@@ -566,9 +477,6 @@ class AdvancedCliUI {
         });
         this.autoLayout();
     }
-    /**
-     * Show Todos panel with real items
-     */
     showTodos(todos, title = 'Update Todos') {
         const lines = [];
         for (const t of todos) {
@@ -590,9 +498,6 @@ class AdvancedCliUI {
         });
         this.autoLayout();
     }
-    /**
-     * Parse a markdown Todo file (todo.md) and render as Todos panel
-     */
     showTodosFromMarkdown(markdown, title = 'Todo Plan') {
         try {
             const items = [];
@@ -616,7 +521,6 @@ class AdvancedCliUI {
                         continue;
                     }
                     if (inTodos && !isTodoHeader) {
-                        // end of todo section
                         break;
                     }
                 }
@@ -654,9 +558,6 @@ class AdvancedCliUI {
             this.showFileContent('todo.md', markdown);
         }
     }
-    /**
-     * Show file content with syntax highlighting
-     */
     showFileContent(filePath, content, highlightLines) {
         const language = this.detectLanguage(filePath);
         const formattedContent = this.formatCodeContent(content, language, highlightLines);
@@ -672,9 +573,6 @@ class AdvancedCliUI {
         });
         this.showCodingLayout();
     }
-    /**
-     * Show file list (grep/find results)
-     */
     showFileList(files, title = '📁 Files') {
         const listContent = files.map((file, index) => {
             const icon = this.getFileIcon(path.extname(file));
@@ -690,34 +588,22 @@ class AdvancedCliUI {
         });
         this.autoLayout();
     }
-    /**
-     * Show coding layout (file content + status)
-     */
     showCodingLayout() {
         this.hidePanel('diff');
         this.hidePanel('list');
         this.layoutMode = 'single';
         this.renderStructuredLayout();
     }
-    /**
-     * Show diff layout (diff + status)
-     */
     showDiffLayout() {
         this.hidePanel('file');
         this.hidePanel('list');
         this.layoutMode = 'dual';
         this.renderStructuredLayout();
     }
-    /**
-     * Show search layout (list + file + status)
-     */
     showSearchLayout() {
         this.layoutMode = 'triple';
         this.renderStructuredLayout();
     }
-    /**
-     * Auto-layout based on current visible panels
-     */
     autoLayout() {
         const visiblePanels = Array.from(this.panels.values()).filter(p => p.visible);
         if (visiblePanels.length <= 1) {
@@ -731,9 +617,6 @@ class AdvancedCliUI {
         }
         this.renderStructuredLayout();
     }
-    /**
-     * Show grep results in structured format
-     */
     showGrepResults(pattern, matches) {
         const grepContent = matches.map(match => {
             const fileName = chalk_1.default.blue(match.file || match.filePath);
@@ -751,9 +634,6 @@ class AdvancedCliUI {
         });
         this.showSearchLayout();
     }
-    /**
-     * Hide panel
-     */
     hidePanel(panelId) {
         const panel = this.panels.get(panelId);
         if (panel) {
@@ -761,19 +641,10 @@ class AdvancedCliUI {
             this.adjustLayout();
         }
     }
-    /**
-     * Clear all panels
-     */
     clearPanels() {
         this.panels.clear();
         this.layoutMode = 'single';
     }
-    /**
-     * Show persistent todos (disabled in simple mode)
-     */
-    /**
-     * Render structured layout with panels
-     */
     renderStructuredLayout() {
         if (!this.isInteractiveMode) {
             this.renderSimpleLayout();
@@ -785,7 +656,6 @@ class AdvancedCliUI {
             this.showActiveIndicators();
             return;
         }
-        // Promote layout based on visible panel count
         if (visiblePanels.length >= 3) {
             this.renderTripleLayout(visiblePanels);
             return;
@@ -859,7 +729,7 @@ class AdvancedCliUI {
             case 'diff':
                 return this.formatDiffContent(panel.content);
             case 'file':
-                return panel.content; // Already formatted in showFileContent
+                return panel.content;
             case 'list':
                 return this.formatListContent(panel.content);
             default:
@@ -935,7 +805,6 @@ class AdvancedCliUI {
     detectLanguage(filePath) {
         const ext = path.extname(filePath).toLowerCase();
         const basename = path.basename(filePath).toLowerCase();
-        // Special filenames
         if (basename === 'dockerfile')
             return 'dockerfile';
         if (basename === 'makefile')
@@ -955,40 +824,31 @@ class AdvancedCliUI {
         if (basename.endsWith('.config.ts'))
             return 'typescript';
         const languageMap = {
-            // JavaScript family
             '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
             '.ts': 'typescript', '.tsx': 'typescript', '.mts': 'typescript', '.cts': 'typescript',
             '.vue': 'vue', '.svelte': 'svelte',
-            // Web technologies
             '.html': 'html', '.htm': 'html', '.xhtml': 'html',
             '.css': 'css', '.scss': 'scss', '.sass': 'sass', '.less': 'less', '.styl': 'stylus',
-            // Backend languages
             '.py': 'python', '.pyx': 'python', '.pyi': 'python', '.pyw': 'python',
             '.java': 'java', '.scala': 'scala', '.kt': 'kotlin', '.kts': 'kotlin',
             '.rb': 'ruby', '.rbx': 'ruby', '.gemspec': 'ruby',
             '.php': 'php', '.phtml': 'php', '.php3': 'php', '.php4': 'php', '.php5': 'php',
             '.go': 'go', '.rs': 'rust', '.swift': 'swift',
             '.cs': 'csharp', '.vb': 'vbnet', '.fs': 'fsharp',
-            // Systems programming
             '.c': 'c', '.h': 'c',
             '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp', '.hxx': 'cpp',
             '.m': 'objectivec', '.mm': 'objectivec',
-            // Shell and scripting
             '.sh': 'bash', '.bash': 'bash', '.zsh': 'bash', '.fish': 'bash',
             '.ps1': 'powershell', '.psm1': 'powershell',
             '.bat': 'batch', '.cmd': 'batch',
-            // Data formats
             '.json': 'json', '.jsonc': 'json', '.json5': 'json',
             '.xml': 'xml', '.xsd': 'xml', '.xsl': 'xml',
             '.yaml': 'yaml', '.yml': 'yaml',
             '.toml': 'toml', '.ini': 'ini', '.conf': 'ini', '.cfg': 'ini',
             '.env': 'bash', '.properties': 'properties',
-            // Documentation
             '.md': 'markdown', '.markdown': 'markdown', '.mdown': 'markdown',
             '.rst': 'rst', '.tex': 'latex',
-            // Database
             '.sql': 'sql', '.mysql': 'sql', '.pgsql': 'sql', '.sqlite': 'sql',
-            // Other languages
             '.r': 'r', '.R': 'r', '.rmd': 'r',
             '.lua': 'lua', '.pl': 'perl', '.pm': 'perl',
             '.dart': 'dart', '.elm': 'elm', '.ex': 'elixir', '.exs': 'elixir',
@@ -996,7 +856,6 @@ class AdvancedCliUI {
             '.hs': 'haskell', '.lhs': 'haskell',
             '.ml': 'ocaml', '.mli': 'ocaml',
             '.jl': 'julia',
-            // Config and DevOps
             '.dockerfile': 'dockerfile',
             '.dockerignore': 'gitignore',
             '.gitignore': 'gitignore',
@@ -1004,7 +863,6 @@ class AdvancedCliUI {
             '.editorconfig': 'editorconfig',
             '.prettierrc': 'json',
             '.eslintrc': 'json',
-            // Templates
             '.hbs': 'handlebars', '.handlebars': 'handlebars',
             '.mustache': 'mustache',
             '.jinja': 'jinja2', '.j2': 'jinja2',
@@ -1014,36 +872,25 @@ class AdvancedCliUI {
     }
     getFileIcon(ext) {
         const iconMap = {
-            // JavaScript ecosystem
             '.js': '📄', '.jsx': '⚛️', '.ts': '📘', '.tsx': '⚛️',
             '.vue': '💚', '.svelte': '🧡', '.mjs': '📄', '.cjs': '📄',
-            // Web technologies
             '.html': '🌐', '.htm': '🌐', '.css': '🎨', '.scss': '🎨', '.sass': '🎨', '.less': '🎨',
-            // Backend languages
             '.py': '🐍', '.java': '☕', '.scala': '🔴', '.kt': '🟣',
             '.rb': '💎', '.php': '🐘', '.go': '🐹', '.rs': '🦀', '.swift': '🦉',
             '.cs': '🔷', '.vb': '🔵', '.fs': '🔸',
-            // Systems programming
             '.c': '⚙️', '.h': '⚙️', '.cpp': '⚙️', '.hpp': '⚙️',
             '.m': '🍎', '.mm': '🍎',
-            // Shell and config
             '.sh': '📜', '.bash': '📜', '.zsh': '📜', '.fish': '🐠',
             '.ps1': '💙', '.bat': '⚫', '.cmd': '⚫',
-            // Data formats
             '.json': '📋', '.xml': '📄', '.yaml': '⚙️', '.yml': '⚙️',
             '.toml': '📝', '.ini': '⚙️', '.env': '🔑',
-            // Documentation
             '.md': '📝', '.rst': '📄', '.tex': '📄',
-            // Database
             '.sql': '🗃️',
-            // Other languages
             '.r': '📊', '.lua': '🌙', '.pl': '🐪', '.dart': '🎯',
             '.elm': '🌳', '.ex': '💧', '.clj': '🔵', '.hs': '🎩',
             '.ml': '🐪', '.jl': '🟢',
-            // DevOps
             '.dockerfile': '🐳', '.dockerignore': '🐳',
             '.gitignore': '📋', '.gitattributes': '📋',
-            // Templates
             '.hbs': '🔧', '.mustache': '👨', '.ejs': '📄', '.erb': '💎'
         };
         return iconMap[ext.toLowerCase()] || '📄';
@@ -1060,40 +907,21 @@ class AdvancedCliUI {
             this.layoutMode = 'triple';
         }
     }
-    /**
-     * Cleanup resources
-     */
     cleanup() {
-        // Stop all spinners
         this.spinners.forEach(spinner => spinner.stop());
         this.spinners.clear();
-        // Stop all progress bars
         this.progressBars.forEach(bar => bar.stop());
         this.progressBars.clear();
-        // Clear panels
         this.panels.clear();
     }
-    /**
-     * Background Agents Management
-     */
-    /**
-     * Register or update a background agent
-     */
     updateBackgroundAgent(agentInfo) {
         agentInfo.lastUpdate = new Date();
         this.backgroundAgents.set(agentInfo.id, agentInfo);
-        // Update the agents panel
         this.updateAgentsPanel();
     }
-    /**
-     * Show background agents activity in real-time
-     */
     showBackgroundAgentsActivity(agents) {
         agents.forEach(agent => this.updateBackgroundAgent(agent));
     }
-    /**
-     * Get agent status icon
-     */
     getAgentStatusIcon(status) {
         switch (status) {
             case 'idle': return '⏸️';
@@ -1103,9 +931,6 @@ class AdvancedCliUI {
             default: return '🤖';
         }
     }
-    /**
-     * Update the agents panel
-     */
     updateAgentsPanel() {
         const agents = Array.from(this.backgroundAgents.values());
         if (agents.length === 0) {
@@ -1138,9 +963,6 @@ class AdvancedCliUI {
         });
         this.autoLayout();
     }
-    /**
-     * Format duration for display
-     */
     formatDuration(ms) {
         const seconds = Math.floor(ms / 1000);
         if (seconds < 60) {
@@ -1150,9 +972,6 @@ class AdvancedCliUI {
         const remainingSeconds = seconds % 60;
         return `${minutes}m ${remainingSeconds}s`;
     }
-    /**
-     * Clear completed background agents
-     */
     clearCompletedAgents() {
         for (const [id, agent] of this.backgroundAgents.entries()) {
             if (agent.status === 'completed' || agent.status === 'error') {
@@ -1161,9 +980,6 @@ class AdvancedCliUI {
         }
         this.updateAgentsPanel();
     }
-    /**
-     * Get background agents status summary
-     */
     getAgentsStatusSummary() {
         const agents = Array.from(this.backgroundAgents.values());
         return {
@@ -1176,5 +992,4 @@ class AdvancedCliUI {
     }
 }
 exports.AdvancedCliUI = AdvancedCliUI;
-// Export singleton instance
 exports.advancedUI = new AdvancedCliUI();

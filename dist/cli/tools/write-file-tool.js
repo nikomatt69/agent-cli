@@ -41,10 +41,6 @@ const secure_file_tools_1 = require("./secure-file-tools");
 const cli_ui_1 = require("../utils/cli-ui");
 const diff_viewer_1 = require("../ui/diff-viewer");
 const diff_manager_1 = require("../ui/diff-manager");
-/**
- * Production-ready Write File Tool
- * Safely writes files with backup, validation, and rollback capabilities
- */
 class WriteFileTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
         super('write-file-tool', workingDirectory);
@@ -54,9 +50,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
         const startTime = Date.now();
         let backupPath;
         try {
-            // Sanitize and validate file path
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
-            // Validate content if validators are provided
             if (options.validators) {
                 for (const validator of options.validators) {
                     const validation = await validator(content, sanitizedPath);
@@ -65,31 +59,25 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     }
                 }
             }
-            // Read existing content for diff display
             let existingContent = '';
             let isNewFile = false;
             try {
                 existingContent = await (0, promises_1.readFile)(sanitizedPath, 'utf8');
             }
             catch (error) {
-                // File doesn't exist, it's a new file
                 isNewFile = true;
             }
-            // Create backup if file exists and backup is enabled
             if (options.createBackup !== false) {
                 backupPath = await this.createBackup(sanitizedPath);
             }
-            // Ensure directory exists
             const dir = (0, path_1.dirname)(sanitizedPath);
             await (0, promises_1.mkdir)(dir, { recursive: true });
-            // Apply content transformations
             let processedContent = content;
             if (options.transformers) {
                 for (const transformer of options.transformers) {
                     processedContent = await transformer(processedContent, sanitizedPath);
                 }
             }
-            // Show diff before writing (unless disabled)
             if (options.showDiff !== false && !isNewFile && existingContent !== processedContent) {
                 const fileDiff = {
                     filePath: sanitizedPath,
@@ -100,7 +88,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 };
                 console.log('\n');
                 diff_viewer_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
-                // Also add to diff manager for approval system
                 diff_manager_1.diffManager.addFileDiff(sanitizedPath, existingContent, processedContent);
             }
             else if (isNewFile) {
@@ -114,13 +101,11 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 console.log('\n');
                 diff_viewer_1.DiffViewer.showFileDiff(fileDiff, { compact: true });
             }
-            // Write file with specified encoding
             const encoding = options.encoding || 'utf8';
             await (0, promises_1.writeFile)(sanitizedPath, processedContent, {
                 encoding: encoding,
                 mode: options.mode || 0o644
             });
-            // Verify write if requested
             if (options.verifyWrite) {
                 const verification = await this.verifyWrite(sanitizedPath, processedContent, encoding);
                 if (!verification.success) {
@@ -137,7 +122,7 @@ class WriteFileTool extends base_tool_1.BaseTool {
                 metadata: {
                     encoding,
                     lines: processedContent.split('\n').length,
-                    created: !backupPath, // New file if no backup was created
+                    created: !backupPath,
                     mode: options.mode || 0o644
                 }
             };
@@ -153,7 +138,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            // Rollback if backup exists
             if (backupPath && options.autoRollback !== false) {
                 try {
                     await this.rollback(filePath, backupPath);
@@ -191,15 +175,11 @@ class WriteFileTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Write multiple files in a transaction-like manner
-     */
     async writeMultiple(files, options = {}) {
         const results = [];
         const backups = [];
         let successCount = 0;
         try {
-            // Phase 1: Create backups for all existing files
             for (const file of files) {
                 const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(file.path, this.workingDirectory);
                 if (options.createBackup !== false) {
@@ -209,15 +189,13 @@ class WriteFileTool extends base_tool_1.BaseTool {
                             backups.push(backupPath);
                     }
                     catch {
-                        // File doesn't exist, no backup needed
                     }
                 }
             }
-            // Phase 2: Write all files
             for (const file of files) {
                 const toolResult = await this.execute(file.path, file.content, {
                     ...options,
-                    createBackup: false // Already handled above
+                    createBackup: false
                 });
                 const result = toolResult.data;
                 results.push(result);
@@ -228,7 +206,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     break;
                 }
             }
-            // Phase 3: Handle partial failures
             if (successCount < files.length && options.rollbackOnPartialFailure) {
                 await this.rollbackMultiple(backups);
                 cli_ui_1.CliUI.logWarning('Rolled back all changes due to partial failure');
@@ -242,7 +219,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
             };
         }
         catch (error) {
-            // Rollback all changes
             if (options.autoRollback !== false) {
                 await this.rollbackMultiple(backups);
             }
@@ -256,22 +232,16 @@ class WriteFileTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Append content to an existing file
-     */
     async append(filePath, content, options = {}) {
         try {
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
-            // Read existing content if file exists
             let existingContent = '';
             try {
                 const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
                 existingContent = await fs.readFile(sanitizedPath, 'utf8');
             }
             catch {
-                // File doesn't exist, will be created
             }
-            // Prepare new content
             const separator = options.separator || '\n';
             const newContent = existingContent + (existingContent ? separator : '') + content;
             const toolResult = await this.execute(filePath, newContent, {
@@ -285,51 +255,36 @@ class WriteFileTool extends base_tool_1.BaseTool {
             throw new Error(`Failed to append to file: ${error.message}`);
         }
     }
-    /**
-     * Create a backup of an existing file
-     */
     async createBackup(filePath) {
         try {
             const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
-            await fs.access(filePath); // Check if file exists
-            // Ensure backup directory exists
+            await fs.access(filePath);
             await (0, promises_1.mkdir)(this.backupDirectory, { recursive: true });
-            // Generate backup filename with timestamp
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const fileName = filePath.replace(this.workingDirectory, '').replace(/^\//, '');
             const backupPath = (0, path_1.join)(this.backupDirectory, `${fileName}.${timestamp}.backup`);
-            // Ensure backup subdirectories exist
             await (0, promises_1.mkdir)((0, path_1.dirname)(backupPath), { recursive: true });
-            // Copy file to backup location
             await (0, promises_1.copyFile)(filePath, backupPath);
             cli_ui_1.CliUI.logInfo(`Backup created: ${backupPath}`);
             return backupPath;
         }
         catch {
-            // File doesn't exist or can't be backed up
             return undefined;
         }
     }
-    /**
-     * Rollback a file from backup
-     */
     async rollback(filePath, backupPath) {
         try {
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
             await (0, promises_1.copyFile)(backupPath, sanitizedPath);
-            await (0, promises_1.unlink)(backupPath); // Clean up backup
+            await (0, promises_1.unlink)(backupPath);
         }
         catch (error) {
             throw new Error(`Rollback failed: ${error.message}`);
         }
     }
-    /**
-     * Rollback multiple files from backups
-     */
     async rollbackMultiple(backupPaths) {
         for (const backupPath of backupPaths) {
             try {
-                // Extract original path from backup path
                 const originalPath = backupPath
                     .replace(this.backupDirectory, this.workingDirectory)
                     .replace(/\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.backup$/, '');
@@ -340,9 +295,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
             }
         }
     }
-    /**
-     * Verify that file was written correctly
-     */
     async verifyWrite(filePath, expectedContent, encoding) {
         try {
             const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
@@ -364,9 +316,6 @@ class WriteFileTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Clean old backups
-     */
     async cleanBackups(maxAge = 7 * 24 * 60 * 60 * 1000) {
         try {
             const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));

@@ -6,9 +6,6 @@ class BaseTool {
         this.workingDirectory = workingDirectory;
         this.name = name;
     }
-    /**
-     * Verifica se un percorso è sicuro (dentro working directory)
-     */
     isPathSafe(path) {
         const fs = require('fs');
         const pathModule = require('path');
@@ -21,15 +18,9 @@ class BaseTool {
             return false;
         }
     }
-    /**
-     * Ottiene il nome del tool
-     */
     getName() {
         return this.name;
     }
-    /**
-     * Ottiene la working directory
-     */
     getWorkingDirectory() {
         return this.workingDirectory;
     }

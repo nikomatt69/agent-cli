@@ -4,17 +4,14 @@ exports.ContextEnhancer = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
 class ContextEnhancer {
-    // Enhance messages with additional context and intelligence
     async enhance(messages, context) {
         const enhancedMessages = [...messages];
-        // Add enhanced system prompt if not present
         if (!enhancedMessages.some(msg => msg.role === 'system')) {
             enhancedMessages.unshift({
                 role: 'system',
                 content: this.getEnhancedSystemPrompt(context)
             });
         }
-        // Add workspace context for file-related queries
         const lastUserMessage = enhancedMessages.filter(msg => msg.role === 'user').pop();
         if (lastUserMessage && this.isFileRelatedQuery(lastUserMessage.content)) {
             const workspaceContext = this.getWorkspaceContext(context.workingDirectory);
@@ -23,7 +20,6 @@ class ContextEnhancer {
                 content: `📁 **Workspace Context**:\n${workspaceContext}`
             });
         }
-        // Add conversation memory for continuity
         if (context.conversationMemory.length > 0) {
             const memoryContext = this.getConversationMemory(context.conversationMemory);
             enhancedMessages.splice(1, 0, {
@@ -31,7 +27,6 @@ class ContextEnhancer {
                 content: `🧠 **Conversation Memory**:\n${memoryContext}`
             });
         }
-        // Add execution context for ongoing operations
         if (context.executionContext.size > 0) {
             const executionContext = this.getExecutionContext(context.executionContext);
             enhancedMessages.splice(1, 0, {
@@ -110,7 +105,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
         return types;
     }
     getConversationMemory(memory) {
-        const recentMessages = memory.slice(-5); // Last 5 messages
+        const recentMessages = memory.slice(-5);
         const summary = recentMessages.map(msg => {
             const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
             return `${msg.role}: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`;

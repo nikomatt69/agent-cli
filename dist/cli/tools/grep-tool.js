@@ -10,7 +10,7 @@ const fs_1 = require("fs");
 const list_tool_1 = require("./list-tool");
 const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 const DEFAULT_MAX_RESULTS = 100;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const BINARY_FILE_PATTERNS = ['.jpg', '.png', '.gif', '.pdf', '.zip', '.tar', '.gz', '.exe', '.dll', '.so'];
 class GrepTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
@@ -18,7 +18,6 @@ class GrepTool extends base_tool_1.BaseTool {
     }
     async execute(params) {
         try {
-            // Carica prompt specifico per questo tool
             const promptManager = prompt_manager_1.PromptManager.getInstance();
             const systemPrompt = await promptManager.loadPromptForContext({
                 toolName: 'grep-tool',
@@ -31,7 +30,6 @@ class GrepTool extends base_tool_1.BaseTool {
             const searchPath = params.path || this.workingDirectory;
             const maxResults = params.maxResults || DEFAULT_MAX_RESULTS;
             const contextLines = params.contextLines || 0;
-            // Validazione sicurezza percorso
             if (!this.isPathSafe(searchPath)) {
                 throw new Error(`Path not safe or outside working directory: ${searchPath}`);
             }
@@ -40,12 +38,9 @@ class GrepTool extends base_tool_1.BaseTool {
             }
             cli_ui_1.CliUI.logInfo(`🔍 Searching for pattern: ${cli_ui_1.CliUI.highlight(params.pattern)}`);
             const startTime = Date.now();
-            // Preparazione regex pattern
             const regex = this.buildRegexPattern(params);
-            // Scansione file
             const filesToSearch = await this.findFilesToSearch(searchPath, params);
             cli_ui_1.CliUI.logDebug(`Found ${filesToSearch.length} files to search`);
-            // Ricerca pattern nei file
             const matches = [];
             let filesScanned = 0;
             let filesWithMatches = 0;
@@ -59,7 +54,6 @@ class GrepTool extends base_tool_1.BaseTool {
                         filesWithMatches++;
                     }
                     filesScanned++;
-                    // Limita risultati per performance
                     if (matches.length >= maxResults) {
                         matches.splice(maxResults);
                         break;
@@ -84,7 +78,6 @@ class GrepTool extends base_tool_1.BaseTool {
                 }
             };
             cli_ui_1.CliUI.logSuccess(`✅ Found ${result.totalMatches} matches in ${filesWithMatches} files`);
-            // Show grep results in structured UI
             if (result.matches.length > 0) {
                 advanced_cli_ui_1.advancedUI.showGrepResults(params.pattern, result.matches);
             }
@@ -112,16 +105,11 @@ class GrepTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Costruisce regex pattern basato sui parametri
-     */
     buildRegexPattern(params) {
         let pattern = params.pattern;
-        // Escape special regex characters se non usando regex mode
         if (!params.useRegex) {
             pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
-        // Whole word matching
         if (params.wholeWord) {
             pattern = `\\b${pattern}\\b`;
         }
@@ -133,15 +121,12 @@ class GrepTool extends base_tool_1.BaseTool {
             throw new Error(`Invalid regex pattern: ${pattern}. ${error}`);
         }
     }
-    /**
-     * Trova file da cercare applicando filtri intelligenti
-     */
     async findFilesToSearch(searchPath, params) {
         const files = [];
         const visited = new Set();
         const scanRecursive = async (currentPath, depth) => {
             if (depth > 10 || files.length > 1000)
-                return; // Limiti di sicurezza
+                return;
             const realPath = require('fs').realpathSync(currentPath);
             if (visited.has(realPath))
                 return;
@@ -151,7 +136,6 @@ class GrepTool extends base_tool_1.BaseTool {
                 for (const entry of entries) {
                     const fullPath = (0, path_1.join)(currentPath, entry);
                     const relativePath = (0, path_1.relative)(searchPath, fullPath);
-                    // Applica ignore patterns
                     if (this.shouldIgnoreForGrep(relativePath, params.exclude || [])) {
                         continue;
                     }
@@ -161,16 +145,13 @@ class GrepTool extends base_tool_1.BaseTool {
                             await scanRecursive(fullPath, depth + 1);
                         }
                         else if (stats.isFile()) {
-                            // Verifica dimensione file
                             if (stats.size > MAX_FILE_SIZE) {
                                 cli_ui_1.CliUI.logDebug(`Skipping large file: ${relativePath} (${stats.size} bytes)`);
                                 continue;
                             }
-                            // Verifica se è file binario
                             if (this.isBinaryFile(entry)) {
                                 continue;
                             }
-                            // Applica filtro include se specificato
                             if (params.include && !this.matchesIncludePattern(entry, params.include)) {
                                 continue;
                             }
@@ -195,9 +176,6 @@ class GrepTool extends base_tool_1.BaseTool {
         }
         return files;
     }
-    /**
-     * Cerca pattern in un singolo file
-     */
     async searchInFile(filePath, regex, contextLines, params) {
         const content = await (0, promises_1.readFile)(filePath, 'utf-8');
         const lines = content.split('\n');
@@ -214,24 +192,18 @@ class GrepTool extends base_tool_1.BaseTool {
                     match: match[0],
                     column: match.index
                 };
-                // Aggiungi contesto se richiesto
                 if (contextLines > 0) {
                     grepMatch.beforeContext = lines.slice(Math.max(0, i - contextLines), i);
                     grepMatch.afterContext = lines.slice(i + 1, Math.min(lines.length, i + 1 + contextLines));
                 }
                 matches.push(grepMatch);
-                // Reset regex per global flag
                 regex.lastIndex = 0;
             }
         }
         return matches;
     }
-    /**
-     * Verifica se un file/directory deve essere ignorato per grep
-     */
     shouldIgnoreForGrep(relativePath, excludePatterns) {
         const pathLower = relativePath.toLowerCase();
-        // Applica ignore patterns standard
         if (list_tool_1.IGNORE_PATTERNS.some(pattern => {
             if (pattern.endsWith('/')) {
                 return pathLower.includes(pattern.toLowerCase());
@@ -244,7 +216,6 @@ class GrepTool extends base_tool_1.BaseTool {
         })) {
             return true;
         }
-        // Applica exclude patterns personalizzati
         return excludePatterns.some(pattern => {
             if (pattern.includes('*')) {
                 const regex = new RegExp(pattern.replace(/\*/g, '.*'));
@@ -253,20 +224,12 @@ class GrepTool extends base_tool_1.BaseTool {
             return pathLower.includes(pattern.toLowerCase());
         });
     }
-    /**
-     * Verifica se un file è binario
-     */
     isBinaryFile(filename) {
         const ext = (0, path_1.extname)(filename).toLowerCase();
         return BINARY_FILE_PATTERNS.includes(ext);
     }
-    /**
-     * Verifica se un file corrisponde al pattern include
-     */
     matchesIncludePattern(filename, includePattern) {
-        // Supporta pattern come "*.js", "*.{ts,tsx}", etc.
         if (includePattern.includes('{') && includePattern.includes('}')) {
-            // Pattern con multiple estensioni: *.{js,ts,tsx}
             const basePattern = includePattern.split('{')[0];
             const extensions = includePattern.match(/\{([^}]+)\}/)?.[1].split(',') || [];
             return extensions.some(ext => {
@@ -276,9 +239,6 @@ class GrepTool extends base_tool_1.BaseTool {
         }
         return this.matchesGlobPattern(filename, includePattern);
     }
-    /**
-     * Verifica match con pattern glob semplice
-     */
     matchesGlobPattern(filename, pattern) {
         const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
         return regex.test(filename);

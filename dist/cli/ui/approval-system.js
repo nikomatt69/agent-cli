@@ -23,17 +23,13 @@ class ApprovalSystem {
                 networkRequests: true,
                 systemCommands: true,
             },
-            timeout: 60000, // 1 minute default
+            timeout: 60000,
             ...config,
         };
     }
-    /**
-     * Request approval for a set of actions
-     */
     async requestApproval(request) {
         this.pendingRequests.set(request.id, request);
         try {
-            // Check if auto-approval is enabled for this type
             if (this.shouldAutoApprove(request)) {
                 console.log(chalk_1.default.green(`✓ Auto-approved: ${request.title} (${request.riskLevel} risk)`));
                 return {
@@ -41,9 +37,7 @@ class ApprovalSystem {
                     timestamp: new Date(),
                 };
             }
-            // Show request details
             this.displayApprovalRequest(request);
-            // Get user input
             const response = await this.promptForApproval(request);
             return response;
         }
@@ -51,9 +45,6 @@ class ApprovalSystem {
             this.pendingRequests.delete(request.id);
         }
     }
-    /**
-     * Quick approval for simple operations
-     */
     async quickApproval(title, description, riskLevel = 'medium') {
         const request = {
             id: `quick-${Date.now()}`,
@@ -65,12 +56,8 @@ class ApprovalSystem {
         const response = await this.requestApproval(request);
         return response.approved;
     }
-    /**
-     * Request approval for file operations with diff preview
-     */
     async requestFileApproval(title, fileDiffs, riskLevel = 'medium') {
         console.log(chalk_1.default.blue.bold(`\\n🔍 ${title}`));
-        // Show file diffs
         diff_viewer_1.DiffViewer.showMultiFileDiff(fileDiffs, { compact: true });
         const actions = fileDiffs.map(diff => ({
             type: diff.isNew ? 'file_create' : diff.isDeleted ? 'file_delete' : 'file_modify',
@@ -91,12 +78,8 @@ class ApprovalSystem {
         const response = await this.requestApproval(request);
         return response.approved;
     }
-    /**
-     * Request approval for command execution
-     */
     async requestCommandApproval(command, args = [], workingDir) {
         const fullCommand = `${command} ${args.join(' ')}`;
-        // Assess risk level based on command
         const riskLevel = this.assessCommandRisk(command, args);
         const request = {
             id: `cmd-${Date.now()}`,
@@ -116,9 +99,6 @@ class ApprovalSystem {
         const response = await this.requestApproval(request);
         return response.approved;
     }
-    /**
-     * Request approval for package installation
-     */
     async requestPackageApproval(packages, manager = 'npm', isGlobal = false) {
         const riskLevel = isGlobal ? 'high' : 'medium';
         const request = {
@@ -136,13 +116,9 @@ class ApprovalSystem {
         const response = await this.requestApproval(request);
         return response.approved;
     }
-    /**
-     * Display approval request to user with improved formatting
-     */
     displayApprovalRequest(request) {
         const riskColor = this.getRiskColor(request.riskLevel);
         const riskIcon = this.getRiskIcon(request.riskLevel);
-        // Add clear visual separation
         console.log(chalk_1.default.gray('─'.repeat(60)));
         console.log();
         console.log((0, boxen_1.default)(`${riskIcon} ${chalk_1.default.bold(request.title)}\n\n` +
@@ -155,7 +131,6 @@ class ApprovalSystem {
             borderColor: request.riskLevel === 'critical' ? 'red' :
                 request.riskLevel === 'high' ? 'yellow' : 'blue',
         }));
-        // Show detailed actions
         if (request.actions.length > 0) {
             console.log(chalk_1.default.blue.bold('\n📋 Planned Actions:'));
             request.actions.forEach((action, index) => {
@@ -164,7 +139,6 @@ class ApprovalSystem {
                 console.log(`  ${index + 1}. ${actionIcon} ${action.description} ${actionRisk(`[${action.riskLevel}]`)}`);
             });
         }
-        // Show context if available
         if (request.context) {
             console.log(chalk_1.default.blue.bold('\n🔍 Context:'));
             if (request.context.workingDirectory) {
@@ -184,11 +158,7 @@ class ApprovalSystem {
             }
         }
     }
-    /**
-     * Prompt user for approval with improved formatting
-     */
     async promptForApproval(request) {
-        // Add spacing before the prompt
         console.log();
         const questions = [
             {
@@ -199,7 +169,6 @@ class ApprovalSystem {
                 prefix: '  ',
             },
         ];
-        // For high-risk operations, ask for additional confirmation
         if (request.riskLevel === 'critical' || request.riskLevel === 'high') {
             questions.push({
                 type: 'confirm',
@@ -210,7 +179,6 @@ class ApprovalSystem {
                 when: (answers) => answers.approved,
             });
         }
-        // Option to add comments for complex operations
         if (request.actions.length > 3) {
             questions.push({
                 type: 'input',
@@ -222,7 +190,6 @@ class ApprovalSystem {
         try {
             const answers = await inquirer_1.default.prompt(questions);
             const approved = answers.approved && (answers.confirmHighRisk !== false);
-            // Add spacing and clear result
             console.log();
             if (approved) {
                 console.log(chalk_1.default.green.bold('✅ Operation approved'));
@@ -230,7 +197,6 @@ class ApprovalSystem {
             else {
                 console.log(chalk_1.default.yellow.bold('❌ Operation cancelled'));
             }
-            // Add final spacing
             console.log();
             return {
                 approved,
@@ -239,7 +205,6 @@ class ApprovalSystem {
             };
         }
         catch (error) {
-            // Handle Ctrl+C or other interruption
             console.log(chalk_1.default.red('\n❌ Operation cancelled by user'));
             return {
                 approved: false,
@@ -247,19 +212,14 @@ class ApprovalSystem {
             };
         }
     }
-    /**
-     * Check if operation should be auto-approved
-     */
     shouldAutoApprove(request) {
         const config = this.config.autoApprove;
         if (!config)
             return false;
-        // Check risk level auto-approval
         if (request.riskLevel === 'low' && config.lowRisk)
             return true;
         if (request.riskLevel === 'medium' && config.mediumRisk)
             return true;
-        // Check specific operation types
         const hasFileOps = request.actions.some(a => ['file_create', 'file_modify', 'file_delete'].includes(a.type));
         if (hasFileOps && config.fileOperations)
             return true;
@@ -268,37 +228,27 @@ class ApprovalSystem {
             return true;
         return false;
     }
-    /**
-     * Assess command risk level
-     */
     assessCommandRisk(command, args) {
         const cmd = command.toLowerCase();
         const fullCommand = `${cmd} ${args.join(' ')}`.toLowerCase();
-        // Critical risk commands
         const criticalCommands = ['rm -rf', 'sudo rm', 'format', 'fdisk', 'dd'];
         if (criticalCommands.some(dangerous => fullCommand.includes(dangerous))) {
             return 'critical';
         }
-        // High risk commands
         const highRiskCommands = ['rm', 'del', 'sudo', 'chmod 777', 'chown'];
         if (highRiskCommands.some(risky => fullCommand.includes(risky))) {
             return 'high';
         }
-        // Medium risk commands
         const mediumRiskCommands = ['npm install -g', 'yarn global', 'pip install', 'docker run'];
         if (mediumRiskCommands.some(medium => fullCommand.includes(medium))) {
             return 'medium';
         }
-        // Network commands
         const networkCommands = ['curl', 'wget', 'fetch', 'http'];
         if (networkCommands.some(net => cmd.includes(net))) {
             return 'medium';
         }
         return 'low';
     }
-    /**
-     * Get color for risk level
-     */
     getRiskColor(risk) {
         switch (risk) {
             case 'critical': return chalk_1.default.red.bold;
@@ -308,9 +258,6 @@ class ApprovalSystem {
             default: return chalk_1.default.gray;
         }
     }
-    /**
-     * Get icon for risk level
-     */
     getRiskIcon(risk) {
         switch (risk) {
             case 'critical': return '🚨';
@@ -320,9 +267,6 @@ class ApprovalSystem {
             default: return '📋';
         }
     }
-    /**
-     * Get icon for action type
-     */
     getActionIcon(type) {
         switch (type) {
             case 'file_create': return '📄';
@@ -334,19 +278,12 @@ class ApprovalSystem {
             default: return '🔧';
         }
     }
-    /**
-     * Update configuration
-     */
     updateConfig(newConfig) {
         this.config = { ...this.config, ...newConfig };
     }
-    /**
-     * Get current configuration
-     */
     getConfig() {
         return { ...this.config };
     }
 }
 exports.ApprovalSystem = ApprovalSystem;
-// Export singleton instance
 exports.approvalSystem = new ApprovalSystem();

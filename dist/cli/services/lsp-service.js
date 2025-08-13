@@ -50,7 +50,6 @@ class LSPService {
         this.workingDirectory = dir;
     }
     initializeDefaultServers() {
-        // TypeScript/JavaScript LSP
         this.servers.set('typescript', {
             name: 'TypeScript Language Server',
             command: 'typescript-language-server',
@@ -58,7 +57,6 @@ class LSPService {
             filetypes: ['.ts', '.tsx', '.js', '.jsx'],
             status: 'stopped'
         });
-        // Python LSP
         this.servers.set('python', {
             name: 'Python Language Server',
             command: 'pylsp',
@@ -66,7 +64,6 @@ class LSPService {
             filetypes: ['.py'],
             status: 'stopped'
         });
-        // Rust LSP
         this.servers.set('rust', {
             name: 'Rust Analyzer',
             command: 'rust-analyzer',
@@ -144,7 +141,6 @@ class LSPService {
     detectProjectLanguages(projectPath) {
         const languages = [];
         try {
-            // Check for common config files
             const files = fs.readdirSync(projectPath);
             if (files.includes('tsconfig.json') || files.includes('package.json')) {
                 languages.push('typescript');
@@ -157,7 +153,6 @@ class LSPService {
             }
         }
         catch (error) {
-            // Ignore errors
         }
         return languages;
     }

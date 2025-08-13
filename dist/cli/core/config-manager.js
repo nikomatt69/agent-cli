@@ -42,7 +42,6 @@ const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const chalk_1 = __importDefault(require("chalk"));
 const zod_1 = require("zod");
-// Validation schemas
 const ModelConfigSchema = zod_1.z.object({
     provider: zod_1.z.enum(['openai', 'anthropic', 'google', 'ollama']),
     model: zod_1.z.string(),
@@ -55,14 +54,12 @@ const ConfigSchema = zod_1.z.object({
     maxTokens: zod_1.z.number().min(1).max(16000).default(12000),
     chatHistory: zod_1.z.boolean().default(true),
     maxHistoryLength: zod_1.z.number().min(1).max(1000).default(100),
-    // Optional system prompt for general chat mode
     systemPrompt: zod_1.z.string().optional(),
     autoAnalyzeWorkspace: zod_1.z.boolean().default(true),
     enableAutoApprove: zod_1.z.boolean().default(false),
     preferredAgent: zod_1.z.string().optional(),
     models: zod_1.z.record(ModelConfigSchema),
     apiKeys: zod_1.z.record(zod_1.z.string()).optional(),
-    // MCP (Model Context Protocol) servers configuration
     mcpServers: zod_1.z.record(zod_1.z.object({
         name: zod_1.z.string(),
         type: zod_1.z.enum(['http', 'websocket', 'command', 'stdio']),
@@ -85,14 +82,12 @@ const ConfigSchema = zod_1.z.object({
             header: zod_1.z.string().optional(),
         }).optional(),
     })).optional(),
-    // Agent Manager specific config
     maxConcurrentAgents: zod_1.z.number().min(1).max(10).default(3),
     enableGuidanceSystem: zod_1.z.boolean().default(true),
     defaultAgentTimeout: zod_1.z.number().min(1000).default(60000),
     logLevel: zod_1.z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     requireApprovalForNetwork: zod_1.z.boolean().default(true),
     approvalPolicy: zod_1.z.enum(['strict', 'moderate', 'permissive']).default('moderate'),
-    // Security configuration for different modes
     securityMode: zod_1.z.enum(['safe', 'default', 'developer']).default('safe'),
     toolApprovalPolicies: zod_1.z.object({
         fileOperations: zod_1.z.enum(['always', 'risky', 'never']).default('risky'),
@@ -107,7 +102,6 @@ const ConfigSchema = zod_1.z.object({
         systemCommands: 'always',
         networkRequests: 'always',
     }),
-    // Session-based settings
     sessionSettings: zod_1.z.object({
         approvalTimeoutMs: zod_1.z.number().min(5000).max(300000).default(30000),
         devModeTimeoutMs: zod_1.z.number().min(60000).max(7200000).default(3600000),
@@ -130,7 +124,6 @@ const ConfigSchema = zod_1.z.object({
         allowNetwork: false,
         allowCommands: true,
     }),
-    // Cloud documentation system
     cloudDocs: zod_1.z.object({
         enabled: zod_1.z.boolean().default(false),
         provider: zod_1.z.enum(['supabase', 'firebase', 'github']).default('supabase'),
@@ -153,7 +146,6 @@ const ConfigSchema = zod_1.z.object({
 });
 class SimpleConfigManager {
     constructor() {
-        // Default models configuration
         this.defaultModels = {
             'claude-sonnet-4-20250514': {
                 provider: 'anthropic',
@@ -260,21 +252,17 @@ class SimpleConfigManager {
                 smartSuggestions: true,
             },
         };
-        // Create config directory in user's home directory
         const configDir = path.join(os.homedir(), '.nikcli');
         this.configPath = path.join(configDir, 'config.json');
-        // Ensure config directory exists
         if (!fs.existsSync(configDir)) {
             fs.mkdirSync(configDir, { recursive: true });
         }
-        // Load or create config
         this.loadConfig();
     }
     loadConfig() {
         try {
             if (fs.existsSync(this.configPath)) {
                 const configData = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
-                // Merge with defaults to ensure all fields exist
                 this.config = { ...this.defaultConfig, ...configData };
             }
             else {
@@ -309,7 +297,6 @@ class SimpleConfigManager {
         this.config = { ...newConfig };
         this.saveConfig();
     }
-    // API Key management
     setApiKey(model, apiKey) {
         if (!this.config.apiKeys) {
             this.config.apiKeys = {};
@@ -318,11 +305,9 @@ class SimpleConfigManager {
         this.saveConfig();
     }
     getApiKey(model) {
-        // First check config file
         if (this.config.apiKeys && this.config.apiKeys[model]) {
             return this.config.apiKeys[model];
         }
-        // Then check environment variables
         const modelConfig = this.config.models[model];
         if (modelConfig) {
             switch (modelConfig.provider) {
@@ -333,14 +318,12 @@ class SimpleConfigManager {
                 case 'google':
                     return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
                 case 'ollama':
-                    return undefined; // Ollama doesn't need API keys
+                    return undefined;
             }
         }
         return undefined;
     }
-    // Cloud documentation API keys
     getCloudDocsApiKeys() {
-        // Fallback to environment variables if config not loaded
         if (!this.config || !this.config.cloudDocs) {
             return {
                 apiUrl: process.env.SUPABASE_URL,
@@ -353,7 +336,6 @@ class SimpleConfigManager {
             apiKey: cloudDocsConfig.apiKey || process.env.SUPABASE_ANON_KEY
         };
     }
-    // Model management
     setCurrentModel(model) {
         if (!this.config.models[model]) {
             throw new Error(`Model ${model} not found in configuration`);
@@ -382,7 +364,6 @@ class SimpleConfigManager {
             hasApiKey: !!this.getApiKey(name),
         }));
     }
-    // Validation
     validateConfig() {
         try {
             ConfigSchema.parse(this.config);
@@ -393,12 +374,10 @@ class SimpleConfigManager {
             return false;
         }
     }
-    // Reset to defaults
     reset() {
         this.config = { ...this.defaultConfig };
         this.saveConfig();
     }
-    // Export/Import
     export() {
         return { ...this.config };
     }
@@ -411,8 +390,6 @@ class SimpleConfigManager {
     }
 }
 exports.SimpleConfigManager = SimpleConfigManager;
-// Create and export singleton instance
 exports.simpleConfigManager = new SimpleConfigManager();
-// Export aliases for compatibility
 exports.ConfigManager = SimpleConfigManager;
 exports.configManager = exports.simpleConfigManager;

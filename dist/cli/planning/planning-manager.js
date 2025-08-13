@@ -39,13 +39,9 @@ const plan_generator_1 = require("./plan-generator");
 const plan_executor_1 = require("./plan-executor");
 const tool_registry_1 = require("../tools/tool-registry");
 const cli_ui_1 = require("../utils/cli-ui");
-/**
- * Production-ready Planning Manager
- * Orchestrates the complete planning and execution workflow
- */
 class PlanningManager extends events_1.EventEmitter {
     constructor(workingDirectory, config) {
-        super(); // Call EventEmitter constructor
+        super();
         this.planHistory = new Map();
         this.config = {
             maxStepsPerPlan: 50,
@@ -59,29 +55,20 @@ class PlanningManager extends events_1.EventEmitter {
         this.planGenerator = new plan_generator_1.PlanGenerator();
         this.planExecutor = new plan_executor_1.PlanExecutor(this.toolRegistry, this.config);
     }
-    /**
-     * Main entry point: Plan and execute a user request
-     */
     async planAndExecute(userRequest, projectPath) {
         cli_ui_1.CliUI.logSection('AI Planning & Execution System');
         cli_ui_1.CliUI.logInfo(`Processing request: ${cli_ui_1.CliUI.highlight(userRequest)}`);
         try {
-            // Step 1: Analyze project context
             const context = await this.buildPlannerContext(userRequest, projectPath);
-            // Step 2: Generate execution plan
             const plan = await this.planGenerator.generatePlan(context);
-            // Render real todos in structured UI (all modes)
             await this.renderTodosUI(plan);
             this.planHistory.set(plan.id, plan);
-            // Step 3: Validate plan
             const validation = this.planGenerator.validatePlan(plan);
             this.displayValidationResults(validation);
             if (!validation.isValid) {
                 throw new Error(`Plan validation failed: ${validation.errors.join(', ')}`);
             }
-            // Step 4: Execute plan
             const result = await this.planExecutor.executePlan(plan);
-            // Step 5: Log final results
             this.logPlanningSession(plan, result);
             return result;
         }
@@ -90,22 +77,15 @@ class PlanningManager extends events_1.EventEmitter {
             throw error;
         }
     }
-    /**
-     * Generate a plan without executing it
-     */
     async generatePlanOnly(userRequest, projectPath) {
         cli_ui_1.CliUI.logSection('Plan Generation');
         const context = await this.buildPlannerContext(userRequest, projectPath);
         const plan = await this.planGenerator.generatePlan(context);
-        // Show todos panel in structured UI
         await this.renderTodosUI(plan);
         this.planHistory.set(plan.id, plan);
         this.displayPlan(plan);
         return plan;
     }
-    /**
-     * Execute a previously generated plan
-     */
     async executePlan(planId) {
         const plan = this.planHistory.get(planId);
         if (!plan) {
@@ -114,25 +94,18 @@ class PlanningManager extends events_1.EventEmitter {
         cli_ui_1.CliUI.logSection('Plan Execution');
         return await this.executeWithEventTracking(plan);
     }
-    /**
-     * Execute plan with step-by-step event emission for UI updates
-     */
     async executeWithEventTracking(plan) {
-        // Emit plan start event
         this.emit('planExecutionStart', { planId: plan.id, title: plan.title });
         try {
-            // Track step execution
             const updatedTodos = [...plan.todos];
             for (let i = 0; i < updatedTodos.length; i++) {
                 const todo = updatedTodos[i];
-                // Emit step start event
                 this.emit('stepStart', {
                     planId: plan.id,
                     stepIndex: i,
                     stepId: todo.id,
                     todos: updatedTodos
                 });
-                // Update step status to in_progress
                 updatedTodos[i] = { ...todo, status: 'in_progress' };
                 this.emit('stepProgress', {
                     planId: plan.id,
@@ -140,9 +113,7 @@ class PlanningManager extends events_1.EventEmitter {
                     stepId: todo.id,
                     todos: updatedTodos
                 });
-                // Simulate step execution (in a real implementation, this would execute the actual step)
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                // Update step status to completed
                 updatedTodos[i] = { ...todo, status: 'completed' };
                 this.emit('stepComplete', {
                     planId: plan.id,
@@ -151,9 +122,7 @@ class PlanningManager extends events_1.EventEmitter {
                     todos: updatedTodos
                 });
             }
-            // Emit plan completion event
             this.emit('planExecutionComplete', { planId: plan.id, title: plan.title });
-            // Return execution result
             return {
                 planId: plan.id,
                 status: 'completed',
@@ -184,33 +153,18 @@ class PlanningManager extends events_1.EventEmitter {
             throw error;
         }
     }
-    /**
-     * List all generated plans
-     */
     listPlans() {
         return Array.from(this.planHistory.values());
     }
-    /**
-     * Get plan by ID
-     */
     getPlan(planId) {
         return this.planHistory.get(planId);
     }
-    /**
-     * Get execution history
-     */
     getExecutionHistory() {
         return this.planExecutor.getExecutionHistory();
     }
-    /**
-     * Display tool registry information
-     */
     displayToolRegistry() {
         this.toolRegistry.displayRegistry();
     }
-    /**
-     * Get planning statistics
-     */
     getPlanningStats() {
         const plans = Array.from(this.planHistory.values());
         const executions = Array.from(this.planExecutor.getExecutionHistory().values());
@@ -230,13 +184,9 @@ class PlanningManager extends events_1.EventEmitter {
             toolUsageStats: this.calculateToolUsage(plans)
         };
     }
-    /**
-     * Build planner context from user request and project analysis
-     */
     async buildPlannerContext(userRequest, projectPath) {
         cli_ui_1.CliUI.startSpinner('Analyzing project context...');
         try {
-            // Get available tools
             const availableTools = this.toolRegistry.listTools().map(name => {
                 const metadata = this.toolRegistry.getToolMetadata(name);
                 return {
@@ -245,11 +195,10 @@ class PlanningManager extends events_1.EventEmitter {
                     riskLevel: metadata?.riskLevel || 'medium',
                     reversible: metadata?.reversible || true,
                     estimatedDuration: metadata?.estimatedDuration || 5000,
-                    requiredArgs: [], // Would be populated from tool introspection
+                    requiredArgs: [],
                     optionalArgs: []
                 };
             });
-            // Basic project analysis (could be enhanced with actual file scanning)
             const projectAnalysis = await this.analyzeProject(projectPath);
             cli_ui_1.CliUI.succeedSpinner('Project context analyzed');
             return {
@@ -269,12 +218,7 @@ class PlanningManager extends events_1.EventEmitter {
             throw error;
         }
     }
-    /**
-     * Analyze project structure and characteristics
-     */
     async analyzeProject(projectPath) {
-        // This would use the FindFilesTool to scan the project
-        // For now, return a mock analysis
         return {
             fileCount: 100,
             languages: ['typescript', 'javascript'],
@@ -283,9 +227,6 @@ class PlanningManager extends events_1.EventEmitter {
             hasDocumentation: true
         };
     }
-    /**
-     * Display plan details
-     */
     displayPlan(plan) {
         cli_ui_1.CliUI.logSection(`Generated Plan: ${plan.title}`);
         cli_ui_1.CliUI.logKeyValue('Plan ID', plan.id);
@@ -307,9 +248,6 @@ class PlanningManager extends events_1.EventEmitter {
             }
         });
     }
-    /**
-     * Render the plan todos in the Advanced CLI UI
-     */
     async renderTodosUI(plan) {
         try {
             const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
@@ -325,9 +263,6 @@ class PlanningManager extends events_1.EventEmitter {
             }
         }
     }
-    /**
-     * Display validation results
-     */
     displayValidationResults(validation) {
         if (validation.errors.length > 0) {
             cli_ui_1.CliUI.logSubsection('Validation Errors');
@@ -342,9 +277,6 @@ class PlanningManager extends events_1.EventEmitter {
             validation.suggestions.forEach(suggestion => cli_ui_1.CliUI.logInfo(suggestion));
         }
     }
-    /**
-     * Log complete planning session results
-     */
     logPlanningSession(plan, result) {
         cli_ui_1.CliUI.logSection('Planning Session Complete');
         const duration = result.endTime ?
@@ -359,12 +291,8 @@ class PlanningManager extends events_1.EventEmitter {
         if (result.summary.skippedSteps > 0) {
             cli_ui_1.CliUI.logInfo(`${result.summary.skippedSteps} steps skipped`);
         }
-        // Save session log
         this.saveSessionLog(plan, result);
     }
-    /**
-     * Save session log for audit trail
-     */
     saveSessionLog(plan, result) {
         const sessionLog = {
             planId: plan.id,
@@ -376,12 +304,8 @@ class PlanningManager extends events_1.EventEmitter {
                 .filter(s => s.type === 'tool' && s.toolName)
                 .map(s => s.toolName)
         };
-        // In production, this would save to a persistent log store
         cli_ui_1.CliUI.logInfo(`Session logged: ${plan.id}`);
     }
-    /**
-     * Calculate risk distribution across plans
-     */
     calculateRiskDistribution(plans) {
         return plans.reduce((acc, plan) => {
             const risk = plan.riskAssessment.overallRisk;
@@ -389,9 +313,6 @@ class PlanningManager extends events_1.EventEmitter {
             return acc;
         }, {});
     }
-    /**
-     * Calculate tool usage statistics
-     */
     calculateToolUsage(plans) {
         const toolUsage = {};
         plans.forEach(plan => {

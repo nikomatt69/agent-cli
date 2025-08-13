@@ -8,15 +8,11 @@ class PromptManager {
     constructor(projectRoot) {
         this.promptCache = new Map();
         this.cacheEnabled = true;
-        this.maxCacheSize = 100; // Maximum number of cached prompts
-        this.cacheTTL = 30 * 60 * 1000; // 30 minutes in milliseconds
+        this.maxCacheSize = 100;
+        this.cacheTTL = 30 * 60 * 1000;
         this.promptsDirectory = (0, path_1.resolve)((0, path_1.join)(projectRoot, 'src', 'prompts'));
-        // Validate that prompts directory exists and is safe
         this.validatePromptsDirectory();
     }
-    /**
-     * Validate that the prompts directory exists and is secure
-     */
     validatePromptsDirectory() {
         if (!(0, fs_1.existsSync)(this.promptsDirectory)) {
             cli_ui_1.CliUI.logWarning(`Prompts directory not found: ${this.promptsDirectory}`);
@@ -24,9 +20,6 @@ class PromptManager {
             this.createDefaultPromptStructure();
         }
     }
-    /**
-     * Create default prompt directory structure if missing
-     */
     createDefaultPromptStructure() {
         const fs = require('fs');
         const dirs = [
@@ -49,16 +42,11 @@ class PromptManager {
             cli_ui_1.CliUI.logError(`Failed to create prompt directories: ${error.message}`);
         }
     }
-    /**
-     * Validate that a path is safe and within the prompts directory
-     */
     isPathSafe(relativePath) {
         try {
             const fullPath = (0, path_1.resolve)((0, path_1.join)(this.promptsDirectory, relativePath));
             const normalizedPromptsDir = (0, path_1.resolve)(this.promptsDirectory);
-            // Check that the resolved path is within the prompts directory
             const relativeToPrompts = (0, path_1.relative)(normalizedPromptsDir, fullPath);
-            // If the relative path starts with .. it's trying to escape the prompts directory
             return !relativeToPrompts.startsWith('..');
         }
         catch (error) {
@@ -71,9 +59,6 @@ class PromptManager {
         }
         return PromptManager.instance;
     }
-    /**
-     * Load the appropriate system prompt for the given context
-     */
     async loadPromptForContext(context) {
         const promptPath = this.resolvePromptPath(context);
         if (!promptPath) {
@@ -90,50 +75,37 @@ class PromptManager {
             return this.getDefaultPrompt(context);
         }
     }
-    /**
-     * Resolve the prompt path based on context with intelligent fallback
-     */
     resolvePromptPath(context) {
         const candidates = [];
-        // Tool-specific prompts (highest priority)
         if (context.toolName) {
             candidates.push(`tools/atomic-tools/${context.toolName}.txt`);
             candidates.push(`tools/analysis-tools/${context.toolName}.txt`);
-            // Fallback to generic tool prompt
             candidates.push(`tools/atomic-tools/generic-tool.txt`);
         }
-        // Agent-specific prompts
         if (context.agentId) {
             candidates.push(`system/${context.agentId}.txt`);
-            // Fallback to base agent
             candidates.push(`system/base-agent.txt`);
         }
-        // Action-specific prompts
         if (context.actionType) {
             candidates.push(`tools/agent-actions/${context.actionType}.txt`);
             candidates.push(`tools/agent-actions/generic-action.txt`);
         }
-        // Command-specific prompts
         if (context.commandName) {
             candidates.push(`tools/cli-commands/${context.commandName}.txt`);
             candidates.push(`tools/cli-commands/generic-command.txt`);
         }
-        // Task-specific prompts
         if (context.taskType) {
             candidates.push(`tools/workflow-steps/${context.taskType}.txt`);
             candidates.push(`tools/workflow-steps/generic-workflow.txt`);
         }
-        // Safety prompts based on risk level
         if (context.riskLevel === 'high') {
             candidates.push(`tools/safety-prompts/approval-required.txt`);
         }
         else if (context.riskLevel === 'medium') {
             candidates.push(`tools/safety-prompts/caution-required.txt`);
         }
-        // Universal fallbacks (lowest priority)
         candidates.push(`system/base-agent.txt`);
         candidates.push(`tools/generic-fallback.txt`);
-        // Find first existing prompt file
         for (const candidate of candidates) {
             const fullPath = (0, path_1.join)(this.promptsDirectory, candidate);
             if ((0, fs_1.existsSync)(fullPath)) {
@@ -142,48 +114,36 @@ class PromptManager {
         }
         return null;
     }
-    /**
-     * Load a prompt from filesystem with caching and security validation
-     */
     async loadPrompt(relativePath) {
-        // Validate path security first
         if (!this.isPathSafe(relativePath)) {
             throw new Error(`Unsafe path detected: ${relativePath}`);
         }
         const fullPath = (0, path_1.join)(this.promptsDirectory, relativePath);
-        // Check cache first
         if (this.cacheEnabled && this.promptCache.has(relativePath)) {
             const cached = this.promptCache.get(relativePath);
             const now = new Date();
-            // Check if cache entry is still valid (TTL check)
             const cacheAge = now.getTime() - cached.cacheTime.getTime();
             if (cacheAge > this.cacheTTL) {
                 this.promptCache.delete(relativePath);
             }
             else {
-                // Verify file hasn't changed
                 try {
                     const stats = require('fs').statSync(fullPath);
                     if (stats.mtime <= cached.lastModified) {
-                        // Update access stats
                         cached.accessCount++;
                         cached.lastAccessed = now;
                         return cached;
                     }
                 }
                 catch (error) {
-                    // File might have been deleted, remove from cache
                     this.promptCache.delete(relativePath);
                 }
             }
         }
-        // Verify file exists before reading
         if (!(0, fs_1.existsSync)(fullPath)) {
             throw new Error(`Prompt file not found: ${relativePath}`);
         }
-        // Load from filesystem
         const content = (0, fs_1.readFileSync)(fullPath, 'utf-8');
-        // Validate content is not empty
         if (!content.trim()) {
             throw new Error(`Prompt file is empty: ${relativePath}`);
         }
@@ -198,9 +158,7 @@ class PromptManager {
             accessCount: 1,
             lastAccessed: now
         };
-        // Cache the prompt with size management
         if (this.cacheEnabled) {
-            // Clean cache if it's getting too large
             if (this.promptCache.size >= this.maxCacheSize) {
                 this.evictLeastRecentlyUsed();
             }
@@ -208,12 +166,8 @@ class PromptManager {
         }
         return prompt;
     }
-    /**
-     * Interpolate variables in prompt using context
-     */
     interpolatePrompt(content, context) {
         let interpolated = content;
-        // Replace context variables
         if (context.toolName) {
             interpolated = interpolated.replace(/\{toolName\}/g, context.toolName);
         }
@@ -226,16 +180,11 @@ class PromptManager {
                 interpolated = interpolated.replace(placeholder, String(value));
             }
         }
-        // Add timestamp
         interpolated = interpolated.replace(/\{timestamp\}/g, new Date().toISOString());
         return interpolated;
     }
-    /**
-     * Get a comprehensive default prompt if no specific one is found
-     */
     getDefaultPrompt(context) {
         let prompt = '';
-        // Base identity
         if (context.toolName) {
             prompt = `SYSTEM PROMPT - ${context.toolName.toUpperCase()} TOOL
 
@@ -335,7 +284,6 @@ OPERATIONAL GUIDELINES:
 
 Execute the requested operation safely, efficiently, and with clear communication.`;
         }
-        // Add risk level warnings if applicable
         if (context.riskLevel === 'high') {
             prompt += '\n\n⚠️ HIGH RISK OPERATION: This operation requires special attention and may need approval before execution.';
         }
@@ -344,19 +292,13 @@ Execute the requested operation safely, efficiently, and with clear communicatio
         }
         return prompt;
     }
-    /**
-     * Get category from prompt path
-     */
     getCategoryFromPath(path) {
         const parts = path.split('/');
         if (parts.length >= 2) {
-            return parts[1]; // e.g., 'atomic-tools', 'agent-actions', etc.
+            return parts[1];
         }
         return 'general';
     }
-    /**
-     * Pre-load all prompts for better performance
-     */
     async preloadPrompts() {
         cli_ui_1.CliUI.logInfo('🔄 Pre-loading system prompts...');
         const promptDirs = [
@@ -389,9 +331,6 @@ Execute the requested operation safely, efficiently, and with clear communicatio
         }
         cli_ui_1.CliUI.logSuccess(`✅ Pre-loaded ${loadedCount} system prompts`);
     }
-    /**
-     * List all available prompts
-     */
     listAvailablePrompts() {
         const categories = {};
         for (const [path, prompt] of Array.from(this.promptCache)) {
@@ -406,33 +345,22 @@ Execute the requested operation safely, efficiently, and with clear communicatio
             prompts: prompts.sort()
         }));
     }
-    /**
-     * Invalidate prompt cache
-     */
     clearCache() {
         this.promptCache.clear();
         cli_ui_1.CliUI.logInfo('🗑️ Prompt cache cleared');
     }
-    /**
-     * Evict least recently used cache entries when cache is full
-     */
     evictLeastRecentlyUsed() {
         if (this.promptCache.size === 0)
             return;
-        // Sort by last accessed time (oldest first)
         const entries = Array.from(this.promptCache.entries()).sort((a, b) => {
             return a[1].lastAccessed.getTime() - b[1].lastAccessed.getTime();
         });
-        // Remove oldest 25% of entries
         const toRemove = Math.max(1, Math.floor(this.promptCache.size * 0.25));
         for (let i = 0; i < toRemove; i++) {
             this.promptCache.delete(entries[i][0]);
         }
         cli_ui_1.CliUI.logDebug(`🗑️ Evicted ${toRemove} cache entries (LRU)`);
     }
-    /**
-     * Clean expired cache entries
-     */
     cleanExpiredCache() {
         const now = new Date();
         let removedCount = 0;
@@ -447,9 +375,6 @@ Execute the requested operation safely, efficiently, and with clear communicatio
             cli_ui_1.CliUI.logDebug(`🗑️ Cleaned ${removedCount} expired cache entries`);
         }
     }
-    /**
-     * Get comprehensive cache statistics
-     */
     getCacheStats() {
         const categories = {};
         let totalAccessCount = 0;
@@ -469,13 +394,10 @@ Execute the requested operation safely, efficiently, and with clear communicatio
             maxSize: this.maxCacheSize,
             categories,
             totalAccessCount,
-            averageAge: averageAge / 1000, // Convert to seconds
-            hitRate: Math.round(hitRate * 100) / 100 // Round to 2 decimal places
+            averageAge: averageAge / 1000,
+            hitRate: Math.round(hitRate * 100) / 100
         };
     }
-    /**
-     * Configure cache settings
-     */
     configureCaching(options) {
         if (options.enabled !== undefined) {
             this.cacheEnabled = options.enabled;

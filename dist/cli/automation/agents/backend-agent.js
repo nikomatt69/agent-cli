@@ -3,10 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BackendAgent = void 0;
 const base_agent_1 = require("./base-agent");
 const cli_ui_1 = require("../../utils/cli-ui");
-/**
- * Backend Specialized Agent
- * Handles server-side development, APIs, databases, and backend architecture
- */
 class BackendAgent extends base_agent_1.BaseAgent {
     constructor(workingDirectory = process.cwd()) {
         super(workingDirectory);
@@ -25,13 +21,11 @@ class BackendAgent extends base_agent_1.BaseAgent {
             'deployment'
         ];
         this.specialization = 'backend';
-        this.maxConcurrentTasks = 3; // Backend can handle multiple concurrent tasks
+        this.maxConcurrentTasks = 3;
     }
     async onInitialize() {
         cli_ui_1.CliUI.logInfo('🔧 Backend Agent initializing...');
-        // Check for backend frameworks and tools
         await this.detectBackendStack();
-        // Setup backend-specific tool configurations
         await this.configureBackendTools();
         cli_ui_1.CliUI.logSuccess('✅ Backend Agent ready for server-side tasks');
     }
@@ -60,31 +54,23 @@ class BackendAgent extends base_agent_1.BaseAgent {
     }
     async onStop() {
         cli_ui_1.CliUI.logInfo('🔧 Backend Agent shutting down...');
-        // Cleanup any backend-specific resources
     }
-    /**
-     * Create a new API endpoint
-     */
     async createAPI(task) {
         const { apiName, methods, framework, database } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🚀 Creating API: ${apiName} with methods: ${methods?.join(', ')}`);
         try {
-            // Generate API routes
             const routeCode = await this.generateAPIRoutes(apiName, methods, framework);
             const routePath = await this.determineRoutePath(apiName, framework);
             await this.executeTool('write-file-tool', routePath, routeCode);
-            // Generate controller
             const controllerCode = await this.generateController(apiName, methods, database);
             const controllerPath = await this.determineControllerPath(apiName, framework);
             await this.executeTool('write-file-tool', controllerPath, controllerCode);
-            // Generate model if database is specified
             let modelPath = null;
             if (database) {
                 const modelCode = await this.generateModel(apiName, database);
                 modelPath = await this.determineModelPath(apiName, database);
                 await this.executeTool('write-file-tool', modelPath, modelCode);
             }
-            // Generate API tests
             const testCode = await this.generateAPITests(apiName, methods);
             const testPath = routePath.replace(/\.(js|ts)$/, '.test.$1');
             await this.executeTool('write-file-tool', testPath, testCode);
@@ -102,22 +88,16 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to create API: ${error.message}`);
         }
     }
-    /**
-     * Design database schema
-     */
     async designDatabase(task) {
         const { entities, relationships, databaseType } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🗄️ Designing ${databaseType} database schema`);
         try {
-            // Generate database schema
             const schemaCode = await this.generateDatabaseSchema(entities, relationships, databaseType);
             const schemaPath = await this.determineSchemaPath(databaseType);
             await this.executeTool('write-file-tool', schemaPath, schemaCode);
-            // Generate migration files
             const migrationCode = await this.generateMigrations(entities, databaseType);
             const migrationPath = await this.determineMigrationPath(databaseType);
             await this.executeTool('write-file-tool', migrationPath, migrationCode);
-            // Generate seed data
             const seedCode = await this.generateSeedData(entities);
             const seedPath = await this.determineSeedPath(databaseType);
             await this.executeTool('write-file-tool', seedPath, seedCode);
@@ -135,26 +115,19 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to design database: ${error.message}`);
         }
     }
-    /**
-     * Implement authentication system
-     */
     async implementAuthentication(task) {
         const { authType, provider, features } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🔐 Implementing ${authType} authentication`);
         try {
-            // Generate authentication middleware
             const authMiddleware = await this.generateAuthMiddleware(authType, provider);
             const middlewarePath = 'src/middleware/auth.ts';
             await this.executeTool('write-file-tool', middlewarePath, authMiddleware);
-            // Generate authentication routes
             const authRoutes = await this.generateAuthRoutes(authType, features);
             const routesPath = 'src/routes/auth.ts';
             await this.executeTool('write-file-tool', routesPath, authRoutes);
-            // Generate authentication utilities
             const authUtils = await this.generateAuthUtils(authType, provider);
             const utilsPath = 'src/utils/auth.ts';
             await this.executeTool('write-file-tool', utilsPath, authUtils);
-            // Generate authentication tests
             const authTests = await this.generateAuthTests(authType);
             const testsPath = 'src/tests/auth.test.ts';
             await this.executeTool('write-file-tool', testsPath, authTests);
@@ -173,9 +146,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to implement authentication: ${error.message}`);
         }
     }
-    /**
-     * Setup middleware
-     */
     async setupMiddleware(task) {
         const { middlewareTypes, framework } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`⚙️ Setting up middleware: ${middlewareTypes?.join(', ')}`);
@@ -187,7 +157,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
                 await this.executeTool('write-file-tool', middlewarePath, middlewareCode);
                 middlewareFiles.push(middlewarePath);
             }
-            // Update main app file to use middleware
             await this.updateAppWithMiddleware(middlewareTypes, framework);
             return {
                 success: true,
@@ -200,30 +169,23 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to setup middleware: ${error.message}`);
         }
     }
-    /**
-     * Optimize backend performance
-     */
     async optimizeBackendPerformance(task) {
         const { optimizationType, targetFiles } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`⚡ Optimizing backend performance: ${optimizationType}`);
         try {
             const optimizations = [];
-            // Database query optimization
             if (optimizationType.includes('database')) {
                 const dbResult = await this.optimizeDatabaseQueries(targetFiles);
                 optimizations.push(dbResult);
             }
-            // Caching implementation
             if (optimizationType.includes('caching')) {
                 const cacheResult = await this.implementCaching(targetFiles);
                 optimizations.push(cacheResult);
             }
-            // Connection pooling
             if (optimizationType.includes('connection-pooling')) {
                 const poolResult = await this.setupConnectionPooling();
                 optimizations.push(poolResult);
             }
-            // API response optimization
             if (optimizationType.includes('api-response')) {
                 const apiResult = await this.optimizeAPIResponses(targetFiles);
                 optimizations.push(apiResult);
@@ -238,25 +200,19 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to optimize performance: ${error.message}`);
         }
     }
-    /**
-     * Setup monitoring
-     */
     async setupMonitoring(task) {
         const { monitoringTools, metrics } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`📊 Setting up monitoring with: ${monitoringTools?.join(', ')}`);
         try {
             const monitoringFiles = [];
-            // Setup logging
             const loggingCode = await this.generateLoggingSetup(monitoringTools);
             const loggingPath = 'src/utils/logger.ts';
             await this.executeTool('write-file-tool', loggingPath, loggingCode);
             monitoringFiles.push(loggingPath);
-            // Setup metrics collection
             const metricsCode = await this.generateMetricsSetup(metrics);
             const metricsPath = 'src/utils/metrics.ts';
             await this.executeTool('write-file-tool', metricsPath, metricsCode);
             monitoringFiles.push(metricsPath);
-            // Setup health checks
             const healthCode = await this.generateHealthChecks();
             const healthPath = 'src/routes/health.ts';
             await this.executeTool('write-file-tool', healthPath, healthCode);
@@ -272,20 +228,14 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to setup monitoring: ${error.message}`);
         }
     }
-    /**
-     * Containerize application
-     */
     async containerizeApplication(task) {
         const { containerTool, environment } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🐳 Containerizing application with ${containerTool}`);
         try {
-            // Generate Dockerfile
             const dockerfileContent = await this.generateDockerfile(environment);
             await this.executeTool('write-file-tool', 'Dockerfile', dockerfileContent);
-            // Generate docker-compose.yml
             const composeContent = await this.generateDockerCompose(environment);
             await this.executeTool('write-file-tool', 'docker-compose.yml', composeContent);
-            // Generate .dockerignore
             const dockerignoreContent = await this.generateDockerignore();
             await this.executeTool('write-file-tool', '.dockerignore', dockerignoreContent);
             return {
@@ -300,16 +250,11 @@ class BackendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to containerize application: ${error.message}`);
         }
     }
-    /**
-     * Handle generic backend tasks
-     */
     async handleGenericBackendTask(task) {
         cli_ui_1.CliUI.logInfo(`🔧 Handling generic backend task: ${task.type}`);
-        // Use planning system for complex tasks
         const plan = await this.generateTaskPlan(task);
         return await this.executePlan(plan);
     }
-    // Helper methods for backend operations
     async detectBackendStack() {
         try {
             const packageJson = await this.executeTool('read-file-tool', 'package.json');
@@ -334,7 +279,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
     async configureBackendTools() {
         cli_ui_1.CliUI.logDebug('🔧 Configuring backend-specific tools');
     }
-    // Placeholder methods for complex backend operations
     async generateAPIRoutes(apiName, methods, framework) {
         return `// ${apiName} API routes for ${framework}\nexport default router;`;
     }
@@ -383,7 +327,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
     async generateDockerignore() {
         return `node_modules\n.git\n.env\n*.log\nDockerfile\n.dockerignore`;
     }
-    // Path determination methods
     async determineRoutePath(apiName, framework) {
         return `src/routes/${apiName}.ts`;
     }
@@ -402,7 +345,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
     async determineSeedPath(databaseType) {
         return `src/database/seeds/001_initial.${databaseType === 'mongodb' ? 'js' : 'sql'}`;
     }
-    // Performance optimization methods
     async optimizeDatabaseQueries(files) {
         return { type: 'database-optimization', filesProcessed: files?.length || 0 };
     }
@@ -415,7 +357,6 @@ class BackendAgent extends base_agent_1.BaseAgent {
     async optimizeAPIResponses(files) {
         return { type: 'api-optimization', filesProcessed: files?.length || 0 };
     }
-    // Monitoring setup methods
     async generateLoggingSetup(tools) {
         return `// Logging setup with: ${tools?.join(', ')}\nexport const logger = {};`;
     }

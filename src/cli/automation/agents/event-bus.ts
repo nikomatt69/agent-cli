@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { CliUI } from '../../utils/cli-ui';
+import { randomBytes } from 'crypto';
 
 /**
  * Production-ready Event Bus for Multi-Agent Communication
@@ -279,14 +280,14 @@ export class EventBus extends EventEmitter {
      * Generate unique event ID
      */
     private generateEventId(): string {
-        return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `evt_${Date.now()}_${randomBytes(6).toString('base64url')}`;
     }
 
     /**
      * Generate unique subscriber ID
      */
     private generateSubscriberId(): string {
-        return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `sub_${Date.now()}_${randomBytes(6).toString('base64url')}`;
     }
 }
 

@@ -38,15 +38,12 @@ class ReactAgent extends base_agent_1.BaseAgent {
             };
         }
         try {
-            // First analyze the project structure
             console.log(chalk_1.default.cyan('📊 Analyzing React/Next.js project...'));
             const projectInfo = await tools_manager_1.toolsManager.analyzeProject();
-            // Check if it's a React/Next.js project
             const isReactProject = projectInfo.framework === 'React' || projectInfo.framework === 'Next.js' ||
                 projectInfo.technologies.some(tech => tech.includes('React') || tech.includes('Next'));
             if (!isReactProject) {
                 console.log(chalk_1.default.yellow('⚠️ This doesn\'t appear to be a React project. Setting up React environment...'));
-                // Install React dependencies if needed
                 const reactDeps = ['react', '@types/react'];
                 if (projectInfo.framework !== 'Next.js') {
                     reactDeps.push('react-dom', '@types/react-dom');
@@ -92,7 +89,6 @@ Always provide complete, working solutions with:
                 },
             ];
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
-            // Try to extract and create files if the AI suggests them
             await this.processReactResponse(response, taskData);
             return {
                 response,
@@ -107,16 +103,13 @@ Always provide complete, working solutions with:
         }
     }
     async processReactResponse(response, originalTask) {
-        // Look for file creation suggestions in the response
         const fileMatches = response.match(/```[\w]*\n([\s\S]*?)\n```/g);
         if (fileMatches && originalTask.toLowerCase().includes('create')) {
             console.log(chalk_1.default.blue('🚀 Creating React files based on response...'));
             for (let i = 0; i < fileMatches.length; i++) {
                 const codeBlock = fileMatches[i];
                 const code = codeBlock.replace(/```[\w]*\n/, '').replace(/\n```$/, '');
-                // Try to determine filename from context or use generic names
                 let filename = this.extractFilename(response, codeBlock) || `component-${i + 1}.tsx`;
-                // Ensure it's in the right directory
                 if (!filename.includes('/')) {
                     filename = `src/components/${filename}`;
                 }
@@ -128,7 +121,6 @@ Always provide complete, working solutions with:
                     console.log(chalk_1.default.yellow(`⚠️ Could not create file: ${filename}`));
                 }
             }
-            // Run type checking after creating files
             console.log(chalk_1.default.blue('🔍 Running TypeScript type check...'));
             const typeResult = await tools_manager_1.toolsManager.typeCheck();
             if (!typeResult.success) {
@@ -137,10 +129,8 @@ Always provide complete, working solutions with:
         }
     }
     extractFilename(response, codeBlock) {
-        // Look for filename mentions near the code block
         const lines = response.split('\n');
         const codeIndex = lines.findIndex(line => line.includes(codeBlock.split('\n')[0]));
-        // Check a few lines before the code block for filename hints
         for (let i = Math.max(0, codeIndex - 5); i < codeIndex; i++) {
             const line = lines[i];
             const filenameMatch = line.match(/([a-zA-Z][a-zA-Z0-9-_]*\.(tsx?|jsx?))/);
@@ -148,14 +138,12 @@ Always provide complete, working solutions with:
                 return filenameMatch[1];
             }
         }
-        // Look for component names in the code
         const componentMatch = codeBlock.match(/(?:export\s+(?:default\s+)?(?:function|const)\s+|class\s+)([A-Z][a-zA-Z0-9]*)/);
         if (componentMatch) {
             return `${componentMatch[1]}.tsx`;
         }
         return null;
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

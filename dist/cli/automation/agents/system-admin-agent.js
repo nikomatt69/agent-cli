@@ -93,7 +93,6 @@ Generate a structured plan with commands to execute.`,
                 schemaName: 'SystemCommands',
                 schemaDescription: 'Structured plan for system command execution',
             });
-            // Cast to any to handle unknown type
             const planResult = plan;
             console.log(chalk_1.default.blue.bold('\n📋 Command Execution Plan:'));
             console.log(chalk_1.default.gray(`Reasoning: ${planResult.reasoning || 'No reasoning provided'}`));
@@ -110,7 +109,6 @@ Generate a structured plan with commands to execute.`,
                 if (cmd.sudo)
                     console.log(`   ${chalk_1.default.red('⚠️ Requires sudo')}`);
             });
-            // Ask for confirmation
             const readline = require('readline').createInterface({
                 input: process.stdin,
                 output: process.stdout
@@ -125,7 +123,6 @@ Generate a structured plan with commands to execute.`,
                 console.log(chalk_1.default.yellow('Command execution cancelled'));
                 return { cancelled: true, plan };
             }
-            // Execute commands
             const results = [];
             for (const cmd of planResult.commands || []) {
                 console.log(chalk_1.default.blue(`\n🔄 Executing: ${cmd.command}`));
@@ -260,7 +257,7 @@ Generate a structured plan with commands to execute.`,
                 processCount: processes.length,
             });
             console.log(chalk_1.default.cyan(`📊 Memory: ${Math.round(systemInfo.memory.used / 1024 / 1024 / 1024 * 100) / 100}GB | Processes: ${processes.length}`));
-        }, 5000); // Sample every 5 seconds
+        }, 5000);
         setTimeout(() => {
             clearInterval(interval);
             console.log(chalk_1.default.green(`✅ Monitoring complete. Collected ${samples.length} samples`));
@@ -338,7 +335,6 @@ Generate a structured plan with commands to execute.`,
                 const duration = parseInt(taskData.match(/monitor.*?(\d+)/)?.[1] || '30');
                 return await this.monitorSystem(duration);
             }
-            // Default: treat as command execution
             return await this.executeCommands(taskData);
         }
         catch (error) {
@@ -348,7 +344,6 @@ Generate a structured plan with commands to execute.`,
             };
         }
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

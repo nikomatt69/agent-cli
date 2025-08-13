@@ -12,9 +12,6 @@ class WorkflowOrchestrator {
         this.toolRegistry = new tool_registry_1.ToolRegistry(workingDirectory);
         this.initializeDefaultChains();
     }
-    /**
-     * Esegue una catena di workflow completa
-     */
     async executeChain(chainId, initialParams = {}) {
         const chain = this.chainDefinitions.get(chainId);
         if (!chain) {
@@ -32,7 +29,6 @@ class WorkflowOrchestrator {
         };
         this.activeChains.set(chainId, context);
         try {
-            // Publish chain start event
             await this.eventBus.publish(event_bus_1.EventTypes.TASK_STARTED, {
                 taskId: chainId,
                 agentId: 'workflow-orchestrator',
@@ -40,7 +36,6 @@ class WorkflowOrchestrator {
                 chainName: chain.name
             });
             const result = await this.executeSteps(chain, context);
-            // Publish chain completion event
             await this.eventBus.publish(event_bus_1.EventTypes.TASK_COMPLETED, {
                 taskId: chainId,
                 agentId: 'workflow-orchestrator',
@@ -62,9 +57,6 @@ class WorkflowOrchestrator {
             this.activeChains.delete(chainId);
         }
     }
-    /**
-     * Esegue i step della catena sequenzialmente
-     */
     async executeSteps(chain, context) {
         const results = [];
         const errors = [];
@@ -74,14 +66,11 @@ class WorkflowOrchestrator {
             context.currentStep = i + 1;
             try {
                 cli_ui_1.CliUI.logInfo(`📋 Step ${context.currentStep}/${context.totalSteps}: ${step.toolName}`);
-                // Verifica condizioni
                 if (step.condition && !step.condition(context.previousResults)) {
                     cli_ui_1.CliUI.logWarning(`⏭️ Skipping step ${step.id} - condition not met`);
                     continue;
                 }
-                // Safety checks
                 await this.performSafetyChecks(step, context, chain.safetyChecks);
-                // Verifica auto-approval
                 const needsApproval = await this.checkApprovalRequired(step, chain.autoApprovalRules);
                 if (needsApproval) {
                     const approved = await this.requestHumanApproval(step, context);
@@ -89,13 +78,11 @@ class WorkflowOrchestrator {
                         throw new Error(`Step ${step.id} was not approved by human reviewer`);
                     }
                 }
-                // Esegui il tool
                 const result = await this.executeStep(step, context);
                 results.push(result);
                 context.previousResults.push(result);
                 logs.push(`✅ Step ${step.id} completed successfully`);
                 cli_ui_1.CliUI.logSuccess(`✅ Step completed: ${step.toolName}`);
-                // Handle dynamic step generation
                 if (step.onSuccess) {
                     const additionalSteps = step.onSuccess(result);
                     if (additionalSteps.length > 0) {
@@ -108,15 +95,13 @@ class WorkflowOrchestrator {
             catch (error) {
                 cli_ui_1.CliUI.logError(`❌ Step ${step.id} failed: ${error.message}`);
                 errors.push({ step: step.id, error: error.message });
-                // Handle retry logic
                 const retryCount = step.retryCount || 0;
                 if (retryCount > 0) {
                     cli_ui_1.CliUI.logWarning(`🔄 Retrying step ${step.id} (${retryCount} attempts remaining)`);
                     step.retryCount = retryCount - 1;
-                    i--; // Retry current step
+                    i--;
                     continue;
                 }
-                // Handle error recovery
                 if (step.onError) {
                     const recoverySteps = step.onError(error);
                     if (recoverySteps.length > 0) {
@@ -126,7 +111,6 @@ class WorkflowOrchestrator {
                         continue;
                     }
                 }
-                // Se non c'è recovery, fallisce tutta la catena
                 throw error;
             }
         }
@@ -142,38 +126,28 @@ class WorkflowOrchestrator {
             logs
         };
     }
-    /**
-     * Esegue un singolo step del workflow
-     */
     async executeStep(step, context) {
         const tool = this.toolRegistry.getTool(step.toolName);
         if (!tool) {
             throw new Error(`Tool '${step.toolName}' not found in registry`);
         }
-        // Sostituisci variabili nei parametri
         const resolvedParams = this.resolveParameters(step.parameters, context);
-        // Esegui il tool con timeout
-        const timeout = step.timeout || 30000; // 30 secondi default
+        const timeout = step.timeout || 30000;
         const result = await Promise.race([
             tool.execute(resolvedParams),
             new Promise((_, reject) => setTimeout(() => reject(new Error(`Step ${step.id} timed out after ${timeout}ms`)), timeout))
         ]);
         return result;
     }
-    /**
-     * Risolve le variabili nei parametri usando il contesto
-     */
     resolveParameters(params, context) {
         const resolved = {};
         for (const [key, value] of Object.entries(params)) {
             if (typeof value === 'string' && value.startsWith('$')) {
-                // Variabile da risolvere
                 const varName = value.substring(1);
                 if (varName === 'workingDirectory') {
                     resolved[key] = context.workingDirectory;
                 }
                 else if (varName.startsWith('result[')) {
-                    // Accesso a risultato precedente: $result[0].filePath
                     const match = varName.match(/result\[(\d+)\]\.(.+)/);
                     if (match) {
                         const index = parseInt(match[1]);
@@ -185,7 +159,7 @@ class WorkflowOrchestrator {
                     resolved[key] = context.variables[varName];
                 }
                 else {
-                    resolved[key] = value; // Mantieni valore originale se non trovato
+                    resolved[key] = value;
                 }
             }
             else {
@@ -194,9 +168,6 @@ class WorkflowOrchestrator {
         }
         return resolved;
     }
-    /**
-     * Verifica se uno step richiede approvazione umana
-     */
     async checkApprovalRequired(step, rules) {
         if (step.autoApprove === true)
             return false;
@@ -214,19 +185,12 @@ class WorkflowOrchestrator {
                 }
             }
         }
-        // Default: richiedi approvazione per operazioni non specificate
         return true;
     }
-    /**
-     * Verifica pattern matching per tool names
-     */
     matchesPattern(toolName, pattern) {
         const regex = new RegExp(pattern.replace('*', '.*'));
         return regex.test(toolName);
     }
-    /**
-     * Verifica condizioni sui parametri
-     */
     matchesParameterConditions(params, conditions) {
         for (const [key, expectedValue] of Object.entries(conditions)) {
             if (params[key] !== expectedValue) {
@@ -235,9 +199,6 @@ class WorkflowOrchestrator {
         }
         return true;
     }
-    /**
-     * Esegue safety checks prima dell'esecuzione
-     */
     async performSafetyChecks(step, context, checks) {
         for (const check of checks) {
             if (!check.check(step, context)) {
@@ -245,23 +206,14 @@ class WorkflowOrchestrator {
             }
         }
     }
-    /**
-     * Richiede approvazione umana per step critici
-     */
     async requestHumanApproval(step, context) {
         cli_ui_1.CliUI.logWarning(`🚨 Human approval required for step: ${step.id}`);
         cli_ui_1.CliUI.logInfo(`Tool: ${step.toolName}`);
         cli_ui_1.CliUI.logInfo(`Parameters: ${JSON.stringify(step.parameters, null, 2)}`);
-        // In un'implementazione reale, questo dovrebbe aspettare input umano
-        // Per ora, assumiamo approvazione automatica per step sicuri
         const safeTools = ['read-file-tool', 'grep-search', 'find-files-tool'];
         return safeTools.includes(step.toolName);
     }
-    /**
-     * Inizializza catene di workflow predefinite
-     */
     initializeDefaultChains() {
-        // Catena per implementare nuova feature
         this.chainDefinitions.set('implement-feature', {
             id: 'implement-feature',
             name: 'Implement New Feature',
@@ -329,22 +281,13 @@ class WorkflowOrchestrator {
         });
         cli_ui_1.CliUI.logInfo(`🔗 Initialized ${this.chainDefinitions.size} workflow chains`);
     }
-    /**
-     * Registra una nuova catena di workflow
-     */
     registerChain(chain) {
         this.chainDefinitions.set(chain.id, chain);
         cli_ui_1.CliUI.logInfo(`📝 Registered workflow chain: ${chain.name}`);
     }
-    /**
-     * Lista tutte le catene disponibili
-     */
     listChains() {
         return Array.from(this.chainDefinitions.values());
     }
-    /**
-     * Ottiene lo stato di una catena attiva
-     */
     getChainStatus(chainId) {
         return this.activeChains.get(chainId) || null;
     }

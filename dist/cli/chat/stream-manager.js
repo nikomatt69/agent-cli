@@ -8,10 +8,6 @@ const events_1 = require("events");
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
-/**
- * StreamManager emits events during planning/execution
- * and can export them to a file.
- */
 class StreamManager {
     constructor() {
         this.emitter = new events_1.EventEmitter();
@@ -24,7 +20,6 @@ class StreamManager {
         this.events.push(event);
         this.emitter.emit(event.type, event);
     }
-    /** Export recorded events to a JSON file. */
     async exportEvents(agentId) {
         const dir = path_1.default.join(os_1.default.homedir(), '.nikcli', 'streams');
         await fs_1.promises.mkdir(dir, { recursive: true });

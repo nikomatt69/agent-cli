@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 "use strict";
-/**
- * Main AI Development Orchestrator
- * Production-ready autonomous development system with streaming interface
- */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -24,7 +20,6 @@ class MainOrchestrator {
         this.setupGlobalHandlers();
     }
     setupGlobalHandlers() {
-        // Global error handler
         process.on('unhandledRejection', (reason, promise) => {
             console.error(chalk_1.default.red('❌ Unhandled Rejection:'), reason);
         });
@@ -32,25 +27,20 @@ class MainOrchestrator {
             console.error(chalk_1.default.red('❌ Uncaught Exception:'), error);
             this.gracefulShutdown();
         });
-        // Graceful shutdown handlers
         process.on('SIGTERM', this.gracefulShutdown.bind(this));
         process.on('SIGINT', this.gracefulShutdown.bind(this));
     }
     async gracefulShutdown() {
         console.log(chalk_1.default.yellow('\\n🛑 Shutting down orchestrator...'));
         try {
-            // Stop all active agents
             const activeAgents = agent_service_1.agentService.getActiveAgents();
             if (activeAgents.length > 0) {
                 console.log(chalk_1.default.blue(`⏳ Waiting for ${activeAgents.length} agents to complete...`));
-                // In production, implement proper agent shutdown
             }
-            // Save any pending diffs
             const pendingDiffs = diff_manager_1.diffManager.getPendingCount();
             if (pendingDiffs > 0) {
                 console.log(chalk_1.default.yellow(`💾 ${pendingDiffs} diffs still pending`));
             }
-            // Clear resources
             await this.cleanup();
             console.log(chalk_1.default.green('✅ Orchestrator shut down cleanly'));
         }
@@ -62,7 +52,6 @@ class MainOrchestrator {
         }
     }
     async cleanup() {
-        // Cleanup services
         const lspServers = lsp_service_1.lspService.getServerStatus();
         for (const server of lspServers) {
             if (server.status === 'running') {
@@ -129,7 +118,6 @@ class MainOrchestrator {
     }
     checkDependencies() {
         try {
-            // Check critical dependencies
             require('chalk');
             require('boxen');
             require('nanoid');
@@ -194,21 +182,17 @@ class MainOrchestrator {
         return true;
     }
     async initializeServices() {
-        // Set working directory for all services
         const workingDir = process.cwd();
         tool_service_1.toolService.setWorkingDirectory(workingDir);
         planning_service_1.planningService.setWorkingDirectory(workingDir);
         lsp_service_1.lspService.setWorkingDirectory(workingDir);
-        diff_manager_1.diffManager.setAutoAccept(true); // Default to auto-accept as shown in image
+        diff_manager_1.diffManager.setAutoAccept(true);
     }
     async initializeAgents() {
-        // Agent service is initialized via import
-        // Verify all agents are available
         const agents = agent_service_1.agentService.getAvailableAgents();
         console.log(chalk_1.default.dim(`   Loaded ${agents.length} agents`));
     }
     async initializePlanning() {
-        // Planning service initialization
         console.log(chalk_1.default.dim('   Planning system ready'));
     }
     async initializeTools() {
@@ -216,11 +200,9 @@ class MainOrchestrator {
         console.log(chalk_1.default.dim(`   Loaded ${tools.length} tools`));
     }
     async initializeSecurity() {
-        // Security policies are initialized in the orchestrator
         console.log(chalk_1.default.dim('   Security policies loaded'));
     }
     async initializeContext() {
-        // Context management is handled in the streaming orchestrator
         console.log(chalk_1.default.dim('   Context management ready'));
     }
     showQuickStart() {
@@ -239,25 +221,19 @@ class MainOrchestrator {
     }
     async start() {
         try {
-            // Show startup banner
             this.showStartupBanner();
-            // Wait for user to see banner
             await new Promise(resolve => setTimeout(resolve, 2000));
-            // Check system requirements
             const requirementsMet = await this.checkSystemRequirements();
             if (!requirementsMet) {
                 console.log(chalk_1.default.red('\\n❌ Cannot start - system requirements not met'));
                 process.exit(1);
             }
-            // Initialize all systems
             const initialized = await this.initializeSystem();
             if (!initialized) {
                 console.log(chalk_1.default.red('\\n❌ Cannot start - system initialization failed'));
                 process.exit(1);
             }
-            // Show quick start guide
             this.showQuickStart();
-            // Start the streaming orchestrator
             console.log(chalk_1.default.blue.bold('🎛️ Starting Streaming Orchestrator...\\n'));
             await this.streamOrchestrator.start();
         }
@@ -268,7 +244,6 @@ class MainOrchestrator {
     }
 }
 exports.MainOrchestrator = MainOrchestrator;
-// Start if run directly
 if (require.main === module) {
     const orchestrator = new MainOrchestrator();
     orchestrator.start().catch(error => {

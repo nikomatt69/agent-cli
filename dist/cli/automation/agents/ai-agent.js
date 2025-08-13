@@ -22,7 +22,6 @@ class AIAnalysisAgent extends base_agent_1.BaseAgent {
         if (taskData) {
             console.log(`Task: ${taskData}`);
         }
-        // Default code to analyze if no task provided
         const codeToAnalyze = taskData || 'function add(a: number, b: number): number { return a + b; }';
         const prompt = `Analyze this code and provide insights about its functionality, potential improvements, and best practices:\n\n${codeToAnalyze}`;
         try {
@@ -49,7 +48,6 @@ class AIAnalysisAgent extends base_agent_1.BaseAgent {
     async onStop() {
         console.log('AI Analysis Agent cleaned up');
     }
-    // Keep legacy methods for backward compatibility
     async run(task) {
         return await this.onExecuteTask(task);
     }

@@ -36,7 +36,6 @@ class ModelProvider {
                 return googleProvider(config.model);
             }
             case 'ollama': {
-                // Ollama does not require API keys; assumes local daemon at default endpoint
                 const ollamaProvider = (0, ollama_ai_provider_1.createOllama)({});
                 return ollamaProvider(config.model);
             }
@@ -56,12 +55,11 @@ class ModelProvider {
             model: model,
             messages: options.messages.map((msg) => ({ role: msg.role, content: msg.content })),
         };
-        // Always honor explicit user settings for all providers
         if (options.maxTokens != null) {
             baseOptions.maxTokens = options.maxTokens;
         }
         else if (currentModelConfig.provider !== 'openai') {
-            baseOptions.maxTokens = 4000; // provider-specific default when not supplied
+            baseOptions.maxTokens = 4000;
         }
         const resolvedTemp = options.temperature ?? config_manager_1.configManager.get('temperature');
         if (resolvedTemp != null) {

@@ -41,17 +41,12 @@ const child_process_1 = require("child_process");
 const util_1 = require("util");
 const logger_1 = require("../../utils/logger");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
-/**
- * Universal Agent - All-in-one enterprise agent with complete functionality
- * Combines analysis, generation, review, optimization, React, backend, DevOps, and autonomous capabilities
- */
 class UniversalAgent {
     constructor(workingDirectory = process.cwd()) {
         this.name = 'Universal Agent';
         this.description = 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities';
         this.specialization = 'universal';
         this.capabilities = [
-            // Core capabilities
             'code-generation',
             'code-analysis',
             'code-review',
@@ -59,7 +54,6 @@ class UniversalAgent {
             'debugging',
             'refactoring',
             'testing',
-            // Frontend capabilities
             'react',
             'nextjs',
             'typescript',
@@ -71,7 +65,6 @@ class UniversalAgent {
             'hooks',
             'jsx',
             'tsx',
-            // Backend capabilities
             'backend',
             'nodejs',
             'api-development',
@@ -80,7 +73,6 @@ class UniversalAgent {
             'rest-api',
             'graphql',
             'microservices',
-            // DevOps capabilities
             'devops',
             'ci-cd',
             'docker',
@@ -89,20 +81,18 @@ class UniversalAgent {
             'infrastructure',
             'monitoring',
             'security',
-            // Autonomous capabilities
             'file-operations',
             'project-creation',
             'autonomous-coding',
             'system-administration',
             'full-stack-development',
-            // Analysis capabilities
             'performance-analysis',
             'security-analysis',
             'quality-assessment',
             'architecture-review',
             'documentation-generation'
         ];
-        this.version = '0.1.9-beta';
+        this.version = '0.1.10-beta';
         this.status = 'initializing';
         this.currentTasks = 0;
         this.maxConcurrentTasks = 3;
@@ -169,9 +159,7 @@ class UniversalAgent {
             capabilities: this.capabilities.length,
             permissions: Object.keys(this.config.permissions).length
         });
-        // Load guidance files
         await this.loadGuidanceFiles();
-        // Initialize development environment detection
         await this.detectEnvironment();
         this.status = 'ready';
         await logger_1.logger.logAgent('info', this.id, 'Universal Agent initialized successfully', {
@@ -191,9 +179,7 @@ class UniversalAgent {
         try {
             task.status = 'in_progress';
             task.startedAt = new Date();
-            // Analyze task to determine best approach
             const approach = await this.analyzeTask(task);
-            // Execute based on task type and requirements
             let result;
             switch (approach.category) {
                 case 'code-analysis':
@@ -228,7 +214,6 @@ class UniversalAgent {
             }
             const endTime = Date.now();
             const duration = endTime - startTime;
-            // Update metrics
             this.updateMetrics(true, duration);
             const taskResult = {
                 taskId: task.id,
@@ -279,7 +264,6 @@ class UniversalAgent {
         }
     }
     canHandle(task) {
-        // Universal agent can handle any task
         if (task.requiredCapabilities) {
             return task.requiredCapabilities.some(cap => this.capabilities.includes(cap));
         }
@@ -297,19 +281,16 @@ class UniversalAgent {
     async cleanup() {
         this.status = 'offline';
         await logger_1.logger.logAgent('info', this.id, 'Universal Agent cleanup started');
-        // Save any pending state
         if (this.currentTasks > 0) {
             await logger_1.logger.logAgent('warn', this.id, `Cleanup called with ${this.currentTasks} tasks still running`);
         }
         this.status = 'offline';
         await logger_1.logger.logAgent('info', this.id, 'Universal Agent cleanup completed');
     }
-    // Additional required methods for Agent interface
     async run(task) {
         return this.executeTask(task);
     }
     async executeTodo(todo) {
-        // Convert todo to task and execute
         const task = {
             id: todo.id,
             type: 'internal',
@@ -330,12 +311,10 @@ class UniversalAgent {
     getCapabilities() {
         return [...this.capabilities];
     }
-    // Private methods for different task types
     async analyzeTask(task) {
         const description = task.description?.toLowerCase() || '';
         const title = task.title?.toLowerCase() || '';
         const combined = `${title} ${description}`;
-        // Determine task category based on content analysis
         if (combined.includes('react') || combined.includes('component') || combined.includes('jsx')) {
             return { category: 'react-development', confidence: 0.9, reasoning: 'Contains React-related keywords' };
         }
@@ -872,7 +851,6 @@ class UniversalAgent {
             try {
                 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
                 const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
-                // Detect frameworks and tools
                 if (deps.react)
                     this.capabilities.push('react-detected');
                 if (deps.next)

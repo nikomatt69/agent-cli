@@ -43,10 +43,6 @@ const chalk_1 = __importDefault(require("chalk"));
 const chokidar = __importStar(require("chokidar"));
 const marked_1 = require("marked");
 const yaml = __importStar(require("js-yaml"));
-/**
- * GuidanceManager - Core system for CLAUDE.md/CODEX.md integration
- * Automatically detects, parses, and injects guidance files into AI context
- */
 class GuidanceManager {
     constructor(workingDirectory, globalGuidanceDir) {
         this.watchers = [];
@@ -62,40 +58,28 @@ class GuidanceManager {
             console.log(chalk_1.default.blue(`📁 Created global guidance directory: ${this.globalGuidanceDir}`));
         }
     }
-    /**
-     * Initialize the guidance system
-     */
     async initialize(onContextUpdate) {
         this.onContextUpdate = onContextUpdate;
         console.log(chalk_1.default.blue('🧠 Initializing guidance system...'));
-        // Scan for existing guidance files
         await this.scanGuidanceFiles();
-        // Set up file watchers
         this.setupFileWatchers();
-        // Build initial context
         await this.updateContext();
         console.log(chalk_1.default.green(`✅ Guidance system initialized with ${this.guidanceFiles.size} files`));
     }
-    /**
-     * Scan for all guidance files in global, project, and subdirectories
-     */
     async scanGuidanceFiles() {
         const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md'];
-        // Scan global directory
         for (const filename of guidanceTypes) {
             const globalPath = path.join(this.globalGuidanceDir, filename);
             if (fs.existsSync(globalPath)) {
                 await this.loadGuidanceFile(globalPath, 'global');
             }
         }
-        // Scan project directory and subdirectories
         await this.scanProjectGuidance(this.workingDirectory);
     }
     async scanProjectGuidance(dir) {
         const guidanceTypes = ['CLAUDE.md', 'CODEX.md', 'AGENTS.md', 'NIKOCLI.md'];
         try {
             const items = fs.readdirSync(dir, { withFileTypes: true });
-            // Check for guidance files in current directory
             for (const filename of guidanceTypes) {
                 const filePath = path.join(dir, filename);
                 if (fs.existsSync(filePath)) {
@@ -103,7 +87,6 @@ class GuidanceManager {
                     await this.loadGuidanceFile(filePath, level);
                 }
             }
-            // Recursively scan subdirectories (but avoid node_modules, .git, etc.)
             for (const item of items) {
                 if (item.isDirectory() && !this.shouldSkipDirectory(item.name)) {
                     const subDir = path.join(dir, item.name);
@@ -112,16 +95,12 @@ class GuidanceManager {
             }
         }
         catch (error) {
-            // Silently skip directories we can't read
         }
     }
     shouldSkipDirectory(name) {
         const skipDirs = ['node_modules', '.git', '.next', 'dist', 'build', '.vscode', '.idea'];
         return skipDirs.includes(name) || name.startsWith('.');
     }
-    /**
-     * Load and parse a guidance file
-     */
     async loadGuidanceFile(filePath, level) {
         try {
             const stats = fs.statSync(filePath);
@@ -144,15 +123,11 @@ class GuidanceManager {
             console.log(chalk_1.default.yellow(`⚠️ Could not load guidance file ${filePath}: ${error.message}`));
         }
     }
-    /**
-     * Parse guidance file content and extract structured information
-     */
     async parseGuidanceFile(content, type) {
         const parsed = {
             sections: {},
             instructions: []
         };
-        // Try to extract YAML frontmatter
         const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
         if (frontmatterMatch) {
             try {
@@ -160,16 +135,13 @@ class GuidanceManager {
                 content = frontmatterMatch[2];
             }
             catch (error) {
-                // If YAML parsing fails, treat as regular markdown
             }
         }
-        // Parse markdown sections
         const tokens = marked_1.marked.lexer(content);
         let currentSection = '';
         let currentContent = '';
         for (const token of tokens) {
             if (token.type === 'heading' && token.depth <= 2) {
-                // Save previous section
                 if (currentSection && currentContent.trim()) {
                     parsed.sections[currentSection] = currentContent.trim();
                 }
@@ -177,7 +149,6 @@ class GuidanceManager {
                 currentContent = '';
             }
             else if (token.type === 'list') {
-                // Extract instructions from lists
                 const items = this.extractListItems(token);
                 parsed.instructions.push(...items);
                 currentContent += this.tokenToText(token) + '\n';
@@ -186,11 +157,9 @@ class GuidanceManager {
                 currentContent += this.tokenToText(token) + '\n';
             }
         }
-        // Save last section
         if (currentSection && currentContent.trim()) {
             parsed.sections[currentSection] = currentContent.trim();
         }
-        // If no sections found, treat entire content as instructions
         if (Object.keys(parsed.sections).length === 0) {
             parsed.sections.general = content.trim();
         }
@@ -227,9 +196,6 @@ class GuidanceManager {
                 return token.raw || token.text || '';
         }
     }
-    /**
-     * Set up file watchers for automatic updates
-     */
     setupFileWatchers() {
         const watchPaths = [
             path.join(this.globalGuidanceDir, '*.md'),
@@ -263,14 +229,10 @@ class GuidanceManager {
         }
         await this.updateContext();
     }
-    /**
-     * Update the merged guidance context
-     */
     async updateContext() {
         const globalGuidance = Array.from(this.guidanceFiles.values()).filter(f => f.level === 'global');
         const projectGuidance = Array.from(this.guidanceFiles.values()).filter(f => f.level === 'project');
         const subdirGuidance = Array.from(this.guidanceFiles.values()).filter(f => f.level === 'subdirectory');
-        // Merge instructions with proper priority (subdirectory > project > global)
         const mergedInstructions = this.mergeInstructions(globalGuidance, projectGuidance, subdirGuidance);
         this.currentContext = {
             globalGuidance,
@@ -280,17 +242,12 @@ class GuidanceManager {
             lastUpdated: new Date()
         };
         console.log(chalk_1.default.green(`🔄 Guidance context updated (${globalGuidance.length + projectGuidance.length + subdirGuidance.length} files)`));
-        // Notify listeners
         if (this.onContextUpdate && this.currentContext) {
             this.onContextUpdate(this.currentContext);
         }
     }
-    /**
-     * Merge instructions from multiple guidance files
-     */
     mergeInstructions(global, project, subdir) {
         let instructions = [];
-        // Add global instructions first
         for (const file of global) {
             if (file.parsed?.sections?.general) {
                 instructions.push(`# Global ${file.type.toUpperCase()} Guidelines\n${file.parsed.sections.general}`);
@@ -301,7 +258,6 @@ class GuidanceManager {
                 }
             }
         }
-        // Add project-level instructions
         for (const file of project) {
             if (file.parsed?.sections?.general) {
                 instructions.push(`# Project ${file.type.toUpperCase()} Guidelines\n${file.parsed.sections.general}`);
@@ -312,7 +268,6 @@ class GuidanceManager {
                 }
             }
         }
-        // Add subdirectory-specific instructions (highest priority)
         for (const file of subdir) {
             const relativePath = path.relative(this.workingDirectory, path.dirname(file.path));
             if (file.parsed?.sections?.general) {
@@ -326,21 +281,14 @@ class GuidanceManager {
         }
         return instructions.join('\n\n');
     }
-    /**
-     * Get current guidance context
-     */
     getContext() {
         return this.currentContext;
     }
-    /**
-     * Get guidance for a specific context (agent system prompt injection)
-     */
     getContextForAgent(agentType, currentDirectory) {
         if (!this.currentContext) {
             return '';
         }
         let relevantInstructions = this.currentContext.mergedInstructions;
-        // Filter instructions based on agent type
         if (agentType) {
             const agentSpecific = Array.from(this.guidanceFiles.values())
                 .filter(f => f.type === 'agents' && f.parsed?.sections?.[agentType.toLowerCase()])
@@ -350,7 +298,6 @@ class GuidanceManager {
                 relevantInstructions = `# Agent-Specific Instructions for ${agentType}\n${agentSpecific}\n\n${relevantInstructions}`;
             }
         }
-        // Add context-specific instructions
         if (currentDirectory && currentDirectory !== this.workingDirectory) {
             const dirSpecific = Array.from(this.guidanceFiles.values())
                 .filter(f => f.level === 'subdirectory' && path.dirname(f.path) === currentDirectory)
@@ -362,9 +309,6 @@ class GuidanceManager {
         }
         return relevantInstructions;
     }
-    /**
-     * Create a sample guidance file
-     */
     createSampleGuidanceFile(type, location) {
         const templates = {
             claude: `# CLAUDE.md
@@ -482,15 +426,9 @@ You are a backend specialist focusing on:
             throw error;
         }
     }
-    /**
-     * List all guidance files
-     */
     listGuidanceFiles() {
         return Array.from(this.guidanceFiles.values());
     }
-    /**
-     * Get guidance file stats
-     */
     getStats() {
         const files = Array.from(this.guidanceFiles.values());
         return {
@@ -508,9 +446,6 @@ You are a backend specialist focusing on:
             totalSize: files.reduce((sum, f) => sum + f.content.length, 0)
         };
     }
-    /**
-     * Cleanup watchers and resources
-     */
     async cleanup() {
         console.log(chalk_1.default.blue('🧹 Cleaning up guidance system...'));
         for (const watcher of this.watchers) {

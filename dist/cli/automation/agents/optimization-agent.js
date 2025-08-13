@@ -20,7 +20,6 @@ class OptimizationAgent extends base_agent_1.BaseAgent {
         if (taskData) {
             console.log(`Task: ${taskData}`);
         }
-        // Default code to optimize if no taskData provided
         const codeToOptimize = taskData || `
 function findUser(users, id) {
   for (let i = 0; i < users.length; i++) {
@@ -68,7 +67,6 @@ Provide the optimized version with explanations of the improvements made.`;
     async onStop() {
         console.log('Optimization Agent cleaned up');
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

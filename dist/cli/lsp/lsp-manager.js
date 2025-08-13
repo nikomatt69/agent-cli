@@ -12,15 +12,13 @@ const fs_1 = require("fs");
 const chalk_1 = __importDefault(require("chalk"));
 class LSPManager {
     constructor() {
-        this.clients = new Map(); // workspaceRoot+serverId -> client
+        this.clients = new Map();
         this.workspaceRoots = new Set();
         this.fileAnalysisCache = new Map();
-        // Cleanup on process exit
         process.on('beforeExit', () => this.shutdown());
         process.on('SIGINT', () => this.shutdown());
         process.on('SIGTERM', () => this.shutdown());
     }
-    // Get or create LSP clients for a file
     async getClientsForFile(filePath) {
         const absolutePath = (0, path_1.resolve)(filePath);
         const applicableServers = (0, lsp_servers_1.getApplicableLSPServers)(absolutePath);
@@ -50,10 +48,8 @@ class LSPManager {
         }
         return clients;
     }
-    // Analyze a file with full LSP context
     async analyzeFile(filePath) {
         const absolutePath = (0, path_1.resolve)(filePath);
-        // Check cache first
         const cached = this.fileAnalysisCache.get(absolutePath);
         if (cached) {
             return cached;
@@ -71,34 +67,26 @@ class LSPManager {
             diagnostics: [],
             workspaceRoot: (0, path_1.dirname)(absolutePath)
         };
-        // Get data from all applicable LSP clients
         for (const client of clients) {
             try {
-                // Open file if not already open
                 if (!client.isFileOpen(absolutePath)) {
                     await client.openFile(absolutePath);
                 }
-                // Wait a moment for diagnostics to arrive
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                // Collect diagnostics
                 const diagnostics = client.getDiagnostics(absolutePath);
                 context.diagnostics.push(...diagnostics);
-                // Get document symbols
                 const symbols = await client.getDocumentSymbols(absolutePath);
                 context.symbols.push(...symbols);
-                // Update workspace root to the LSP client's root
                 context.workspaceRoot = client.getWorkspaceRoot();
             }
             catch (error) {
                 console.log(chalk_1.default.yellow(`⚠️ Error analyzing with ${client.getServerInfo().name}: ${error.message}`));
             }
         }
-        // Cache the result
         this.fileAnalysisCache.set(absolutePath, context);
         console.log(chalk_1.default.green(`✅ Analyzed ${(0, path_1.relative)(context.workspaceRoot, absolutePath)}: ${context.symbols.length} symbols, ${context.diagnostics.length} diagnostics`));
         return context;
     }
-    // Get workspace-wide insights
     async getWorkspaceInsights(workspaceRoot) {
         const insights = {
             totalFiles: 0,
@@ -111,20 +99,16 @@ class LSPManager {
         };
         const languageSet = new Set();
         const frameworkSet = new Set();
-        // Collect data from all clients in this workspace
         for (const [key, client] of this.clients) {
             if (!key.startsWith(workspaceRoot))
                 continue;
-            // Get all diagnostics
             const allDiagnostics = client.getDiagnostics();
             for (const [filePath, diagnostics] of allDiagnostics) {
                 insights.totalFiles++;
-                // Detect language
                 const language = (0, language_detection_1.detectLanguageFromExtension)(filePath);
                 if (language !== 'plaintext') {
                     languageSet.add(language);
                 }
-                // Count diagnostics by severity
                 diagnostics.forEach(diag => {
                     switch (diag.severity) {
                         case 1:
@@ -139,7 +123,6 @@ class LSPManager {
                             break;
                     }
                 });
-                // Get symbols
                 try {
                     const symbols = await client.getDocumentSymbols(filePath);
                     symbols.forEach(symbol => {
@@ -161,13 +144,11 @@ class LSPManager {
                     });
                 }
                 catch (error) {
-                    // Skip if can't get symbols
                 }
             }
         }
         insights.languages = Array.from(languageSet);
         insights.frameworks = Array.from(frameworkSet);
-        // Generate problems and suggestions
         if (insights.diagnostics.errors > 0) {
             insights.problems.push(`${insights.diagnostics.errors} compilation errors need fixing`);
         }
@@ -182,7 +163,6 @@ class LSPManager {
         }
         return insights;
     }
-    // Search symbols across workspace
     async searchSymbols(query, workspaceRoot) {
         const allSymbols = [];
         for (const [key, client] of this.clients) {
@@ -193,12 +173,10 @@ class LSPManager {
                 allSymbols.push(...symbols);
             }
             catch (error) {
-                // Skip failed searches
             }
         }
         return allSymbols;
     }
-    // Get hover information
     async getHoverInfo(filePath, line, character) {
         const clients = await this.getClientsForFile(filePath);
         for (const client of clients) {
@@ -216,7 +194,6 @@ class LSPManager {
         }
         return null;
     }
-    // Get completions
     async getCompletions(filePath, line, character) {
         const clients = await this.getClientsForFile(filePath);
         const allCompletions = [];
@@ -234,11 +211,9 @@ class LSPManager {
         }
         return allCompletions;
     }
-    // Ensure LSP dependencies are installed
     async ensureDependencies(languages) {
         const serverIds = languages
             .map(lang => {
-            // Map languages to server IDs
             if (['javascript', 'typescript', 'typescriptreact', 'javascriptreact'].includes(lang))
                 return 'typescript';
             if (lang === 'python')
@@ -254,7 +229,6 @@ class LSPManager {
             .filter(Boolean);
         await (0, lsp_servers_1.ensureLSPDependencies)(serverIds);
     }
-    // Get all diagnostics as formatted strings
     getAllDiagnostics() {
         const diagnostics = [];
         for (const client of this.clients.values()) {
@@ -268,7 +242,6 @@ class LSPManager {
         }
         return diagnostics;
     }
-    // Check if file has errors
     hasErrors(filePath) {
         for (const client of this.clients.values()) {
             const diagnostics = client.getDiagnostics(filePath);
@@ -278,7 +251,6 @@ class LSPManager {
         }
         return false;
     }
-    // Get error count for workspace
     getErrorCount(workspaceRoot) {
         let errorCount = 0;
         for (const [key, client] of this.clients) {
@@ -291,15 +263,12 @@ class LSPManager {
         }
         return errorCount;
     }
-    // Clear analysis cache
     clearCache() {
         this.fileAnalysisCache.clear();
     }
-    // Get active workspace roots
     getWorkspaceRoots() {
         return Array.from(this.workspaceRoots);
     }
-    // Get status summary
     getStatus() {
         const status = {
             activeClients: this.clients.size,
@@ -314,7 +283,6 @@ class LSPManager {
         }
         return status;
     }
-    // Shutdown all clients
     async shutdown() {
         console.log(chalk_1.default.blue('🛑 Shutting down LSP clients...'));
         const shutdownPromises = Array.from(this.clients.values()).map(client => client.shutdown().catch(err => console.log(chalk_1.default.yellow(`⚠️ Error shutting down client: ${err.message}`))));
@@ -326,5 +294,4 @@ class LSPManager {
     }
 }
 exports.LSPManager = LSPManager;
-// Global LSP manager instance
 exports.lspManager = new LSPManager();

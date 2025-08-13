@@ -20,7 +20,6 @@ class CodeReviewAgent extends base_agent_1.BaseAgent {
         if (taskData) {
             console.log(`Task: ${taskData}`);
         }
-        // Default code to review if no taskData provided
         const codeToReview = taskData || `
 function processUser(user) {
   if (user.name && user.email) {
@@ -66,7 +65,6 @@ Provide specific suggestions for improvement.`;
     async onStop() {
         console.log('Code Review Agent cleaned up');
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

@@ -39,10 +39,6 @@ const base_tool_1 = require("./base-tool");
 const secure_file_tools_1 = require("./secure-file-tools");
 const cli_ui_1 = require("../utils/cli-ui");
 const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
-/**
- * Production-ready Read File Tool
- * Safely reads file contents with security checks and error handling
- */
 class ReadFileTool extends base_tool_1.BaseTool {
     constructor(workingDirectory) {
         super('read-file-tool', workingDirectory);
@@ -76,19 +72,15 @@ class ReadFileTool extends base_tool_1.BaseTool {
     }
     async executeInternal(filePath, options = {}) {
         try {
-            // Sanitize and validate file path
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
-            // Check file size if maxSize is specified
             if (options.maxSize) {
                 const stats = await Promise.resolve().then(() => __importStar(require('fs/promises'))).then(fs => fs.stat(sanitizedPath));
                 if (stats.size > options.maxSize) {
                     throw new Error(`File too large: ${stats.size} bytes (max: ${options.maxSize})`);
                 }
             }
-            // Read file with specified encoding
             const encoding = options.encoding || 'utf8';
             const content = await (0, promises_1.readFile)(sanitizedPath, encoding);
-            // Apply content filters if specified
             let processedContent = content;
             if (options.stripComments && this.isCodeFile(filePath)) {
                 processedContent = this.stripComments(processedContent, this.getFileExtension(filePath));
@@ -113,7 +105,6 @@ class ReadFileTool extends base_tool_1.BaseTool {
                     extension: this.getFileExtension(filePath)
                 }
             };
-            // Show file content in structured UI if not binary and not too large
             if (!result.metadata?.isBinary && typeof processedContent === 'string' && processedContent.length < 50000) {
                 advanced_cli_ui_1.advancedUI.showFileContent(sanitizedPath, processedContent);
             }
@@ -133,21 +124,14 @@ class ReadFileTool extends base_tool_1.BaseTool {
                     extension: this.getFileExtension(filePath)
                 }
             };
-            // Log error for debugging
             cli_ui_1.CliUI.logError(`Failed to read file ${filePath}: ${error.message}`);
             return errorResult;
         }
     }
-    /**
-     * Read multiple files in parallel
-     */
     async readMultiple(filePaths, options = {}) {
         const readPromises = filePaths.map(path => this.execute(path, options));
         return (await Promise.all(readPromises)).map(result => result.data);
     }
-    /**
-     * Read file with streaming for large files
-     */
     async readStream(filePath, chunkSize = 1024 * 64) {
         const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
         const fs = await Promise.resolve().then(() => __importStar(require('fs')));
@@ -163,9 +147,6 @@ class ReadFileTool extends base_tool_1.BaseTool {
             }
         };
     }
-    /**
-     * Check if file exists and is readable
-     */
     async canRead(filePath) {
         try {
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
@@ -177,9 +158,6 @@ class ReadFileTool extends base_tool_1.BaseTool {
             return false;
         }
     }
-    /**
-     * Get file information without reading content
-     */
     async getFileInfo(filePath) {
         try {
             const sanitizedPath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
@@ -201,41 +179,33 @@ class ReadFileTool extends base_tool_1.BaseTool {
             throw new Error(`Failed to get file info: ${error.message}`);
         }
     }
-    /**
-     * Strip comments from code files
-     */
     stripComments(content, extension) {
         switch (extension.toLowerCase()) {
             case '.js':
             case '.ts':
             case '.jsx':
             case '.tsx':
-                // Remove single-line comments
                 content = content.replace(/\/\/.*$/gm, '');
-                // Remove multi-line comments
                 content = content.replace(/\/\*[\s\S]*?\*\//g, '');
                 break;
             case '.py':
-                // Remove Python comments
                 content = content.replace(/#.*$/gm, '');
                 break;
             case '.css':
             case '.scss':
-                // Remove CSS comments
                 content = content.replace(/\/\*[\s\S]*?\*\//g, '');
                 break;
             case '.html':
             case '.xml':
-                // Remove HTML/XML comments
-                content = content.replace(/<!--[\s\S]*?-->/g, '');
+                let previousContent;
+                do {
+                    previousContent = content;
+                    content = content.replace(/<!--[\s\S]*?-->/g, '');
+                } while (content !== previousContent);
                 break;
         }
-        // Clean up extra whitespace
         return content.replace(/\n\s*\n/g, '\n').trim();
     }
-    /**
-     * Check if file is a code file based on extension
-     */
     isCodeFile(filePath) {
         const codeExtensions = [
             '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.h', '.hpp',
@@ -245,9 +215,6 @@ class ReadFileTool extends base_tool_1.BaseTool {
         const extension = this.getFileExtension(filePath);
         return codeExtensions.includes(extension.toLowerCase());
     }
-    /**
-     * Get file extension
-     */
     getFileExtension(filePath) {
         const lastDot = filePath.lastIndexOf('.');
         return lastDot >= 0 ? filePath.substring(lastDot) : '';

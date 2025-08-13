@@ -48,15 +48,9 @@ class DiffManager {
         this.pendingDiffs = new Map();
         this.autoAccept = false;
     }
-    /**
-     * Set auto-accept mode
-     */
     setAutoAccept(enabled) {
         this.autoAccept = enabled;
     }
-    /**
-     * Add a file diff for review
-     */
     addFileDiff(filePath, oldContent, newContent) {
         const changes = (0, diff_1.diffLines)(oldContent, newContent);
         const fileDiff = {
@@ -67,7 +61,6 @@ class DiffManager {
             status: this.autoAccept ? 'accepted' : 'pending'
         };
         this.pendingDiffs.set(filePath, fileDiff);
-        // Show diff in structured UI when interactive and not auto-accept; guard and swallow UI errors
         if (!this.autoAccept && process.stdout.isTTY && typeof advanced_cli_ui_1.advancedUI?.showFileDiff === 'function') {
             void Promise.resolve(advanced_cli_ui_1.advancedUI.showFileDiff(filePath, oldContent, newContent))
                 .catch((err) => {
@@ -78,9 +71,6 @@ class DiffManager {
             this.applyDiff(filePath);
         }
     }
-    /**
-     * Display diff for a specific file
-     */
     showDiff(filePath, options = {
         showLineNumbers: true,
         contextLines: 3,
@@ -100,9 +90,6 @@ class DiffManager {
         }));
         this.renderDiff(diff, options);
     }
-    /**
-     * Show all pending diffs
-     */
     showAllDiffs(options) {
         const pendingFiles = Array.from(this.pendingDiffs.values())
             .filter(d => d.status === 'pending');
@@ -121,9 +108,6 @@ class DiffManager {
         console.log(chalk_1.default.red('Use /reject <file> to discard changes'));
         console.log(chalk_1.default.blue('Use /accept-all to approve all pending changes\\n'));
     }
-    /**
-     * Accept a diff and apply changes
-     */
     acceptDiff(filePath) {
         const diff = this.pendingDiffs.get(filePath);
         if (!diff)
@@ -131,9 +115,6 @@ class DiffManager {
         diff.status = 'accepted';
         return this.applyDiff(filePath);
     }
-    /**
-     * Reject a diff
-     */
     rejectDiff(filePath) {
         const diff = this.pendingDiffs.get(filePath);
         if (!diff)
@@ -142,9 +123,6 @@ class DiffManager {
         console.log(chalk_1.default.red(`✖ Rejected changes to ${filePath}`));
         return true;
     }
-    /**
-     * Accept all pending diffs
-     */
     acceptAllDiffs() {
         let applied = 0;
         for (const [filePath, diff] of this.pendingDiffs) {
@@ -157,33 +135,22 @@ class DiffManager {
         console.log(chalk_1.default.green(`✅ Applied ${applied} file changes`));
         return applied;
     }
-    /**
-     * Get pending diff count
-     */
     getPendingCount() {
         return Array.from(this.pendingDiffs.values())
             .filter(d => d.status === 'pending').length;
     }
-    /**
-     * Clear all diffs
-     */
     clearDiffs() {
         this.pendingDiffs.clear();
     }
-    /**
-     * Apply diff to filesystem
-     */
     applyDiff(filePath) {
         const diff = this.pendingDiffs.get(filePath);
         if (!diff)
             return false;
         try {
-            // Ensure directory exists
             const dir = path.dirname(filePath);
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
             }
-            // Write new content
             fs.writeFileSync(filePath, diff.newContent, 'utf8');
             console.log(chalk_1.default.green(`✅ Applied changes to ${filePath}`));
             return true;
@@ -193,9 +160,6 @@ class DiffManager {
             return false;
         }
     }
-    /**
-     * Render diff with syntax highlighting
-     */
     renderDiff(diff, options) {
         let lineNumber = 1;
         let contextCount = 0;
@@ -216,11 +180,10 @@ class DiffManager {
                     lineNumColor = chalk_1.default.red;
                 }
                 else {
-                    // Context line
                     if (options.contextLines > 0) {
                         contextCount++;
                         if (contextCount > options.contextLines) {
-                            continue; // Skip excessive context
+                            continue;
                         }
                     }
                 }
@@ -237,9 +200,6 @@ class DiffManager {
             }
         }
     }
-    /**
-     * Get status color
-     */
     getStatusColor(status) {
         switch (status) {
             case 'pending': return chalk_1.default.yellow('Pending');

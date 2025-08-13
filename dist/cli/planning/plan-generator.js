@@ -3,28 +3,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlanGenerator = void 0;
 const nanoid_1 = require("nanoid");
 const cli_ui_1 = require("../utils/cli-ui");
-/**
- * Production-ready Plan Generator
- * Analyzes user requests and generates detailed, executable plans
- */
 class PlanGenerator {
     constructor() {
         this.toolCapabilities = new Map();
         this.initializeToolCapabilities();
     }
-    /**
-     * Generate an execution plan from user request and context
-     */
     async generatePlan(context) {
         cli_ui_1.CliUI.startSpinner('Analyzing request and generating execution plan...');
         try {
-            // Parse and analyze the user request
             const requestAnalysis = this.analyzeUserRequest(context.userRequest);
-            // Generate steps based on analysis
             const steps = await this.generateSteps(requestAnalysis, context);
-            // Calculate risk assessment
             const riskAssessment = this.assessPlanRisk(steps);
-            // Calculate estimated duration
             const estimatedTotalDuration = steps.reduce((total, step) => total + (step.estimatedDuration || 0), 0);
             const plan = {
                 id: (0, nanoid_1.nanoid)(),
@@ -51,18 +40,13 @@ class PlanGenerator {
             throw new Error(`Plan generation failed: ${error.message}`);
         }
     }
-    /**
-     * Validate a generated plan for safety and feasibility
-     */
     validatePlan(plan) {
         const errors = [];
         const warnings = [];
         const suggestions = [];
-        // Check for circular dependencies
         if (this.hasCircularDependencies(plan.steps)) {
             errors.push('Plan contains circular dependencies between steps');
         }
-        // Check for missing tool capabilities
         for (const step of plan.steps) {
             if (step.type === 'tool' && step.toolName) {
                 if (!this.toolCapabilities.has(step.toolName)) {
@@ -70,15 +54,13 @@ class PlanGenerator {
                 }
             }
         }
-        // Risk assessment warnings
         if (plan.riskAssessment.overallRisk === 'high') {
             warnings.push('Plan contains high-risk operations');
         }
         if (plan.riskAssessment.destructiveOperations > 0) {
             warnings.push(`Plan includes ${plan.riskAssessment.destructiveOperations} potentially destructive operations`);
         }
-        // Performance suggestions
-        if (plan.estimatedTotalDuration > 300000) { // 5 minutes
+        if (plan.estimatedTotalDuration > 300000) {
             suggestions.push('Consider breaking this plan into smaller, more manageable chunks');
         }
         if (plan.steps.length > 20) {
@@ -91,16 +73,11 @@ class PlanGenerator {
             suggestions
         };
     }
-    /**
-     * Analyze user request to understand intent and requirements
-     */
     analyzeUserRequest(request) {
         const lowerRequest = request.toLowerCase();
-        // Detect operation types
         const operations = [];
         const entities = [];
         const modifiers = [];
-        // File operations
         if (lowerRequest.includes('create') || lowerRequest.includes('add')) {
             operations.push('create');
         }
@@ -113,7 +90,6 @@ class PlanGenerator {
         if (lowerRequest.includes('read') || lowerRequest.includes('show') || lowerRequest.includes('list')) {
             operations.push('read');
         }
-        // Entity detection
         if (lowerRequest.includes('file') || lowerRequest.includes('component') || lowerRequest.includes('class')) {
             entities.push('file');
         }
@@ -123,7 +99,6 @@ class PlanGenerator {
         if (lowerRequest.includes('documentation') || lowerRequest.includes('readme')) {
             entities.push('documentation');
         }
-        // Complexity assessment
         const complexity = this.assessRequestComplexity(lowerRequest);
         return {
             originalRequest: request,
@@ -136,12 +111,8 @@ class PlanGenerator {
             requiresUserInput: lowerRequest.includes('ask') || lowerRequest.includes('confirm')
         };
     }
-    /**
-     * Generate execution steps based on request analysis
-     */
     async generateSteps(analysis, context) {
         const steps = [];
-        // Always start with validation
         steps.push({
             id: (0, nanoid_1.nanoid)(),
             type: 'validation',
@@ -151,7 +122,6 @@ class PlanGenerator {
             riskLevel: 'low',
             reversible: true
         });
-        // Add analysis step if needed
         if (analysis.requiresAnalysis) {
             steps.push({
                 id: (0, nanoid_1.nanoid)(),
@@ -166,12 +136,10 @@ class PlanGenerator {
                 dependencies: [steps[0].id]
             });
         }
-        // Generate operation-specific steps
         for (const operation of analysis.operations) {
             const operationSteps = this.generateOperationSteps(operation, analysis, context);
             steps.push(...operationSteps);
         }
-        // Add user confirmation for high-risk operations
         const hasHighRiskSteps = steps.some(step => step.riskLevel === 'high');
         if (hasHighRiskSteps) {
             const confirmationStep = {
@@ -182,15 +150,13 @@ class PlanGenerator {
                 estimatedDuration: 10000,
                 riskLevel: 'low',
                 reversible: true,
-                dependencies: steps.slice(0, -1).map(s => s.id) // Depends on all previous steps
+                dependencies: steps.slice(0, -1).map(s => s.id)
             };
-            // Insert before the last high-risk step
             const lastHighRiskIndex = this.findLastIndex(steps, (step) => step.riskLevel === 'high');
             if (lastHighRiskIndex >= 0) {
                 steps.splice(lastHighRiskIndex, 0, confirmationStep);
             }
         }
-        // Add final validation step
         steps.push({
             id: (0, nanoid_1.nanoid)(),
             type: 'validation',
@@ -199,13 +165,10 @@ class PlanGenerator {
             estimatedDuration: 3000,
             riskLevel: 'low',
             reversible: true,
-            dependencies: steps.slice(-2, -1).map(s => s.id) // Depends on previous step
+            dependencies: steps.slice(-2, -1).map(s => s.id)
         });
         return steps;
     }
-    /**
-     * Generate steps for specific operations
-     */
     generateOperationSteps(operation, analysis, context) {
         const steps = [];
         switch (operation) {
@@ -260,9 +223,6 @@ class PlanGenerator {
         }
         return steps;
     }
-    /**
-     * Assess overall plan risk
-     */
     assessPlanRisk(steps) {
         const destructiveOperations = steps.filter(s => !s.reversible).length;
         const fileModifications = steps.filter(s => s.toolName?.includes('write') || s.toolName?.includes('delete') || s.toolName?.includes('replace')).length;
@@ -281,9 +241,6 @@ class PlanGenerator {
             externalCalls
         };
     }
-    /**
-     * Check for circular dependencies in steps
-     */
     hasCircularDependencies(steps) {
         const stepMap = new Map(steps.map(step => [step.id, step]));
         const visited = new Set();
@@ -307,9 +264,6 @@ class PlanGenerator {
         };
         return steps.some(step => hasCycle(step.id));
     }
-    /**
-     * Initialize tool capabilities registry
-     */
     initializeToolCapabilities() {
         const tools = [
             {
@@ -360,9 +314,6 @@ class PlanGenerator {
         ];
         tools.forEach(tool => this.toolCapabilities.set(tool.name, tool));
     }
-    /**
-     * Generate plan title from analysis
-     */
     generatePlanTitle(analysis) {
         const operations = analysis.operations.join(', ');
         const entities = analysis.entities.join(', ');
@@ -376,18 +327,12 @@ class PlanGenerator {
             return 'Custom Execution Plan';
         }
     }
-    /**
-     * Generate plan description
-     */
     generatePlanDescription(analysis, steps) {
         const stepCount = steps.length;
         const riskLevel = steps.some(s => s.riskLevel === 'high') ? 'high' :
             steps.some(s => s.riskLevel === 'medium') ? 'medium' : 'low';
         return `Execution plan with ${stepCount} steps to fulfill: "${analysis.originalRequest}". Risk level: ${riskLevel}.`;
     }
-    /**
-     * Assess request complexity
-     */
     assessRequestComplexity(request) {
         const indicators = [
             request.includes('multiple'),
@@ -405,9 +350,6 @@ class PlanGenerator {
             return 'moderate';
         return 'simple';
     }
-    /**
-     * Helper method for findLastIndex compatibility
-     */
     findLastIndex(array, predicate) {
         for (let i = array.length - 1; i >= 0; i--) {
             if (predicate(array[i], i, array)) {

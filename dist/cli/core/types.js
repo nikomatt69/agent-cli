@@ -1,7 +1,4 @@
 "use strict";
-/**
- * Core types for the CLI system
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TaskPriority = exports.TaskStatus = exports.AgentStatus = void 0;
 var AgentStatus;

@@ -40,7 +40,6 @@ function chunkArray(arr, size) {
     }
     return chunks;
 }
-// Compact a potentially large analysis object into a safe, chunkable summary
 function compactAnalysis(analysis, opts = {}) {
     const maxDirs = opts.maxDirs ?? 500;
     const maxFiles = opts.maxFiles ?? 1000;
@@ -59,13 +58,11 @@ function compactAnalysis(analysis, opts = {}) {
         directory: analysis?.directory,
         timestamp: analysis?.timestamp,
     };
-    // Flatten limited directory and file entries
     const dirEntries = [];
     const fileEntries = [];
     const walk = (node) => {
         if (!node)
             return;
-        // Files
         if (Array.isArray(node.files)) {
             for (const f of node.files) {
                 if (fileEntries.length >= maxFiles)
@@ -73,7 +70,6 @@ function compactAnalysis(analysis, opts = {}) {
                 fileEntries.push({ name: f.name, path: f.path, ext: f.extension, size: f.size });
             }
         }
-        // Directories
         if (Array.isArray(node.directories)) {
             for (const d of node.directories) {
                 if (dirEntries.length < maxDirs) {
@@ -98,10 +94,8 @@ function compactAnalysis(analysis, opts = {}) {
         sampleFiles: fileEntries,
         note: `Truncated for safety${moreDirs ? `, +${moreDirs} more dirs` : ''}${moreFiles ? `, +${moreFiles} more files` : ''}`,
     };
-    // Ensure the returned payload stays under maxChars
     let json = JSON.stringify(summaryObj);
     if (json.length > maxChars) {
-        // If still too large, progressively trim samples
         while (json.length > maxChars && (fileEntries.length > 50 || dirEntries.length > 20)) {
             if (fileEntries.length > 50)
                 fileEntries.length = Math.floor(fileEntries.length * 0.8);
@@ -110,9 +104,8 @@ function compactAnalysis(analysis, opts = {}) {
             json = JSON.stringify({ ...header, sampleDirectories: dirEntries, sampleFiles: fileEntries, note: summaryObj.note });
         }
         if (json.length > maxChars) {
-            // Final hard cap
             json = json.slice(0, maxChars) + '…[truncated]';
-            return json; // already stringified
+            return json;
         }
     }
     try {

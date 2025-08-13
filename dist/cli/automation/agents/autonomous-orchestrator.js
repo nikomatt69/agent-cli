@@ -87,12 +87,10 @@ Consider parallel execution where possible.`,
         console.log(chalk_1.default.gray(`Strategy: ${plan.reasoning}`));
         const results = [];
         const completedTasks = new Set();
-        // Execute tasks according to dependencies and priorities
         for (const taskId of plan.executionOrder) {
             const task = plan.tasks.find((t) => t.id === taskId);
             if (!task)
                 continue;
-            // Check if dependencies are met
             if (task.dependencies) {
                 const unmetDeps = task.dependencies.filter((dep) => !completedTasks.has(dep));
                 if (unmetDeps.length > 0) {
@@ -100,7 +98,6 @@ Consider parallel execution where possible.`,
                     continue;
                 }
             }
-            // Execute task
             const result = await this.executeTask(task);
             results.push(result);
             if (result.success) {
@@ -121,7 +118,6 @@ Consider parallel execution where possible.`,
         return await this.planTasks(taskData);
     }
     async onStop() {
-        // Wait for all running tasks to complete
         await Promise.all(this.runningTasks.values());
         console.log('Autonomous Orchestrator stopped');
     }
@@ -185,7 +181,6 @@ Consider parallel execution where possible.`,
             };
         }
         try {
-            // Plan the tasks
             console.log(chalk_1.default.blue('🧠 Planning task execution...'));
             const plan = await this.planTasks(task);
             if (plan.error) {
@@ -199,7 +194,6 @@ Consider parallel execution where possible.`,
                 console.log(`${index + 1}. ${priority} ${t.description} → ${chalk_1.default.cyan(t.agent)}`);
             });
             console.log(chalk_1.default.gray(`\nReasoning: ${plan.reasoning}`));
-            // Ask for confirmation in interactive mode
             const readline = require('readline').createInterface({
                 input: process.stdin,
                 output: process.stdout
@@ -214,9 +208,7 @@ Consider parallel execution where possible.`,
                 console.log(chalk_1.default.yellow('Execution cancelled'));
                 return { cancelled: true, plan };
             }
-            // Execute the plan
             const results = await this.executeTaskPlan(plan);
-            // Summary
             const successful = results.filter(r => r.success).length;
             const failed = results.filter(r => !r.success).length;
             const totalTime = results.reduce((sum, r) => sum + r.duration, 0);

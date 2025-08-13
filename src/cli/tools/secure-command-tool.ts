@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import * as path from 'path';
+import { randomBytes } from 'crypto';
 
 const execAsync = promisify(exec);
 
@@ -159,7 +160,7 @@ export class SecureCommandTool {
             onError?: (error: Error, command: string, index: number) => void;
         } = {}
     ): Promise<BatchSession> {
-        const sessionId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const sessionId = `batch_${Date.now()}_${randomBytes(6).toString('base64url')}`;
         const sessionDuration = options.sessionDuration || 30; // 30 minutes default
         const expiresAt = new Date(Date.now() + sessionDuration * 60 * 1000);
 

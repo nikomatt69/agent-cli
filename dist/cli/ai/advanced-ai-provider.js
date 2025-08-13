@@ -35,22 +35,18 @@ class AdvancedAIProvider {
     generateWithTools(planningMessages) {
         throw new Error('Method not implemented.');
     }
-    // Truncate long free-form strings to keep prompts safe
     truncateForPrompt(s, maxChars = 2000) {
         if (!s)
             return '';
         return s.length > maxChars ? s.slice(0, maxChars) + '…[truncated]' : s;
     }
-    // Approximate token counting (1 token ≈ 4 characters for most languages)
     estimateTokens(text) {
         if (!text)
             return 0;
-        // More accurate estimation: count words, punctuation, special chars
         const words = text.split(/\s+/).filter(word => word.length > 0);
         const specialChars = (text.match(/[{}[\](),.;:!?'"]/g) || []).length;
-        return Math.ceil((words.length + specialChars * 0.5) * 1.3); // Conservative estimate
+        return Math.ceil((words.length + specialChars * 0.5) * 1.3);
     }
-    // Estimate total tokens in messages array
     estimateMessagesTokens(messages) {
         let totalTokens = 0;
         for (const message of messages) {
@@ -60,43 +56,35 @@ class AdvancedAIProvider {
                     ? message.content.map(part => typeof part === 'string' ? part : JSON.stringify(part)).join('')
                     : JSON.stringify(message.content);
             totalTokens += this.estimateTokens(content);
-            totalTokens += 10; // Role, metadata overhead
+            totalTokens += 10;
         }
         return totalTokens;
     }
-    // Intelligent message truncation to stay within token limits - AGGRESSIVE MODE
     truncateMessages(messages, maxTokens = 120000) {
         const currentTokens = this.estimateMessagesTokens(messages);
         if (currentTokens <= maxTokens) {
             return messages;
         }
-        // Messages too long - applying intelligent truncation
-        // Strategy: Keep system messages, recent user/assistant, and important tool calls
         const truncatedMessages = [];
         const systemMessages = messages.filter(m => m.role === 'system');
         const nonSystemMessages = messages.filter(m => m.role !== 'system');
-        // Always keep system messages (but truncate AGGRESSIVELY)
         for (const sysMsg of systemMessages) {
             const content = typeof sysMsg.content === 'string' ? sysMsg.content : JSON.stringify(sysMsg.content);
             truncatedMessages.push({
                 ...sysMsg,
-                content: this.truncateForPrompt(content, 3000) // REDUCED: Max 3k chars for system messages
+                content: this.truncateForPrompt(content, 3000)
             });
         }
-        // Keep the most recent messages (MORE AGGRESSIVE sliding window)
-        const recentMessages = nonSystemMessages.slice(-10); // REDUCED: Keep last 10 non-system messages
+        const recentMessages = nonSystemMessages.slice(-10);
         let accumulatedTokens = this.estimateMessagesTokens(truncatedMessages);
-        // Add recent messages in reverse order until we hit the limit
         for (let i = recentMessages.length - 1; i >= 0; i--) {
             const msg = recentMessages[i];
             const msgTokens = this.estimateTokens(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content));
             if (accumulatedTokens + msgTokens > maxTokens) {
-                // Truncate this message if it's too long
                 const availableTokens = maxTokens - accumulatedTokens;
-                const availableChars = Math.max(500, availableTokens * 3); // Conservative char conversion
+                const availableChars = Math.max(500, availableTokens * 3);
                 const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
                 const truncatedContent = this.truncateForPrompt(content, availableChars);
-                // Handle different message types properly
                 if (msg.role === 'tool') {
                     truncatedMessages.push({
                         ...msg,
@@ -114,7 +102,6 @@ class AdvancedAIProvider {
             truncatedMessages.push(msg);
             accumulatedTokens += msgTokens;
         }
-        // If we still need more space, add truncation summary
         if (nonSystemMessages.length > 10) {
             const skippedCount = nonSystemMessages.length - 10;
             truncatedMessages.splice(systemMessages.length, 0, {
@@ -131,9 +118,7 @@ class AdvancedAIProvider {
         this.enhancedContext = new Map();
         this.conversationMemory = [];
         this.analysisCache = new Map();
-        // Tool call tracking for intelligent continuation
         this.toolCallHistory = [];
-        // Round tracking for 2-round limit
         this.completedRounds = 0;
         this.maxRounds = 2;
         this.currentModel = config_manager_1.simpleConfigManager.get('currentModel') || 'claude-sonnet-4-20250514';
@@ -147,7 +132,6 @@ class AdvancedAIProvider {
         this.smartCache = smart_cache_manager_1.smartCache;
         this.docLibrary = documentation_library_1.docLibrary;
     }
-    // Advanced context enhancement system
     async enhanceContext(messages) {
         const enhancedMessages = await this.contextEnhancer.enhance(messages, {
             workingDirectory: this.workingDirectory,
@@ -155,22 +139,17 @@ class AdvancedAIProvider {
             conversationMemory: this.conversationMemory,
             analysisCache: this.analysisCache
         });
-        // Update conversation memory
-        this.conversationMemory = enhancedMessages.slice(-20); // Keep last 20 messages
-        // Reset tool history and rounds for new conversation context
+        this.conversationMemory = enhancedMessages.slice(-20);
         const lastUserMessage = enhancedMessages.filter(m => m.role === 'user').pop();
         if (lastUserMessage) {
-            this.toolCallHistory = []; // Fresh start for new queries
-            this.completedRounds = 0; // Reset rounds counter
+            this.toolCallHistory = [];
+            this.completedRounds = 0;
         }
         return enhancedMessages;
     }
-    // Enhanced system prompt with advanced capabilities (using PromptManager)
     async getEnhancedSystemPrompt(context = {}) {
         try {
-            // Get documentation context if available
             const docsContext = this.getDocumentationContext();
-            // Try to load base agent prompt first
             const basePrompt = await this.promptManager.loadPromptForContext({
                 agentId: 'base-agent',
                 parameters: {
@@ -180,18 +159,15 @@ class AdvancedAIProvider {
                     ...context
                 }
             });
-            // If docs are loaded, append them to the base prompt
             if (docsContext) {
                 return `${basePrompt}\n\n${docsContext}`;
             }
             return basePrompt;
         }
         catch (error) {
-            // Fallback to hardcoded prompt if file system prompts fail
             const toolDescriptions = this.toolRouter.getAllTools()
                 .map(tool => `${tool.tool}: ${tool.description}`)
                 .join(', ');
-            // Get documentation context for fallback too
             const docsContext = this.getDocumentationContext();
             const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
@@ -230,29 +206,24 @@ class AdvancedAIProvider {
 **Available Tools**: ${toolDescriptions}
 
 Respond in a helpful, professional manner with clear explanations and actionable insights.`;
-            // Add documentation context if available
             if (docsContext) {
                 return `${basePrompt}\n\n${docsContext}`;
             }
             return basePrompt;
         }
     }
-    // Get current documentation context for AI
     getDocumentationContext() {
         try {
             const stats = docs_context_manager_1.docsContextManager.getContextStats();
             if (stats.loadedCount === 0) {
                 return null;
             }
-            // Get context summary and full context
             const contextSummary = docs_context_manager_1.docsContextManager.getContextSummary();
             const fullContext = docs_context_manager_1.docsContextManager.getFullContext();
-            // Limit context size to prevent token overflow
-            const maxContextLength = 30000; // ~20K words
+            const maxContextLength = 30000;
             if (fullContext.length <= maxContextLength) {
                 return fullContext;
             }
-            // If full context is too large, return summary only
             return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
         }
         catch (error) {
@@ -260,7 +231,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
             return null;
         }
     }
-    // Load tool-specific prompts for enhanced execution
     async getToolPrompt(toolName, parameters = {}) {
         try {
             return await this.promptManager.loadPromptForContext({
@@ -272,14 +242,11 @@ Respond in a helpful, professional manner with clear explanations and actionable
             });
         }
         catch (error) {
-            // Return fallback prompt if file prompt fails
             return `Execute ${toolName} with the provided parameters. Follow best practices and provide clear, helpful output.`;
         }
     }
-    // Advanced file operations with context awareness
     getAdvancedTools() {
         return {
-            // Enhanced file reading with analysis
             read_file: (0, ai_1.tool)({
                 description: 'Read and analyze file contents with metadata',
                 parameters: zod_1.z.object({
@@ -288,7 +255,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 }),
                 execute: async ({ path, analyze }) => {
                     try {
-                        // Load tool-specific prompt for context
                         const toolPrompt = await this.getToolPrompt('read_file', { path, analyze });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         if (!(0, fs_1.existsSync)(fullPath)) {
@@ -301,13 +267,12 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         if (analyze) {
                             analysis = this.analyzeFileContent(content, extension);
                         }
-                        // Store in context for future operations
                         this.executionContext.set(`file:${path}`, {
                             content,
                             stats,
                             analysis,
                             lastRead: new Date(),
-                            toolPrompt // Store prompt for potential reuse
+                            toolPrompt
                         });
                         return {
                             content,
@@ -324,7 +289,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Smart file writing with backups
             write_file: (0, ai_1.tool)({
                 description: 'Write content to file with automatic backup and validation',
                 parameters: zod_1.z.object({
@@ -335,30 +299,24 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 }),
                 execute: async ({ path, content, backup, validate }) => {
                     try {
-                        // Load tool-specific prompt for context
                         const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...', backup, validate });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         const dir = (0, path_1.dirname)(fullPath);
-                        // Ensure directory exists
                         if (!(0, fs_1.existsSync)(dir)) {
                             (0, fs_1.mkdirSync)(dir, { recursive: true });
                         }
-                        // Create backup if file exists
                         let backedUp = false;
                         if (backup && (0, fs_1.existsSync)(fullPath)) {
                             const backupPath = `${fullPath}.backup.${Date.now()}`;
                             (0, fs_1.writeFileSync)(backupPath, (0, fs_1.readFileSync)(fullPath, 'utf-8'));
                             backedUp = true;
                         }
-                        // Validate syntax if applicable
                         let validation = null;
                         if (validate) {
                             validation = this.validateFileContent(content, (0, path_1.extname)(fullPath));
                         }
-                        // Write file
                         (0, fs_1.writeFileSync)(fullPath, content, 'utf-8');
                         const stats = (0, fs_1.statSync)(fullPath);
-                        // Update context
                         this.executionContext.set(`file:${path}`, {
                             content,
                             stats,
@@ -366,7 +324,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                             backedUp,
                             toolPrompt
                         });
-                        // File operation completed
                         return {
                             path: (0, path_1.relative)(this.workingDirectory, fullPath),
                             size: stats.size,
@@ -381,7 +338,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Intelligent directory operations
             explore_directory: (0, ai_1.tool)({
                 description: 'Explore directory structure with intelligent filtering',
                 parameters: zod_1.z.object({
@@ -392,11 +348,9 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 }),
                 execute: async ({ path, depth, includeHidden, filterBy }) => {
                     try {
-                        // Load tool-specific prompt for context
                         const toolPrompt = await this.getToolPrompt('explore_directory', { path, depth, includeHidden, filterBy });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         const structure = this.exploreDirectoryStructure(fullPath, depth, includeHidden, filterBy);
-                        // Update context with directory understanding
                         this.executionContext.set(`dir:${path}`, {
                             structure,
                             explored: new Date(),
@@ -416,7 +370,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Autonomous command execution with intelligence
             execute_command: (0, ai_1.tool)({
                 description: 'Execute commands autonomously with context awareness and safety checks',
                 parameters: zod_1.z.object({
@@ -428,7 +381,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 execute: async ({ command, args, autonomous, timeout }) => {
                     try {
                         const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-                        // Safety check for dangerous commands
                         const isDangerous = this.isDangerousCommand(fullCommand);
                         if (isDangerous && !autonomous) {
                             return {
@@ -437,10 +389,8 @@ Respond in a helpful, professional manner with clear explanations and actionable
                                 reason: isDangerous
                             };
                         }
-                        // Verifica che il comando non esca dalla directory del progetto
                         const projectRoot = this.workingDirectory;
                         const commandCwd = this.workingDirectory;
-                        // Controlla se il comando tenta di cambiare directory
                         if (fullCommand.includes('cd ') && !fullCommand.includes(`cd ${projectRoot}`)) {
                             return {
                                 error: 'Command blocked: cannot change directory outside project',
@@ -453,12 +403,10 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         const { stdout, stderr } = await execAsync(fullCommand, {
                             cwd: commandCwd,
                             timeout,
-                            maxBuffer: 1024 * 1024 * 10, // 10MB
+                            maxBuffer: 1024 * 1024 * 10,
                         });
                         const duration = Date.now() - startTime;
-                        // Pausa molto leggera tra comandi per evitare sovraccarichi
                         await this.sleep(50);
-                        // Store execution context
                         this.executionContext.set(`cmd:${command}`, {
                             command: fullCommand,
                             stdout,
@@ -467,7 +415,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                             executed: new Date(),
                             cwd: commandCwd
                         });
-                        // Command completed
                         return {
                             command: fullCommand,
                             stdout: stdout.trim(),
@@ -488,7 +435,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Advanced project analysis
             analyze_project: (0, ai_1.tool)({
                 description: 'Comprehensive autonomous project analysis',
                 parameters: zod_1.z.object({
@@ -504,9 +450,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
                             analyzeDependencies,
                             securityScan
                         });
-                        // Store complete analysis in context (may be large)
                         this.executionContext.set('project:analysis', analysis);
-                        // Return a compact, chunk-safe summary to avoid prompt overflow
                         const compact = (0, analysis_utils_1.compactAnalysis)(analysis, {
                             maxDirs: 40,
                             maxFiles: 150,
@@ -519,7 +463,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Autonomous package management
             manage_packages: (0, ai_1.tool)({
                 description: 'Autonomously manage project dependencies',
                 parameters: zod_1.z.object({
@@ -556,7 +499,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         console.log(chalk_1.default.blue(`📦 ${action} packages: ${packages.join(', ') || 'all'}`));
                         const { stdout, stderr } = await execAsync(`${command} ${args.join(' ')}`, {
                             cwd: this.workingDirectory,
-                            timeout: 120000, // 2 minutes for package operations
+                            timeout: 120000,
                         });
                         return {
                             action,
@@ -576,7 +519,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Intelligent code generation
             generate_code: (0, ai_1.tool)({
                 description: 'Generate code with context awareness and best practices',
                 parameters: zod_1.z.object({
@@ -600,7 +542,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         });
                         if (outputPath && codeGenResult.code) {
                             (0, fs_1.writeFileSync)((0, path_1.resolve)(this.workingDirectory, outputPath), codeGenResult.code);
-                            // Code generated
                         }
                         return codeGenResult;
                     }
@@ -609,57 +550,43 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 },
             }),
-            // Web search capabilities
             web_search: this.webSearchProvider.getWebSearchTool(),
-            // IDE context enrichment
             ide_context: this.ideContextEnricher.getIDEContextTool(),
-            // Advanced AI-powered tools
             semantic_search: this.advancedTools.getSemanticSearchTool(),
             code_analysis: this.advancedTools.getCodeAnalysisTool(),
             dependency_analysis: this.advancedTools.getDependencyAnalysisTool(),
             git_workflow: this.advancedTools.getGitWorkflowTool(),
-            // Documentation tools
             doc_search: documentation_tool_1.documentationTools.search,
             doc_add: documentation_tool_1.documentationTools.add,
             doc_stats: documentation_tool_1.documentationTools.stats,
-            // Smart documentation tools for AI agents
             smart_docs_search: smart_docs_tool_1.smartDocsTools.search,
             smart_docs_load: smart_docs_tool_1.smartDocsTools.load,
             smart_docs_context: smart_docs_tool_1.smartDocsTools.context,
-            // AI documentation request tools
             docs_request: docs_request_tool_1.aiDocsTools.request,
             docs_gap_report: docs_request_tool_1.aiDocsTools.gapReport,
         };
     }
-    // Claude Code style streaming with full autonomy
     async *streamChatWithFullAutonomy(messages, abortSignal) {
         if (abortSignal && !(abortSignal instanceof AbortSignal)) {
             throw new TypeError('Invalid AbortSignal provided');
         }
-        // Start performance monitoring
         const sessionId = `session_${Date.now()}`;
         const startTime = Date.now();
         this.performanceOptimizer.startMonitoring();
-        // Enhance context with advanced intelligence
         const enhancedMessages = await this.enhanceContext(messages);
-        // Optimize messages for performance
         const optimizedMessages = this.performanceOptimizer.optimizeMessages(enhancedMessages);
-        // Apply AGGRESSIVE truncation to prevent prompt length errors
-        const truncatedMessages = this.truncateMessages(optimizedMessages, 100000); // REDUCED: 100k tokens safety margin
+        const truncatedMessages = this.truncateMessages(optimizedMessages, 100000);
         const model = this.getModel();
         const tools = this.getAdvancedTools();
         try {
-            // ADVANCED: Check completion protocol cache first (ultra-efficient)
             const lastUserMessage = truncatedMessages.filter(m => m.role === 'user').pop();
             const systemContext = truncatedMessages.filter(m => m.role === 'system').map(m => m.content).join('\n');
             if (lastUserMessage) {
-                // Check if this is an analysis request (skip cache for fresh analysis)
                 const userContent = typeof lastUserMessage.content === 'string'
                     ? lastUserMessage.content
                     : Array.isArray(lastUserMessage.content)
                         ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                         : String(lastUserMessage.content);
-                // Use ToolRouter for intelligent tool analysis
                 const toolRecommendations = this.toolRouter.analyzeMessage(lastUserMessage);
                 this.toolRouter.logRecommendations(userContent, toolRecommendations);
                 const isAnalysisRequest = userContent.toLowerCase().includes('analizza') ||
@@ -672,13 +599,11 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     userContent.toLowerCase().includes('find') ||
                     userContent.toLowerCase().includes('cerca') ||
                     userContent.toLowerCase().includes('search');
-                // Usa cache intelligente ma leggera
                 const cacheDecision = this.smartCache.shouldCache(userContent, systemContext);
                 if (cacheDecision.should && !isAnalysisRequest) {
                     const cachedResponse = await this.smartCache.getCachedResponse(userContent, systemContext);
                     if (cachedResponse) {
                         yield { type: 'start', content: `🎯 Using smart cache (${cacheDecision.strategy})...` };
-                        // Stream the cached response properly formatted
                         const formattedResponse = this.formatCachedResponse(cachedResponse.response);
                         for (const chunk of this.chunkText(formattedResponse, 80)) {
                             yield { type: 'text_delta', content: chunk };
@@ -694,8 +619,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
             yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
             const originalTokens = this.estimateMessagesTokens(messages);
             const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
-            // Check if we're approaching token limits and need to create a summary
-            const tokenLimit = 150000; // Conservative limit
+            const tokenLimit = 150000;
             const isAnalysisRequest = lastUserMessage && typeof lastUserMessage.content === 'string' &&
                 (lastUserMessage.content.toLowerCase().includes('analizza') ||
                     lastUserMessage.content.toLowerCase().includes('analysis') ||
@@ -705,25 +629,19 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     lastUserMessage.content.toLowerCase().includes('explore'));
             if (isAnalysisRequest && originalTokens > tokenLimit * 0.8) {
                 yield { type: 'thinking', content: '📊 Large analysis detected - enabling chained file reading to avoid token limits...' };
-                // Enabling chained file reading mode for large analysis
-                // Add special instruction for chained file reading
                 const chainedInstruction = `IMPORTANT: For this analysis, use chained file reading approach:
 1. First, scan and list files/directories to understand structure
 2. Then read files in small batches (max 3-5 files per call)
 3. Process each batch before moving to the next
 4. Build analysis incrementally to avoid token limits
 5. Use find_files_tool first, then read_file_tool in small groups`;
-                // Add the instruction to the system context
                 const enhancedSystemContext = systemContext + '\n\n' + chainedInstruction;
-                // Update messages with enhanced context
                 const enhancedMessages = messages.map(msg => msg.role === 'system'
                     ? { ...msg, content: enhancedSystemContext }
                     : msg);
-                // Use enhanced messages for the rest of the processing
                 messages = enhancedMessages;
             }
             const params = this.getProviderParams();
-            // Add enhanced system prompt to messages (async)
             const enhancedSystemPrompt = await this.getEnhancedSystemPrompt();
             const messagesWithEnhancedPrompt = truncatedMessages.map(msg => msg.role === 'system' ? { ...msg, content: enhancedSystemPrompt } : msg);
             const provider = this.getCurrentModelInfo().config.provider;
@@ -732,7 +650,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 model,
                 messages: safeMessages,
                 tools,
-                maxToolRoundtrips: isAnalysisRequest ? 25 : 50, // Increased for deeper analysis and toolchains
+                maxToolRoundtrips: isAnalysisRequest ? 25 : 50,
                 temperature: params.temperature,
                 abortSignal,
                 onStepFinish: (_evt) => { },
@@ -744,12 +662,11 @@ Respond in a helpful, professional manner with clear explanations and actionable
             let currentToolCalls = [];
             let accumulatedText = '';
             let toolCallCount = 0;
-            const maxToolCallsForAnalysis = 30; // Increased limit for comprehensive analysis
+            const maxToolCallsForAnalysis = 30;
             const approxCharLimit = provider === 'openai' ? params.maxTokens * 4 : Number.POSITIVE_INFINITY;
             let truncatedByCap = false;
             for await (const delta of (await result).fullStream) {
                 try {
-                    // Check for abort signal interruption
                     if (abortSignal?.aborted) {
                         yield {
                             type: 'error',
@@ -779,22 +696,18 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         case 'tool-call':
                             toolCallCount++;
                             currentToolCalls.push(delta);
-                            // Track this tool call in history (always track for intelligent analysis)
                             this.toolCallHistory.push({
                                 toolName: delta.toolName,
                                 args: delta.args,
-                                result: null, // Will be updated when result comes
+                                result: null,
                                 timestamp: new Date(),
-                                success: false // Will be updated
+                                success: false
                             });
-                            // Check if we're hitting tool call limits for analysis - use intelligent continuation
                             if (isAnalysisRequest && toolCallCount > maxToolCallsForAnalysis) {
-                                // Increment completed rounds
                                 this.completedRounds++;
                                 const originalQuery = typeof lastUserMessage?.content === 'string'
                                     ? lastUserMessage.content
                                     : String(lastUserMessage?.content || '');
-                                // Check if we've completed 2 rounds - if so, provide final summary and stop
                                 if (this.completedRounds >= this.maxRounds) {
                                     const finalSummary = this.generateFinalSummary(originalQuery, this.toolCallHistory);
                                     yield {
@@ -810,9 +723,8 @@ Respond in a helpful, professional manner with clear explanations and actionable
                                         content: `Analysis completed after ${this.completedRounds} rounds. Please review the summary above.`,
                                         metadata: { finalStop: true, rounds: this.completedRounds }
                                     };
-                                    return; // Hard stop after 2 rounds
+                                    return;
                                 }
-                                // If this is the first round, continue with intelligent question
                                 const gapAnalysis = this.analyzeMissingInformation(originalQuery, this.toolCallHistory);
                                 const clarifyingQuestion = this.generateClarifyingQuestion(gapAnalysis, originalQuery, this.toolCallHistory);
                                 yield {
@@ -823,7 +735,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                                     type: 'text_delta',
                                     content: `\n\n**Round ${this.completedRounds} Analysis:**\n${gapAnalysis}\n\n**Question to continue:**\n${clarifyingQuestion}\n\n`
                                 };
-                                // Don't break - let the conversation continue naturally
                                 break;
                             }
                             yield {
@@ -836,7 +747,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                             break;
                         case 'tool-call-delta':
                             const toolCall = currentToolCalls.find(tc => tc.toolCallId === delta.toolCallId);
-                            // Update tool history with result
                             const historyEntry = this.toolCallHistory.find(h => h.toolName === toolCall?.toolName);
                             if (historyEntry) {
                                 historyEntry.result = delta.argsTextDelta;
@@ -855,32 +765,27 @@ Respond in a helpful, professional manner with clear explanations and actionable
                             break;
                         case 'step-finish':
                             if (delta.isContinued) {
-                                // Step completed, continue to next
                             }
                             break;
                         case 'finish':
-                            // Salva nella cache adattiva
                             if (lastUserMessage && accumulatedText.trim()) {
                                 const userContentLength = typeof lastUserMessage.content === 'string'
                                     ? lastUserMessage.content.length
                                     : String(lastUserMessage.content).length;
                                 const tokensUsed = delta.usage?.totalTokens || Math.round((userContentLength + accumulatedText.length) / 4);
-                                // Extract user content as string for storage
                                 const userContentStr = typeof lastUserMessage.content === 'string'
                                     ? lastUserMessage.content
                                     : Array.isArray(lastUserMessage.content)
                                         ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                                         : String(lastUserMessage.content);
-                                // Salva nella cache intelligente
                                 try {
                                     await this.smartCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 1000), {
                                         tokensSaved: tokensUsed,
                                         responseTime: Date.now() - startTime,
-                                        userSatisfaction: 1.0 // Default satisfaction
+                                        userSatisfaction: 1.0
                                     });
                                 }
                                 catch (cacheError) {
-                                    // Continue without caching - don't fail the stream
                                 }
                                 yield {
                                     type: 'complete',
@@ -904,7 +809,6 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     }
                 }
                 catch (deltaError) {
-                    // Stream delta error occurred
                     yield {
                         type: 'error',
                         error: deltaError.message,
@@ -912,22 +816,18 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     };
                 }
             }
-            // Check if response was complete
             if (accumulatedText.length === 0) {
-                // No text received from model
                 yield {
                     type: 'error',
                     error: 'Empty response',
                     content: 'No text was generated - possible parameter mismatch'
                 };
             }
-            // End performance monitoring and log metrics
             const metrics = this.performanceOptimizer.endMonitoring(sessionId, {
                 tokenCount: this.estimateMessagesTokens(truncatedMessages),
                 toolCallCount,
                 responseQuality: this.performanceOptimizer.analyzeResponseQuality(accumulatedText)
             });
-            // Show only essential info: tokens used and context remaining  
             if (truncatedTokens > 0) {
                 console.log(chalk_1.default.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
             }
@@ -941,26 +841,20 @@ Respond in a helpful, professional manner with clear explanations and actionable
             };
         }
     }
-    // Execute autonomous task with intelligent planning and parallel agent support
     async *executeAutonomousTask(task, context) {
         yield { type: 'start', content: `🎯 Starting task: ${task}` };
-        // First, analyze the task and create a plan
         yield { type: 'thinking', content: 'Analyzing task and creating execution plan...' };
         try {
-            // If prebuilt messages are provided, use them directly to avoid duplicating large prompts
             if (context && Array.isArray(context.messages)) {
                 const providedMessages = context.messages;
-                // Note: streamChatWithFullAutonomy will handle truncation internally
                 for await (const event of this.streamChatWithFullAutonomy(providedMessages)) {
                     yield event;
                 }
                 return;
             }
-            // Analizza se il task richiede agenti paralleli
             const requiresParallelAgents = this.analyzeParallelRequirements(task);
             if (requiresParallelAgents) {
                 yield { type: 'thinking', content: '🔄 Task requires parallel agent execution...' };
-                // Esegui con agenti paralleli
                 for await (const event of this.executeParallelTask(task, context)) {
                     yield event;
                 }
@@ -982,7 +876,6 @@ Execute task autonomously with tools. Be direct. Stay within project directory.`
                     content: task
                 }
             ];
-            // Stream the autonomous execution
             for await (const event of this.streamChatWithFullAutonomy(planningMessages)) {
                 yield event;
             }
@@ -995,7 +888,6 @@ Execute task autonomously with tools. Be direct. Stay within project directory.`
             };
         }
     }
-    // Analizza se un task richiede agenti paralleli
     analyzeParallelRequirements(task) {
         const parallelKeywords = [
             'parallel', 'simultaneous', 'concurrent', 'multiple', 'several',
@@ -1005,20 +897,15 @@ Execute task autonomously with tools. Be direct. Stay within project directory.`
         const lowerTask = task.toLowerCase();
         return parallelKeywords.some(keyword => lowerTask.includes(keyword));
     }
-    // Esegue task con agenti paralleli
     async *executeParallelTask(task, context) {
         yield { type: 'thinking', content: '🔄 Planning parallel execution...' };
         try {
-            // Dividi il task in sottotask paralleli
             const subtasks = this.splitIntoSubtasks(task);
             yield { type: 'thinking', content: `📋 Split into ${subtasks.length} parallel subtasks` };
-            // Esegui sottotask in parallelo con isolamento
             const results = await Promise.allSettled(subtasks.map(async (subtask, index) => {
-                // Pausa molto leggera tra l'avvio degli agenti per evitare sovraccarichi
                 await this.sleep(index * 50);
                 return this.executeSubtask(subtask, index, context);
             }));
-            // Aggrega risultati
             const successful = results.filter(r => r.status === 'fulfilled').length;
             const failed = results.filter(r => r.status === 'rejected').length;
             yield {
@@ -1035,9 +922,7 @@ Execute task autonomously with tools. Be direct. Stay within project directory.`
             };
         }
     }
-    // Divide un task in sottotask paralleli
     splitIntoSubtasks(task) {
-        // Logica semplice per dividere task complessi
         const subtasks = [];
         if (task.toLowerCase().includes('build and test')) {
             subtasks.push('Build the project');
@@ -1048,19 +933,17 @@ Execute task autonomously with tools. Be direct. Stay within project directory.`
             subtasks.push('Generate documentation');
         }
         else {
-            // Fallback: dividi per frasi
             const sentences = task.split(/[.!?]+/).filter(s => s.trim().length > 10);
-            subtasks.push(...sentences.slice(0, 3)); // Massimo 3 sottotask
+            subtasks.push(...sentences.slice(0, 3));
         }
         return subtasks.length > 0 ? subtasks : [task];
     }
-    // Esegue un singolo sottotask con isolamento
     async executeSubtask(subtask, index, context) {
         const subtaskContext = {
             ...context,
             subtaskIndex: index,
             isParallel: true,
-            workingDirectory: this.workingDirectory // Mantieni directory del progetto
+            workingDirectory: this.workingDirectory
         };
         const messages = [
             {
@@ -1075,21 +958,17 @@ Stay within project directory.`
                 content: subtask
             }
         ];
-        // Esegui il sottotask
         const result = await this.streamChatWithFullAutonomy(messages);
         return result;
     }
-    // Safely stringify and truncate large contexts to prevent prompt overflow - AGGRESSIVE
     safeStringifyContext(ctx, maxChars = 1000) {
         if (!ctx)
             return '{}';
         try {
             const str = JSON.stringify(ctx, (key, value) => {
-                // Truncate long strings AGGRESSIVELY
                 if (typeof value === 'string') {
-                    return value.length > 100 ? value.slice(0, 100) + '…[truncated]' : value; // REDUCED from 512
+                    return value.length > 100 ? value.slice(0, 100) + '…[truncated]' : value;
                 }
-                // Limit large arrays
                 if (Array.isArray(value)) {
                     const limited = value.slice(0, 20);
                     if (value.length > 20)
@@ -1104,14 +983,12 @@ Stay within project directory.`
             return '[unstringifiable context]';
         }
     }
-    // Helper methods for intelligent analysis
     analyzeFileContent(content, extension) {
         const analysis = {
             lines: content.split('\n').length,
             size: content.length,
             language: this.detectLanguage(extension),
         };
-        // Language-specific analysis
         switch (extension) {
             case '.ts':
             case '.tsx':
@@ -1152,13 +1029,11 @@ Stay within project directory.`
                 break;
             case '.ts':
             case '.tsx':
-                // Basic TypeScript validation could be added here
                 break;
         }
         return validation;
     }
     exploreDirectoryStructure(dirPath, maxDepth, includeHidden, filterBy) {
-        // Implement intelligent directory exploration
         const explore = (currentPath, depth) => {
             if (depth > maxDepth)
                 return null;
@@ -1187,7 +1062,6 @@ Stay within project directory.`
                             extension: (0, path_1.extname)(item.name),
                             size: (0, fs_1.statSync)(itemPath).size
                         };
-                        // Apply filter
                         if (this.matchesFilter(fileInfo, filterBy)) {
                             structure.files.push(fileInfo);
                         }
@@ -1238,7 +1112,6 @@ Stay within project directory.`
     }
     generateDirectoryRecommendations(structure) {
         const recommendations = [];
-        // Analyze project structure and provide recommendations
         const hasPackageJson = structure.files?.some((f) => f.name === 'package.json');
         const hasTypeScript = structure.files?.some((f) => f.extension === '.ts');
         const hasTests = structure.files?.some((f) => f.name.includes('.test.') || f.name.includes('.spec.'));
@@ -1274,7 +1147,6 @@ Stay within project directory.`
             directory: this.workingDirectory,
             options
         };
-        // Basic project structure
         const packageJsonPath = (0, path_1.join)(this.workingDirectory, 'package.json');
         if ((0, fs_1.existsSync)(packageJsonPath)) {
             const packageJson = JSON.parse((0, fs_1.readFileSync)(packageJsonPath, 'utf-8'));
@@ -1283,13 +1155,10 @@ Stay within project directory.`
             analysis.version = packageJson.version;
             analysis.framework = this.detectFramework(packageJson);
         }
-        // File analysis
         const structure = this.exploreDirectoryStructure(this.workingDirectory, 3, false, 'all');
         analysis.structure = structure;
         analysis.fileCount = this.countFiles(structure);
-        // Language detection
         analysis.languages = this.detectProjectLanguages(structure);
-        // Dependencies analysis
         if (options.analyzeDependencies && analysis.package) {
             analysis.dependencies = {
                 production: Object.keys(analysis.package.dependencies || {}),
@@ -1369,9 +1238,7 @@ Stay within project directory.`
         return Array.from(languages);
     }
     async generateIntelligentCode(params) {
-        // This would integrate with the AI model to generate context-aware code
         const { type, description, language, framework, projectContext } = params;
-        // Use AI to generate appropriate code based on context
         const codeGenPrompt = `Generate ${type} code for: ${description}
 Language: ${language}
 Framework: ${framework || 'none'}
@@ -1408,7 +1275,6 @@ Requirements:
             return { error: `Code generation failed: ${error.message}` };
         }
     }
-    // Model management
     getModel(modelName) {
         const model = modelName || this.currentModel || config_manager_1.simpleConfigManager.get('currentModel');
         const allModels = config_manager_1.simpleConfigManager.get('models');
@@ -1416,8 +1282,6 @@ Requirements:
         if (!configData) {
             throw new Error(`Model ${model} not found in configuration`);
         }
-        // Configure providers with API keys properly
-        // Create provider instances with API keys, then get the specific model
         switch (configData.provider) {
             case 'openai': {
                 const apiKey = config_manager_1.simpleConfigManager.getApiKey(model);
@@ -1441,7 +1305,6 @@ Requirements:
                 return googleProvider(configData.model);
             }
             case 'ollama': {
-                // Ollama runs locally and does not require API keys
                 const ollamaProvider = (0, ollama_ai_provider_1.createOllama)({});
                 return ollamaProvider(configData.model);
             }
@@ -1449,44 +1312,37 @@ Requirements:
                 throw new Error(`Unsupported provider: ${configData.provider}`);
         }
     }
-    // Get provider-specific parameters
     getProviderParams(modelName) {
         const model = modelName || this.currentModel || config_manager_1.simpleConfigManager.get('currentModel');
         const allModels = config_manager_1.simpleConfigManager.get('models');
         const configData = allModels[model];
         if (!configData) {
-            return { maxTokens: 8000, temperature: 0.7 }; // REDUCED default
+            return { maxTokens: 8000, temperature: 0.7 };
         }
-        // Provider-specific token limits and settings
         switch (configData.provider) {
             case 'openai':
-                // OpenAI models - REDUCED for lighter requests
                 if (configData.model.includes('gpt-5')) {
-                    return { maxTokens: 8192, temperature: 1 }; // REDUCED from 8192
+                    return { maxTokens: 8192, temperature: 1 };
                 }
                 else if (configData.model.includes('gpt-4')) {
-                    return { maxTokens: 4096, temperature: 1 }; // REDUCED from 4096
+                    return { maxTokens: 4096, temperature: 1 };
                 }
                 return { maxTokens: 3000, temperature: 1 };
             case 'anthropic':
-                // Claude models - AUMENTATO per risposte più complete
                 if (configData.model.includes('claude-4') ||
                     configData.model.includes('claude-4-sonnet') ||
                     configData.model.includes('claude-sonnet-4')) {
-                    return { maxTokens: 12000, temperature: 0.7 }; // AUMENTATO da 4000
+                    return { maxTokens: 12000, temperature: 0.7 };
                 }
-                return { maxTokens: 10000, temperature: 0.7 }; // AUMENTATO da 4000
+                return { maxTokens: 10000, temperature: 0.7 };
             case 'google':
-                // Gemini models - AUMENTATO per risposte più complete
-                return { maxTokens: 8000, temperature: 0.7 }; // AUMENTATO da 1500
+                return { maxTokens: 8000, temperature: 0.7 };
             case 'ollama':
-                // Local models - AUMENTATO per risposte più complete
-                return { maxTokens: 4000, temperature: 0.7 }; // AUMENTATO da 1000
+                return { maxTokens: 4000, temperature: 0.7 };
             default:
-                return { maxTokens: 12000, temperature: 0.7 }; // AUMENTATO da 8000
+                return { maxTokens: 12000, temperature: 0.7 };
         }
     }
-    // Build provider-specific options to satisfy differing token parameter names
     getProviderOptions(maxTokens) {
         try {
             const provider = this.getCurrentModelInfo().config.provider;
@@ -1494,9 +1350,7 @@ Requirements:
                 case 'openai':
                     return { openai: { max_completion_tokens: maxTokens } };
                 case 'google':
-                    // Google Generative AI expects max_output_tokens
                     return { google: { max_output_tokens: maxTokens } };
-                // Anthropic and others work with normalized maxTokens via AI SDK
                 default:
                     return {};
             }
@@ -1505,9 +1359,8 @@ Requirements:
             return {};
         }
     }
-    // Build a provider-safe message array by enforcing hard character caps
     sanitizeMessagesForProvider(provider, messages) {
-        const maxTotalChars = provider === 'openai' ? 800000 : 400000; // conservative caps
+        const maxTotalChars = provider === 'openai' ? 800000 : 400000;
         const maxPerMessage = provider === 'openai' ? 60000 : 40000;
         const safeMessages = [];
         let total = 0;
@@ -1518,7 +1371,6 @@ Requirements:
             const tail = text.slice(-Math.floor(limit * 0.2));
             return `${head}\n…[omitted ${text.length - limit} chars]\n${tail}`;
         };
-        // Keep system messages first (clamped)
         const systems = messages.filter(m => m.role === 'system');
         for (const m of systems) {
             const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
@@ -1526,7 +1378,6 @@ Requirements:
             total += clamped.length;
             if (total > maxTotalChars)
                 break;
-            // For tool messages, wrap clamped string as tool-friendly text content
             if (m.role === 'tool') {
                 safeMessages.push({ ...m, content: [{ type: 'text', text: clamped }] });
             }
@@ -1535,9 +1386,8 @@ Requirements:
                 safeMessages.push({ role, content: clamped });
             }
         }
-        // Then add the most recent non-system messages until we hit the cap
         const rest = messages.filter(m => m.role !== 'system');
-        for (let i = Math.max(0, rest.length - 40); i < rest.length; i++) { // last 40 msgs
+        for (let i = Math.max(0, rest.length - 40); i < rest.length; i++) {
             const m = rest[i];
             const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
             const clamped = clamp(content, maxPerMessage);
@@ -1554,10 +1404,9 @@ Requirements:
         }
         return safeMessages;
     }
-    // Configuration methods
     setWorkingDirectory(directory) {
         this.workingDirectory = (0, path_1.resolve)(directory);
-        this.executionContext.clear(); // Reset context for new directory
+        this.executionContext.clear();
     }
     getWorkingDirectory() {
         return this.workingDirectory;
@@ -1582,19 +1431,15 @@ Requirements:
             return false;
         }
     }
-    // Get execution context for debugging/analysis
     getExecutionContext() {
         return new Map(this.executionContext);
     }
-    // Clear execution context
     clearExecutionContext() {
         this.executionContext.clear();
     }
-    // Utility method for sleep
     async sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-    // Test method to verify prompt loading works
     async testPromptLoading() {
         try {
             const baseAgent = await this.getEnhancedSystemPrompt();
@@ -1611,42 +1456,31 @@ Requirements:
             };
         }
     }
-    // Format cached response to preserve proper text formatting
     formatCachedResponse(cachedText) {
         if (!cachedText || typeof cachedText !== 'string') {
             return cachedText;
         }
-        // Restore proper formatting
         let formatted = cachedText
-            // Fix missing spaces after punctuation
             .replace(/([.!?,:;])([A-Z])/g, '$1 $2')
-            // Fix missing spaces after commas and periods
             .replace(/([,])([a-zA-Z])/g, '$1 $2')
-            // Fix missing spaces around common words
             .replace(/([a-z])([A-Z])/g, '$1 $2')
-            // Fix code block formatting
             .replace(/```([a-z]*)\n/g, '```$1\n')
-            // Fix list items
             .replace(/^(\d+\.)([A-Z])/gm, '$1 $2')
             .replace(/^([-*])([A-Z])/gm, '$1 $2')
-            // Fix markdown headers
             .replace(/^(#{1,6})([A-Z])/gm, '$1 $2')
-            // Fix step numbers
             .replace(/Step(\d+):/g, 'Step $1:')
-            // Add space after certain patterns
             .replace(/(\w)###/g, '$1\n\n###')
             .replace(/(\w)##/g, '$1\n\n##')
             .replace(/(\w)#([A-Z])/g, '$1\n\n# $2');
         return formatted;
     }
-    // Chunk text into smaller pieces for streaming
     chunkText(text, chunkSize = 80) {
         if (!text || text.length <= chunkSize) {
             return [text];
         }
         const chunks = [];
         let currentChunk = '';
-        const words = text.split(/(\s+)/); // Split on whitespace but keep separators
+        const words = text.split(/(\s+)/);
         for (const word of words) {
             if ((currentChunk + word).length <= chunkSize) {
                 currentChunk += word;
@@ -1663,7 +1497,6 @@ Requirements:
         }
         return chunks;
     }
-    // Analyze gaps when tool roundtrips are exhausted (token-optimized)
     analyzeMissingInformation(originalQuery, toolHistory) {
         const tools = [...new Set(toolHistory.map(t => t.toolName))];
         const failed = toolHistory.filter(t => !t.success).length;
@@ -1671,7 +1504,6 @@ Requirements:
         let analysis = `Used ${tools.length} tools: ${tools.slice(0, 3).join(', ')}${tools.length > 3 ? '...' : ''}. `;
         if (failed > 0)
             analysis += `${failed} failed. `;
-        // Suggest missing tools based on query
         const missing = [];
         if ((queryLower.includes('search') || queryLower.includes('find') || queryLower.includes('cerca') || queryLower.includes('trova')) && !tools.includes('semantic_search')) {
             missing.push('semantic search');
@@ -1684,7 +1516,6 @@ Requirements:
         }
         return this.truncateForPrompt(analysis, 200);
     }
-    // Generate specific clarifying questions (token-optimized)
     generateClarifyingQuestion(gapAnalysis, originalQuery, toolHistory) {
         const queryLower = originalQuery.toLowerCase();
         const tools = toolHistory.map(t => t.toolName);
@@ -1706,19 +1537,16 @@ Requirements:
         }
         return this.truncateForPrompt(`${question}\n💡 Tell me how to continue.`, 150);
     }
-    // Generate final summary after 2 rounds of roundtrips
     generateFinalSummary(originalQuery, toolHistory) {
         const tools = [...new Set(toolHistory.map(t => t.toolName))];
         const successful = toolHistory.filter(t => t.success).length;
         const failed = toolHistory.filter(t => !t.success).length;
         const totalOperations = toolHistory.length;
         let summary = `**Final Analysis Summary:**\n\n`;
-        // What was done
         summary += `📊 **Operations Completed:** ${totalOperations} total operations across ${this.completedRounds} rounds\n`;
         summary += `✅ **Successful:** ${successful} operations\n`;
         summary += `❌ **Failed:** ${failed} operations\n`;
         summary += `🛠️ **Tools Used:** ${tools.join(', ')}\n\n`;
-        // Key findings
         summary += `🔍 **Key Findings:**\n`;
         if (successful > 0) {
             summary += `- Successfully executed ${successful} operations\n`;
@@ -1726,13 +1554,10 @@ Requirements:
         if (failed > 0) {
             summary += `- ${failed} operations encountered issues\n`;
         }
-        // Analysis of query fulfillment
         const queryLower = originalQuery.toLowerCase();
         summary += `\n📝 **Query Analysis:**\n`;
         summary += `- Original request: "${this.truncateForPrompt(originalQuery, 80)}"\n`;
-        // Recommend next steps based on analysis
         summary += `\n🎯 **Recommended Next Steps:**\n`;
-        // Strategy based on what was tried
         if (failed > successful && failed > 3) {
             summary += `- Review and refine search criteria (many operations failed)\n`;
             summary += `- Try different search patterns or keywords\n`;
@@ -1756,11 +1581,9 @@ Requirements:
             }
             summary += `- Focus on specific modules or components\n`;
         }
-        // General strategies
         summary += `- Provide more specific context or constraints\n`;
         summary += `- Break down the request into smaller, targeted tasks\n`;
         summary += `- Try alternative approaches or tools not yet used\n`;
-        // Final guidance
         summary += `\n💡 **How to Continue:** Please provide more specific guidance, narrow the scope, or try a different approach based on the recommendations above. Consider breaking your request into smaller, more focused tasks.`;
         return this.truncateForPrompt(summary, 800);
     }

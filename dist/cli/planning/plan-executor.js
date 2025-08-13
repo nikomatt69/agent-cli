@@ -6,10 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlanExecutor = void 0;
 const inquirer_1 = __importDefault(require("inquirer"));
 const cli_ui_1 = require("../utils/cli-ui");
-/**
- * Production-ready Plan Executor
- * Handles plan approval, step execution, and rollback capabilities
- */
 class PlanExecutor {
     constructor(toolRegistry, config) {
         this.executionHistory = new Map();
@@ -19,13 +15,10 @@ class PlanExecutor {
             requireApprovalForRisk: 'medium',
             enableRollback: true,
             logLevel: 'info',
-            timeoutPerStep: 60000, // 1 minute
+            timeoutPerStep: 60000,
             ...config
         };
     }
-    /**
-     * Execute a plan with user approval and monitoring
-     */
     async executePlan(plan) {
         cli_ui_1.CliUI.logSection(`Executing Plan: ${plan.title}`);
         const startTime = new Date();
@@ -42,24 +35,20 @@ class PlanExecutor {
             }
         };
         try {
-            // Request approval if needed
             const approval = await this.requestApproval(plan);
             if (!approval.approved) {
                 result.status = 'cancelled';
                 cli_ui_1.CliUI.logWarning('Plan execution cancelled by user');
                 return result;
             }
-            // Filter steps based on approval
             const stepsToExecute = plan.steps.filter(step => !approval.modifiedSteps?.includes(step.id));
             cli_ui_1.CliUI.logInfo(`Executing ${stepsToExecute.length} steps...`);
-            // Execute steps in dependency order
             const executionOrder = this.resolveDependencyOrder(stepsToExecute);
             for (let i = 0; i < executionOrder.length; i++) {
                 const step = executionOrder[i];
                 cli_ui_1.CliUI.logProgress(i + 1, executionOrder.length, `Executing: ${step.title}`);
                 const stepResult = await this.executeStep(step, plan);
                 result.stepResults.push(stepResult);
-                // Update summary
                 switch (stepResult.status) {
                     case 'success':
                         result.summary.successfulSteps++;
@@ -71,7 +60,6 @@ class PlanExecutor {
                         result.summary.skippedSteps++;
                         break;
                 }
-                // Handle step failure
                 if (stepResult.status === 'failure') {
                     const shouldContinue = await this.handleStepFailure(step, stepResult, plan);
                     if (!shouldContinue) {
@@ -79,19 +67,16 @@ class PlanExecutor {
                         break;
                     }
                 }
-                // Check for cancellation
                 if (stepResult.status === 'cancelled') {
                     result.status = 'cancelled';
                     break;
                 }
             }
-            // Determine final status
             if (result.status === 'completed' && result.summary.failedSteps > 0) {
                 result.status = 'partial';
             }
             result.endTime = new Date();
             this.executionHistory.set(plan.id, result);
-            // Log final results
             this.logExecutionSummary(result);
             return result;
         }
@@ -102,11 +87,7 @@ class PlanExecutor {
             return result;
         }
     }
-    /**
-     * Request user approval for plan execution
-     */
     async requestApproval(plan) {
-        // Check if approval is required based on risk level
         const requiresApproval = this.shouldRequireApproval(plan);
         if (!requiresApproval) {
             return {
@@ -114,9 +95,7 @@ class PlanExecutor {
                 timestamp: new Date()
             };
         }
-        // Display plan details
         this.displayPlanForApproval(plan);
-        // Get user approval
         const answers = await inquirer_1.default.prompt([
             {
                 type: 'confirm',
@@ -149,9 +128,6 @@ class PlanExecutor {
             timestamp: new Date()
         };
     }
-    /**
-     * Execute a single step
-     */
     async executeStep(step, plan) {
         const startTime = Date.now();
         const result = {
@@ -191,9 +167,6 @@ class PlanExecutor {
         }
         return result;
     }
-    /**
-     * Execute a tool step
-     */
     async executeTool(step) {
         if (!step.toolName) {
             throw new Error('Tool step missing toolName');
@@ -202,26 +175,17 @@ class PlanExecutor {
         if (!tool) {
             throw new Error(`Tool not found: ${step.toolName}`);
         }
-        // Execute with timeout
         const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error('Step execution timeout')), this.config.timeoutPerStep);
         });
         const executionPromise = tool.execute(...(step.toolArgs ? Object.values(step.toolArgs) : []));
         return Promise.race([executionPromise, timeoutPromise]);
     }
-    /**
-     * Execute a validation step
-     */
     async executeValidation(step, plan) {
-        // Implement validation logic based on step requirements
         cli_ui_1.CliUI.updateSpinner('Running validation checks...');
-        // Simulate validation
         await new Promise(resolve => setTimeout(resolve, 1000));
         return { validated: true, checks: ['prerequisites', 'permissions', 'dependencies'] };
     }
-    /**
-     * Execute a user input step
-     */
     async executeUserInput(step) {
         cli_ui_1.CliUI.stopSpinner();
         const answers = await inquirer_1.default.prompt([
@@ -234,22 +198,13 @@ class PlanExecutor {
         ]);
         return answers;
     }
-    /**
-     * Execute a decision step
-     */
     async executeDecision(step, plan) {
-        // Implement decision logic
         cli_ui_1.CliUI.updateSpinner('Evaluating decision criteria...');
-        // Simulate decision making
         await new Promise(resolve => setTimeout(resolve, 500));
         return { decision: 'proceed', reasoning: 'All criteria met' };
     }
-    /**
-     * Handle step failure and determine if execution should continue
-     */
     async handleStepFailure(step, result, plan) {
         cli_ui_1.CliUI.logError(`Step "${step.title}" failed: ${result.error?.message}`);
-        // For non-critical steps, offer to continue
         if (step.riskLevel === 'low') {
             const answers = await inquirer_1.default.prompt([
                 {
@@ -261,7 +216,6 @@ class PlanExecutor {
             ]);
             return answers.continue;
         }
-        // For critical steps, offer rollback if available
         if (this.config.enableRollback && step.reversible) {
             const answers = await inquirer_1.default.prompt([
                 {
@@ -282,7 +236,6 @@ class PlanExecutor {
                     result.status = 'skipped';
                     return true;
                 case 'retry':
-                    // Implement retry logic
                     return true;
                 default:
                     return false;
@@ -290,9 +243,6 @@ class PlanExecutor {
         }
         return false;
     }
-    /**
-     * Resolve step execution order based on dependencies
-     */
     resolveDependencyOrder(steps) {
         const stepMap = new Map(steps.map(step => [step.id, step]));
         const resolved = [];
@@ -307,7 +257,6 @@ class PlanExecutor {
             if (!step)
                 return;
             resolving.add(stepId);
-            // Resolve dependencies first
             if (step.dependencies) {
                 for (const depId of step.dependencies) {
                     resolve(depId);
@@ -316,15 +265,11 @@ class PlanExecutor {
             resolving.delete(stepId);
             resolved.push(step);
         };
-        // Resolve all steps
         for (const step of steps) {
             resolve(step.id);
         }
         return resolved;
     }
-    /**
-     * Display plan details for user approval
-     */
     displayPlanForApproval(plan) {
         cli_ui_1.CliUI.logSection('Plan Approval Required');
         cli_ui_1.CliUI.logKeyValue('Plan Title', plan.title);
@@ -342,9 +287,6 @@ class PlanExecutor {
             console.log(`     ${cli_ui_1.CliUI.dim(step.description)}`);
         });
     }
-    /**
-     * Check if plan requires user approval
-     */
     shouldRequireApproval(plan) {
         const riskThreshold = this.config.requireApprovalForRisk;
         if (plan.riskAssessment.overallRisk === 'high')
@@ -355,9 +297,6 @@ class PlanExecutor {
             return true;
         return false;
     }
-    /**
-     * Log execution summary
-     */
     logExecutionSummary(result) {
         cli_ui_1.CliUI.logSection('Execution Summary');
         const duration = result.endTime ?
@@ -368,20 +307,13 @@ class PlanExecutor {
         cli_ui_1.CliUI.logKeyValue('Successful', result.summary.successfulSteps.toString());
         cli_ui_1.CliUI.logKeyValue('Failed', result.summary.failedSteps.toString());
         cli_ui_1.CliUI.logKeyValue('Skipped', result.summary.skippedSteps.toString());
-        // Show status icon
         const statusIcon = result.status === 'completed' ? '✅' :
             result.status === 'partial' ? '⚠️' : '❌';
         console.log(`\n${statusIcon} Plan execution ${result.status}`);
     }
-    /**
-     * Get execution history
-     */
     getExecutionHistory() {
         return new Map(this.executionHistory);
     }
-    /**
-     * Get execution result for a specific plan
-     */
     getExecutionResult(planId) {
         return this.executionHistory.get(planId);
     }

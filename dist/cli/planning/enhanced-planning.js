@@ -50,24 +50,18 @@ class EnhancedPlanningSystem {
         this.activePlans = new Map();
         this.workingDirectory = workingDirectory;
     }
-    /**
-     * Generate a comprehensive plan with todo.md file
-     */
     async generatePlan(goal, options = {}) {
         const { maxTodos = 20, includeContext = true, showDetails = true, saveTodoFile = true, todoFilePath = 'todo.md' } = options;
         console.log(chalk_1.default.blue.bold(`\\n🎯 Generating Plan: ${goal}`));
         console.log(chalk_1.default.gray('─'.repeat(60)));
-        // Get project context
         let projectContext = '';
         if (includeContext) {
             console.log(chalk_1.default.gray('📁 Analyzing project context...'));
             const context = workspace_context_1.workspaceContext.getContextForAgent('planner', 10);
             projectContext = context.projectSummary;
         }
-        // Generate AI-powered plan
         console.log(chalk_1.default.gray('🧠 Generating AI plan...'));
         const todos = await this.generateTodosWithAI(goal, projectContext, maxTodos);
-        // Create plan object
         const plan = {
             id: (0, nanoid_1.nanoid)(),
             title: this.extractPlanTitle(goal),
@@ -84,7 +78,6 @@ class EnhancedPlanningSystem {
             },
         };
         this.activePlans.set(plan.id, plan);
-        // Show plan details and real todos in structured UI
         if (showDetails) {
             this.displayPlan(plan);
             try {
@@ -105,15 +98,11 @@ class EnhancedPlanningSystem {
                 }
             }
         }
-        // Save todo.md file
         if (saveTodoFile) {
             await this.saveTodoFile(plan, todoFilePath);
         }
         return plan;
     }
-    /**
-     * Request approval for plan execution
-     */
     async requestPlanApproval(planId) {
         const plan = this.activePlans.get(planId);
         if (!plan) {
@@ -121,9 +110,7 @@ class EnhancedPlanningSystem {
         }
         console.log(chalk_1.default.yellow.bold('\\n⚠️  Plan Review Required'));
         console.log(chalk_1.default.gray('═'.repeat(60)));
-        // Show plan summary
         this.displayPlanSummary(plan);
-        // Ask for approval
         const approved = await approval_system_1.approvalSystem.quickApproval(`Execute Plan: ${plan.title}`, `Execute ${plan.todos.length} tasks with estimated duration of ${Math.round(plan.estimatedTotalDuration)} minutes`, this.assessPlanRisk(plan));
         if (approved) {
             plan.status = 'approved';
@@ -135,9 +122,6 @@ class EnhancedPlanningSystem {
         }
         return approved;
     }
-    /**
-     * Execute approved plan
-     */
     async executePlan(planId) {
         const plan = this.activePlans.get(planId);
         if (!plan) {
@@ -154,7 +138,6 @@ class EnhancedPlanningSystem {
         plan.status = 'executing';
         plan.startedAt = new Date();
         try {
-            // Execute todos in dependency order
             const executionOrder = this.resolveDependencyOrder(plan.todos);
             let completedCount = 0;
             for (const todo of executionOrder) {
@@ -163,22 +146,19 @@ class EnhancedPlanningSystem {
                 todo.status = 'in_progress';
                 todo.startedAt = new Date();
                 try {
-                    // Execute the todo
                     const startTime = Date.now();
                     await this.executeTodo(todo, plan);
                     const duration = Date.now() - startTime;
                     todo.status = 'completed';
                     todo.completedAt = new Date();
-                    todo.actualDuration = Math.round(duration / 60000); // convert to minutes
+                    todo.actualDuration = Math.round(duration / 60000);
                     console.log(chalk_1.default.green(`   ✅ Completed in ${Math.round(duration / 1000)}s`));
                     completedCount++;
-                    // Update todo.md file
                     await this.updateTodoFile(plan);
                 }
                 catch (error) {
                     todo.status = 'failed';
                     console.log(chalk_1.default.red(`   ❌ Failed: ${error.message}`));
-                    // Ask if should continue with remaining todos
                     const shouldContinue = await approval_system_1.approvalSystem.quickApproval('Continue Execution?', `Todo "${todo.title}" failed. Continue with remaining todos?`, 'medium');
                     if (!shouldContinue) {
                         console.log(chalk_1.default.yellow('🛑 Plan execution stopped by user'));
@@ -186,18 +166,15 @@ class EnhancedPlanningSystem {
                         return;
                     }
                 }
-                // Show progress
                 const progress = Math.round((completedCount / plan.todos.length) * 100);
                 console.log(chalk_1.default.blue(`   📊 Progress: ${progress}% (${completedCount}/${plan.todos.length})`));
             }
-            // Plan completed
             plan.status = 'completed';
             plan.completedAt = new Date();
             plan.actualTotalDuration = plan.todos.reduce((sum, todo) => sum + (todo.actualDuration || 0), 0);
             console.log(chalk_1.default.green.bold(`\\n🎉 Plan Completed Successfully!`));
             console.log(chalk_1.default.gray(`✅ ${completedCount}/${plan.todos.length} todos completed`));
             console.log(chalk_1.default.gray(`⏱️  Total time: ${plan.actualTotalDuration} minutes`));
-            // Update final todo.md
             await this.updateTodoFile(plan);
         }
         catch (error) {
@@ -205,9 +182,6 @@ class EnhancedPlanningSystem {
             console.log(chalk_1.default.red(`\\n❌ Plan execution failed: ${error.message}`));
         }
     }
-    /**
-     * Generate todos using AI
-     */
     async generateTodosWithAI(goal, context, maxTodos) {
         const messages = [
             {
@@ -255,7 +229,6 @@ Generate a comprehensive plan that is practical and executable.`
         try {
             const response = await model_provider_1.modelProvider.generateResponse({ messages });
             lastModelOutput = response || '';
-            // Prefer fenced JSON blocks if present, otherwise fall back to broad match
             const raw = lastModelOutput.trim();
             const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
             let jsonString = fenceMatch ? fenceMatch[1].trim() : undefined;
@@ -268,7 +241,6 @@ Generate a comprehensive plan that is practical and executable.`
                 throw new Error('AI did not return valid JSON plan');
             }
             const planData = JSON.parse(jsonString);
-            // Convert to TodoItem format
             const todos = planData.todos.map((todoData, index) => ({
                 id: (0, nanoid_1.nanoid)(),
                 title: todoData.title || `Task ${index + 1}`,
@@ -293,7 +265,6 @@ Generate a comprehensive plan that is practical and executable.`
                 const preview = lastModelOutput.replace(/```/g, '```').slice(0, 400);
                 console.log(chalk_1.default.gray(`↪ Raw AI output (truncated):\n${preview}${lastModelOutput.length > 400 ? '…' : ''}`));
             }
-            // Fallback: create a simple todo
             return [{
                     id: (0, nanoid_1.nanoid)(),
                     title: 'Execute Task',
@@ -309,9 +280,6 @@ Generate a comprehensive plan that is practical and executable.`
                 }];
         }
     }
-    /**
-     * Display plan in formatted view
-     */
     displayPlan(plan) {
         console.log((0, boxen_1.default)(`${chalk_1.default.blue.bold(plan.title)}\\n\\n` +
             `${chalk_1.default.gray('Goal:')} ${plan.goal}\\n` +
@@ -341,9 +309,6 @@ Generate a comprehensive plan that is practical and executable.`
             console.log();
         });
     }
-    /**
-     * Display plan summary
-     */
     displayPlanSummary(plan) {
         const stats = {
             byPriority: this.groupBy(plan.todos, 'priority'),
@@ -367,9 +332,6 @@ Generate a comprehensive plan that is practical and executable.`
             console.log(`  • ${color(category)}: ${todos.length} todos`);
         });
     }
-    /**
-     * Save plan to todo.md file
-     */
     async saveTodoFile(plan, filename = 'todo.md') {
         const todoPath = path.join(this.workingDirectory, filename);
         let content = `# Todo Plan: ${plan.title}\n\n`;
@@ -420,7 +382,6 @@ Generate a comprehensive plan that is practical and executable.`
             }
             content += '---\n\n';
         });
-        // Add statistics
         content += `## Statistics\n\n`;
         content += `- **Total Todos:** ${plan.todos.length}\n`;
         content += `- **Completed:** ${plan.todos.filter(t => t.status === 'completed').length}\n`;
@@ -435,41 +396,25 @@ Generate a comprehensive plan that is practical and executable.`
         await fs.writeFile(todoPath, content, 'utf8');
         console.log(chalk_1.default.green(`📄 Todo file saved: ${todoPath}`));
     }
-    /**
-     * Update existing todo.md file
-     */
     async updateTodoFile(plan, filename = 'todo.md') {
         await this.saveTodoFile(plan, filename);
     }
-    /**
-     * Execute a single todo
-     */
     async executeTodo(todo, plan) {
-        // This is a simplified execution - in a real implementation,
-        // you would integrate with the actual tool execution system
         console.log(chalk_1.default.gray(`   🔍 Analyzing todo: ${todo.title}`));
-        // Simulate execution time
         await new Promise(resolve => setTimeout(resolve, 1000));
-        // Execute commands if specified
         if (todo.commands && todo.commands.length > 0) {
             for (const command of todo.commands) {
                 console.log(chalk_1.default.blue(`   ⚡ Running: ${command}`));
-                // In real implementation, execute the command using tool system
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
-        // Create/modify files if specified
         if (todo.files && todo.files.length > 0) {
             for (const file of todo.files) {
                 console.log(chalk_1.default.yellow(`   📄 Working on file: ${file}`));
-                // In real implementation, create/modify the file
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
         }
     }
-    /**
-     * Resolve todo execution order based on dependencies
-     */
     resolveDependencyOrder(todos) {
         const resolved = [];
         const remaining = [...todos];
@@ -477,12 +422,10 @@ Generate a comprehensive plan that is practical and executable.`
         while (remaining.length > 0) {
             const canExecute = remaining.filter(todo => todo.dependencies.every(depId => resolved.some(resolvedTodo => resolvedTodo.id === depId)));
             if (canExecute.length === 0) {
-                // Break circular dependencies by taking the first remaining todo
                 const next = remaining.shift();
                 resolved.push(next);
             }
             else {
-                // Execute todos with satisfied dependencies
                 canExecute.forEach(todo => {
                     const index = remaining.indexOf(todo);
                     remaining.splice(index, 1);
@@ -492,9 +435,6 @@ Generate a comprehensive plan that is practical and executable.`
         }
         return resolved;
     }
-    /**
-     * Assess plan risk level
-     */
     assessPlanRisk(plan) {
         const criticalCount = plan.todos.filter(t => t.priority === 'critical').length;
         const highCount = plan.todos.filter(t => t.priority === 'high').length;
@@ -508,7 +448,6 @@ Generate a comprehensive plan that is practical and executable.`
             return 'medium';
         return 'low';
     }
-    // Utility methods
     extractPlanTitle(goal) {
         return goal.length > 50 ? goal.substring(0, 47) + '...' : goal;
     }
@@ -578,21 +517,12 @@ Generate a comprehensive plan that is practical and executable.`
             default: return chalk_1.default.gray;
         }
     }
-    /**
-     * Get all active plans
-     */
     getActivePlans() {
         return Array.from(this.activePlans.values());
     }
-    /**
-     * Get plan by ID
-     */
     getPlan(planId) {
         return this.activePlans.get(planId);
     }
-    /**
-     * Show plan status
-     */
     showPlanStatus(planId) {
         if (planId) {
             const plan = this.activePlans.get(planId);
@@ -619,5 +549,4 @@ Generate a comprehensive plan that is practical and executable.`
     }
 }
 exports.EnhancedPlanningSystem = EnhancedPlanningSystem;
-// Export singleton instance
 exports.enhancedPlanning = new EnhancedPlanningSystem();

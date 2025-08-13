@@ -18,10 +18,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./src",
+    "declaration": false,
+    "sourceMap": false,
+    "removeComments": true,
     "paths": {
       "@/*": ["*"],
       "@cli/*": ["cli/*"],
-      "@agents/*": ["cli/agents/*"],
+      "@agents/*": ["cli/automation/agents/*"],
       "@core/*": ["cli/core/*"],
       "@utils/*": ["cli/utils/*"],
       "@tools/*": ["cli/tools/*"],
@@ -29,11 +32,12 @@
     }
   },
   "include": [
-    "src/cli/**/*"
+    "src/cli/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    ".next"
+    ".next",
+    "tests"
   ]
 }

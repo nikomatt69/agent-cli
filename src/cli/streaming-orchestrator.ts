@@ -3,6 +3,7 @@
 import chalk from 'chalk';
 import * as readline from 'readline';
 import { EventEmitter } from 'events';
+import { randomBytes } from 'crypto';
 
 import { agentService } from './services/agent-service';
 import { toolService } from './services/tool-service';
@@ -183,7 +184,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
   private queueMessage(partial: Partial<StreamMessage>): void {
     const message: StreamMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `msg_${Date.now()}_${randomBytes(6).toString('base64url')}`,
       timestamp: new Date(),
       status: 'queued',
       ...partial

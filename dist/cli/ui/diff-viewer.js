@@ -42,9 +42,6 @@ const diff = __importStar(require("diff"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 class DiffViewer {
-    /**
-     * Show diff for a single file modification
-     */
     static showFileDiff(fileDiff, options = {}) {
         const { context = 3, showLineNumbers = true, highlightWords = true, compact = false } = options;
         console.log(chalk_1.default.blue.bold(`\n📄 File: ${fileDiff.filePath}`));
@@ -57,7 +54,6 @@ class DiffViewer {
             console.log(chalk_1.default.red('🗑️  File deleted'));
             return;
         }
-        // Generate line-by-line diff
         const diffResult = diff.diffLines(fileDiff.originalContent, fileDiff.newContent);
         if (diffResult.length === 1 && !diffResult[0].added && !diffResult[0].removed) {
             console.log(chalk_1.default.gray('   No changes'));
@@ -95,9 +91,6 @@ class DiffViewer {
         console.log(chalk_1.default.gray('─'.repeat(80)));
         console.log(chalk_1.default.green(`+${addedLines} additions`) + chalk_1.default.gray(' | ') + chalk_1.default.red(`-${removedLines} deletions`));
     }
-    /**
-     * Show multiple file diffs in a summary view
-     */
     static showMultiFileDiff(fileDiffs, options = {}) {
         console.log(chalk_1.default.blue.bold(`\n📁 File Changes Summary (${fileDiffs.length} files)`));
         console.log(chalk_1.default.gray('═'.repeat(80)));
@@ -123,9 +116,6 @@ class DiffViewer {
             }
         });
     }
-    /**
-     * Show content of a new file
-     */
     static showNewFileContent(content, showLineNumbers, compact) {
         const lines = content.split('\n');
         if (compact && lines.length > 10) {
@@ -147,9 +137,6 @@ class DiffViewer {
             });
         }
     }
-    /**
-     * Create a FileDiff object from file paths
-     */
     static async createFileDiff(filePath, originalPath) {
         const fullPath = path.resolve(filePath);
         let originalContent = '';
@@ -157,7 +144,6 @@ class DiffViewer {
         let isNew = false;
         let isDeleted = false;
         try {
-            // Try to read new content
             newContent = await fs.promises.readFile(fullPath, 'utf8');
         }
         catch (error) {
@@ -168,18 +154,15 @@ class DiffViewer {
                 originalContent = await fs.promises.readFile(originalPath, 'utf8');
             }
             catch (error) {
-                // Original file doesn't exist, this is a new file
                 isNew = true;
             }
         }
         else {
-            // Check if file existed before (simplified check)
             try {
                 const stats = await fs.promises.stat(fullPath);
-                // If file is very recent, consider it new
                 const now = Date.now();
                 const fileTime = stats.mtime.getTime();
-                isNew = (now - fileTime) < 5000; // 5 seconds
+                isNew = (now - fileTime) < 5000;
             }
             catch (error) {
                 isNew = true;
@@ -193,9 +176,6 @@ class DiffViewer {
             isDeleted,
         };
     }
-    /**
-     * Interactive diff approval
-     */
     static async showDiffAndAskApproval(fileDiffs) {
         console.log(chalk_1.default.yellow.bold('\n⚠️  The following files will be modified:'));
         this.showMultiFileDiff(fileDiffs, { compact: true });
@@ -212,9 +192,6 @@ class DiffViewer {
             });
         });
     }
-    /**
-     * Show word-level diff (more detailed)
-     */
     static showWordDiff(original, modified) {
         const wordDiff = diff.diffWords(original, modified);
         let result = '';
@@ -231,9 +208,6 @@ class DiffViewer {
         });
         console.log(result);
     }
-    /**
-     * Save diff to file for later review
-     */
     static async saveDiffToFile(fileDiffs, outputPath) {
         let content = `# File Changes Report\n\nGenerated: ${new Date().toISOString()}\n\n`;
         content += `## Summary\n`;
