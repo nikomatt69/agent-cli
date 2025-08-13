@@ -5,7 +5,7 @@
 ██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║                                                                                                                                                                                                                                
 ██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║                                                                                                                                                                                                                                
 ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║                                                                                                                                                                                                                                
-╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝                                                                                                                                                                                                                                
+╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝                                                                                                                                                                                                                                                                                                                                                                                                                                                                
 
 **A production-ready autonomous AI development assistant that provides an intelligent command-line interface for software development.**
 
