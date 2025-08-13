@@ -542,7 +542,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             const { optimizedMessages, metrics } = context_manager_1.contextManager.optimizeContext(this.session.messages);
             if (metrics.compressionRatio > 0) {
                 console.log(chalk_1.default.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
-                console.log(chalk_1.default.dim(`   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
+                console.log(chalk_1.default.dim(`\n   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
                 console.log(); // Add spacing after token info
             }
             // Stream the autonomous response with optimized context

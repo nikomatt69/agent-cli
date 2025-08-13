@@ -1,0 +1,743 @@
+---
+title: 'Mode Control'
+description: 'Master NikCLI operating modes and transitions'
+icon: 'toggle-on'
+---
+
+## Operating Modes Overview
+
+NikCLI operates in three distinct modes, each optimized for different development scenarios. Understanding and effectively using these modes is key to maximizing your productivity.
+
+<CardGroup cols={3}>
+  <Card title="💬 Default Chat" icon="comments">
+    Interactive conversational development with step-by-step guidance
+  </Card>
+  <Card title="📋 Planning Mode" icon="clipboard-list">
+    Strategic planning and review before implementation
+  </Card>
+  <Card title="🤖 Autonomous Mode" icon="robot">
+    Independent AI execution with minimal supervision
+  </Card>
+</CardGroup>
+
+## Mode Switching Commands
+
+### Quick Mode Navigation
+
+<Tabs>
+  <Tab title="Keyboard Shortcuts">
+    **Primary Method - Shift+Tab Cycling**
+    ```
+    Shift+Tab: Cycle through modes
+    💬 Default → 📋 Planning → 🤖 Autonomous → 💬 Default
+    
+    ESC: Return to Default Chat mode (from any mode)
+    ```
+    
+    **Visual Indicators:**
+    ```
+    Current Mode: 💬 Default Chat
+    Press Shift+Tab to cycle modes
+    
+    Current Mode: 📋 Planning Mode  
+    Press Shift+Tab to cycle modes
+    
+    Current Mode: 🤖 Autonomous Mode
+    Press Shift+Tab to cycle modes
+    ```
+  </Tab>
+  
+  <Tab title="Direct Commands">
+    **Explicit Mode Commands**
+    ```bash
+    /chat       # Switch to Default Chat mode
+    /plan       # Switch to Planning mode  
+    /auto       # Switch to Autonomous mode
+    /autonomous # Alias for /auto
+    ```
+    
+    **Mode Status Commands**
+    ```bash
+    /mode       # Show current mode
+    /status     # Show detailed session status
+    ```
+  </Tab>
+  
+  <Tab title="Configuration">
+    **Default Mode Setting**
+    ```bash
+    # Set startup mode
+    nikcli config set default-mode chat
+    nikcli config set default-mode planning
+    nikcli config set default-mode autonomous
+    
+    # Show current default
+    nikcli config get default-mode
+    ```
+  </Tab>
+</Tabs>
+
+## Default Chat Mode (💬)
+
+### Mode Characteristics
+
+<AccordionGroup>
+  <Accordion title="Interactive Development">
+    **Perfect for learning and step-by-step development**
+    
+    ```
+    > Create a React component for user login
+    
+    🔍 I'll help you create a login component. Let me ask a few questions:
+    
+    1. What authentication method do you prefer?
+       a) Email/password
+       b) Social login (Google, GitHub)
+       c) Both
+    
+    2. Do you want form validation?
+       a) Basic validation
+       b) Advanced validation with error messages
+       c) Real-time validation
+    
+    3. What styling approach should I use?
+       a) CSS modules
+       b) Styled-components
+       c) Tailwind CSS
+    
+    Please let me know your preferences.
+    ```
+    
+    **Features:**
+    - Clarification questions
+    - Step-by-step guidance
+    - Manual approval for changes
+    - Educational explanations
+  </Accordion>
+  
+  <Accordion title="Manual Approval Workflow">
+    **Every action requires explicit approval**
+    
+    ```
+    📝 Ready to create the following files:
+    
+    ┌─ src/components/LoginForm.tsx (new file)
+    ├─ src/components/LoginForm.module.css (new file)
+    └─ src/types/auth.ts (new file)
+    
+    Changes will include:
+    • React functional component with TypeScript
+    • Form validation with error handling
+    • Responsive CSS styling
+    • Type definitions for authentication
+    
+    Proceed with file creation? (y/n/details)
+    > y
+    
+    ✅ Files created successfully!
+    
+    Next steps:
+    1. Review the generated code
+    2. Test the component integration
+    3. Customize styling as needed
+    
+    Would you like me to show you how to integrate this component?
+    ```
+  </Accordion>
+  
+  <Accordion title="Educational Features">
+    **Learn while you develop**
+    
+    ```
+    ✅ Login component created! Let me explain what I built:
+    
+    🏗️ Component Structure:
+    ├── LoginForm.tsx - Main component with state management
+    │   ├── useState for form data and validation
+    │   ├── useCallback for optimized event handlers
+    │   └── Custom validation logic
+    │
+    ├── LoginForm.module.css - Scoped styling
+    │   ├── Responsive layout with flexbox
+    │   ├── Focus states for accessibility
+    │   └── Error styling for validation feedback
+    │
+    └── auth.ts - Type definitions
+        ├── LoginCredentials interface
+        ├── ValidationError interface
+        └── AuthResponse interface
+    
+    💡 Key Features Implemented:
+    • Real-time validation with debouncing
+    • Accessibility attributes (ARIA labels)
+    • Loading states for better UX
+    • Error handling with user-friendly messages
+    
+    Would you like me to explain any specific part in detail?
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Best Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Learning & Exploration" icon="graduation-cap">
+    - Understanding new concepts
+    - Exploring different approaches
+    - Getting detailed explanations
+    - Step-by-step tutorials
+  </Card>
+  
+  <Card title="Precision Work" icon="target">
+    - Critical system modifications
+    - Custom requirement implementations
+    - Code review and refinement
+    - Complex debugging scenarios
+  </Card>
+</CardGroup>
+
+## Planning Mode (📋)
+
+### Planning Workflow
+
+<Steps>
+  <Step title="Plan Creation">
+    Generate comprehensive implementation plans
+    
+    ```
+    /plan create "User authentication system with social login"
+    
+    📋 Creating comprehensive implementation plan...
+    
+    ## User Authentication System Implementation Plan
+    
+    ### Project Analysis
+    - Current stack: React + Node.js + MongoDB
+    - Authentication needs: Email/password + OAuth
+    - Security requirements: JWT tokens, password hashing
+    - Integration points: Frontend auth context, protected routes
+    
+    ### Implementation Phases
+    
+    #### Phase 1: Backend Foundation (2-3 hours)
+    - User model with Mongoose schema
+    - Password hashing with bcrypt
+    - JWT token generation and validation
+    - Authentication middleware
+    - Basic login/register endpoints
+    
+    #### Phase 2: OAuth Integration (1-2 hours)  
+    - Passport.js setup for Google/GitHub
+    - OAuth callback handling
+    - User account linking logic
+    - Social profile data integration
+    
+    #### Phase 3: Frontend Implementation (2-3 hours)
+    - Authentication context/provider
+    - Login and registration forms
+    - Social login buttons
+    - Protected route wrapper
+    - User profile management
+    
+    #### Phase 4: Security & Testing (1-2 hours)
+    - Input validation and sanitization
+    - Rate limiting implementation
+    - Unit and integration tests
+    - Security audit and hardening
+    
+    ### Technical Specifications
+    - Database: MongoDB with Mongoose ODM
+    - Authentication: JWT with refresh tokens
+    - OAuth: Passport.js with Google/GitHub strategies
+    - Frontend: React Context API for state management
+    - Validation: Joi for backend, custom hooks for frontend
+    
+    ### Dependencies
+    - Backend: bcryptjs, jsonwebtoken, passport, passport-google-oauth20
+    - Frontend: react-router-dom, axios for API calls
+    
+    Do you want to proceed with this plan? (y/n/modify)
+    ```
+  </Step>
+  
+  <Step title="Plan Review & Modification">
+    Review and refine the implementation plan
+    
+    ```
+    > I'd like to modify the plan to include email verification
+    
+    📝 Plan Modification Request: Add email verification
+    
+    Updated Phase 1: Backend Foundation (3-4 hours)
+    - User model with email verification fields
+    - Email verification token generation
+    - Email service setup (SendGrid/Nodemailer)
+    - Email verification endpoints
+    - Modified registration flow
+    
+    Updated Phase 3: Frontend Implementation (2.5-3.5 hours)
+    - Email verification page component
+    - Verification status handling
+    - Resend verification email functionality
+    - Updated registration flow with verification step
+    
+    Additional Dependencies:
+    - Backend: nodemailer or @sendgrid/mail
+    - Email templates for verification
+    
+    Updated timeline: 7-9 hours total
+    
+    Save modified plan? (y/n)
+    ```
+  </Step>
+  
+  <Step title="Plan Execution">
+    Execute the approved plan systematically
+    
+    ```
+    /plan execute
+    
+    🚀 Executing Authentication System Plan
+    
+    Phase 1: Backend Foundation [ACTIVE]
+    ├── ✅ User model with Mongoose schema (5 min)
+    ├── ✅ Password hashing implementation (3 min)
+    ├── 🔄 JWT token system (in progress - 8 min)
+    ├── ⏳ Email verification system
+    ├── ⏳ Authentication middleware
+    └── ⏳ API endpoints
+    
+    Current Task: Implementing JWT token generation and validation
+    Estimated completion: 15 minutes
+    
+    Progress: 2/6 tasks complete (33%)
+    
+    Would you like to:
+    [C] Continue automatic execution
+    [P] Pause and review current progress  
+    [M] Switch to manual mode for this phase
+    [S] Skip to next phase
+    ```
+  </Step>
+  
+  <Step title="Progress Monitoring">
+    Track implementation progress against the plan
+    
+    ```
+    /plan status
+    
+    📊 Authentication System Implementation Status
+    
+    Overall Progress: ████████████░░░░░░░░ 60%
+    
+    ✅ Phase 1: Backend Foundation (100% complete)
+    ├── ✅ User model and schema
+    ├── ✅ Password hashing system  
+    ├── ✅ JWT token management
+    ├── ✅ Email verification system
+    ├── ✅ Authentication middleware
+    └── ✅ Login/register/verify endpoints
+    
+    🔄 Phase 2: OAuth Integration (40% complete)
+    ├── ✅ Passport.js configuration
+    ├── 🔄 Google OAuth strategy (in progress)
+    ├── ⏳ GitHub OAuth strategy
+    ├── ⏳ Account linking logic
+    └── ⏳ Profile data integration
+    
+    ⏳ Phase 3: Frontend Implementation (0% complete)
+    ⏳ Phase 4: Security & Testing (0% complete)
+    
+    Current Focus: Google OAuth integration
+    Next Milestone: Complete OAuth setup (ETA: 30 min)
+    
+    Issues Found: None
+    Deviations from Plan: None
+    ```
+  </Step>
+</Steps>
+
+### Planning Commands
+
+<AccordionGroup>
+  <Accordion title="Plan Management">
+    ```bash
+    # Plan lifecycle commands
+    /plan create "task description"    # Create new plan
+    /plan show [planId]               # Show plan details
+    /plan list                        # List all plans
+    /plan execute [planId]            # Execute specific plan
+    /plan status [planId]             # Check execution status
+    /plan pause [planId]              # Pause execution
+    /plan resume [planId]             # Resume paused plan
+    /plan cancel [planId]             # Cancel plan execution
+    /plan delete [planId]             # Delete plan
+    ```
+  </Accordion>
+  
+  <Accordion title="Plan Modification">
+    ```bash
+    # Plan editing commands
+    /plan edit [planId]               # Edit plan interactively
+    /plan add-phase "phase description" # Add new phase
+    /plan remove-phase [phaseId]      # Remove phase
+    /plan reorder-phases              # Reorder execution phases
+    /plan set-priority [phaseId] high # Set phase priority
+    /plan add-dependency [phaseId] [dependsOn] # Add dependency
+    ```
+  </Accordion>
+  
+  <Accordion title="Plan Analysis">
+    ```bash
+    # Plan analysis commands
+    /plan estimate [planId]           # Get time estimates
+    /plan complexity [planId]         # Analyze complexity
+    /plan dependencies [planId]       # Show dependency graph
+    /plan risks [planId]              # Identify potential risks
+    /plan resources [planId]          # Required resources analysis
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Best Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Complex Projects" icon="puzzle-piece">
+    - Multi-component features
+    - System integrations
+    - Architecture changes
+    - Large refactoring efforts
+  </Card>
+  
+  <Card title="Team Collaboration" icon="users">
+    - Shared project planning
+    - Task delegation
+    - Progress tracking
+    - Milestone management
+  </Card>
+</CardGroup>
+
+## Autonomous Mode (🤖)
+
+### Autonomous Operation
+
+<AccordionGroup>
+  <Accordion title="Independent Execution">
+    **AI works with minimal supervision**
+    
+    ```
+    /auto "Create a complete blog system with posts, comments, and admin panel"
+    
+    🤖 Autonomous Mode: Analyzing comprehensive blog system requirement
+    
+    📊 Complexity Analysis:
+    - Feature Scope: HIGH (multiple interconnected components)
+    - Technical Complexity: MEDIUM-HIGH  
+    - Estimated Duration: 2-3 hours
+    - Agents Required: 4 (Frontend, Backend, Database, Integration)
+    
+    🎯 Auto-Generated Execution Plan:
+    
+    Foundation Layer (30 min):
+    ├── Database models (User, Post, Comment, Category)
+    ├── Authentication system setup
+    ├── Basic API structure with Express.js
+    └── Database relationships and constraints
+    
+    Backend API (45 min):
+    ├── CRUD operations for posts and comments
+    ├── User management and authentication
+    ├── Admin panel API endpoints
+    ├── File upload for images
+    └── Search and filtering capabilities
+    
+    Frontend Implementation (60 min):
+    ├── Blog post listing and detail views
+    ├── Comment system with threading
+    ├── Admin dashboard for content management
+    ├── Rich text editor for post creation
+    └── Responsive design implementation
+    
+    Integration & Testing (30 min):
+    ├── End-to-end functionality testing
+    ├── API integration validation
+    ├── Security assessment
+    └── Performance optimization
+    
+    🚀 Beginning autonomous execution in 3 seconds...
+    Press Ctrl+C to abort, 'pause' to pause
+    ```
+  </Accordion>
+  
+  <Accordion title="Multi-Agent Coordination">
+    **Parallel execution with agent collaboration**
+    
+    ```
+    🤖 Multi-Agent Execution Dashboard
+    
+    ┌─ Blog System Implementation ─────────────────────────────┐
+    │                                                         │
+    │  Overall Progress: ████████████████░░░░  75%            │
+    │  Active Agents: 4/4    Elapsed: 1h 23m    ETA: 22m     │
+    │                                                         │
+    │  📊 Agent Status:                                       │
+    │  ├── Backend-Agent     ████████████████████ 100%       │
+    │  ├── Frontend-Agent    ████████████████░░░░  80%       │
+    │  ├── Database-Agent    ████████████████████ 100%       │
+    │  └── Integration-Agent ████████░░░░░░░░░░░░  40%       │
+    │                                                         │
+    │  🎯 Current Tasks:                                      │
+    │  ├── ✅ Database schema completed                       │
+    │  ├── ✅ Authentication API finished                     │
+    │  ├── ✅ Blog post CRUD operations done                  │
+    │  ├── 🔄 Comment system frontend (85% done)             │
+    │  ├── 🔄 Admin dashboard integration (60% done)         │
+    │  └── ⏳ End-to-end testing (queued)                    │
+    │                                                         │
+    │  💡 Recent Completions:                                │
+    │  ├── 14:23 Rich text editor integrated                 │
+    │  ├── 14:31 Image upload functionality added            │
+    │  ├── 14:45 Comment threading implemented               │
+    │  └── 14:52 Admin panel authentication secured         │
+    │                                                         │
+    │  Commands: [P]ause [S]tatus [D]etails [Q]uit          │
+    └─────────────────────────────────────────────────────────┘
+    ```
+  </Accordion>
+  
+  <Accordion title="Quality Assurance">
+    **Continuous validation during execution**
+    
+    ```
+    🔍 Autonomous Quality Assurance
+    
+    Real-time Validation:
+    ├── ✅ TypeScript compilation: No errors
+    ├── ✅ ESLint validation: All rules passed
+    ├── ✅ Unit tests: 47/47 passing
+    ├── ✅ Integration tests: 12/12 passing
+    ├── 🔄 E2E tests: 8/10 passing (2 in progress)
+    └── ⏳ Security scan: Scheduled after completion
+    
+    Code Quality Metrics:
+    ├── Test Coverage: 94% (exceeds 80% requirement)
+    ├── Cyclomatic Complexity: 3.2 avg (good)
+    ├── Duplication: 1.8% (excellent)
+    ├── Maintainability Index: 87 (very good)
+    └── Technical Debt Ratio: 2.1% (low)
+    
+    Automatic Fixes Applied:
+    ├── 🔧 Fixed 3 linting warnings
+    ├── 🔧 Resolved type inconsistency in Comment model
+    ├── 🔧 Optimized database query in post listing
+    ├── 🔧 Enhanced error handling in authentication
+    └── 🔧 Improved responsive design on mobile
+    
+    Performance Benchmarks:
+    ├── Page Load Time: 1.2s (excellent)
+    ├── API Response Time: 45ms avg (very good)
+    ├── Bundle Size: 234KB (within target)
+    └── Memory Usage: 38MB (optimal)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Autonomous Commands
+
+<Tabs>
+  <Tab title="Execution Control">
+    ```bash
+    # Start autonomous execution
+    /auto "task description"          # Begin autonomous mode
+    /autonomous "task description"    # Alias for /auto
+    
+    # Execution control
+    pause                            # Pause execution
+    resume                           # Resume execution  
+    stop                            # Stop and save progress
+    abort                           # Emergency stop
+    
+    # Progress monitoring
+    /status                         # Show execution status
+    /dashboard                      # Open live dashboard
+    /agents                         # Show agent status
+    ```
+  </Tab>
+  
+  <Tab title="Configuration">
+    ```bash
+    # Autonomous mode settings
+    nikcli config set autonomous.approval-level strict
+    nikcli config set autonomous.max-agents 6
+    nikcli config set autonomous.timeout 3600
+    nikcli config set autonomous.auto-backup true
+    
+    # Quality gates
+    nikcli config set autonomous.min-coverage 80
+    nikcli config set autonomous.require-tests true
+    nikcli config set autonomous.quality-gates strict
+    ```
+  </Tab>
+  
+  <Tab title="Safety Controls">
+    ```bash
+    # Emergency controls
+    Ctrl+C                          # Emergency stop
+    /emergency-stop                 # Graceful emergency stop
+    /rollback                       # Rollback to last checkpoint
+    
+    # Safety settings
+    /dev-mode enable 30             # Reduce restrictions temporarily
+    /safe-mode                      # Maximum safety restrictions
+    /approve-all                    # Approve pending operations
+    /clear-approvals                # Clear cached approvals
+    ```
+  </Tab>
+</Tabs>
+
+### Best Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Rapid Development" icon="rocket">
+    - Prototyping and MVP development
+    - Boilerplate generation
+    - Routine implementation tasks
+    - Time-sensitive projects
+  </Card>
+  
+  <Card title="Large Scale Tasks" icon="building">
+    - Full-stack feature implementation
+    - System-wide refactoring
+    - Migration projects
+    - Performance optimization
+  </Card>
+</CardGroup>
+
+## Mode Comparison
+
+| Feature | Default Chat 💬 | Planning Mode 📋 | Autonomous Mode 🤖 |
+|---------|------------------|-------------------|-------------------|
+| **Supervision** | High | Medium | Low |
+| **Speed** | Slow | Medium | Fast |
+| **Learning** | High | Medium | Low |
+| **Complexity** | Simple-Medium | Medium-High | Any |
+| **Approval** | Every step | Major milestones | Safety checkpoints |
+| **Best For** | Learning, precision | Complex planning | Rapid development |
+
+## Advanced Mode Features
+
+### Mode-Specific Configuration
+
+<AccordionGroup>
+  <Accordion title="Per-Mode Settings">
+    ```json
+    // ~/.nikcli/config.json
+    {
+      "modes": {
+        "chat": {
+          "verbosity": "high",
+          "explanations": "detailed",
+          "approval_required": "all_operations"
+        },
+        "planning": {
+          "detail_level": "comprehensive",
+          "estimation_accuracy": "high",
+          "dependency_analysis": "enabled"
+        },
+        "autonomous": {
+          "approval_level": "medium",
+          "quality_gates": "strict",
+          "backup_frequency": "every_10_minutes"
+        }
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom Mode Behaviors">
+    ```bash
+    # Customize mode behaviors
+    nikcli config set modes.chat.explanation-level detailed
+    nikcli config set modes.planning.auto-estimate true
+    nikcli config set modes.autonomous.risk-tolerance medium
+    
+    # Mode-specific agent preferences
+    nikcli config set modes.chat.preferred-agent universal
+    nikcli config set modes.autonomous.max-parallel-agents 4
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Mode Transitions
+
+<Tabs>
+  <Tab title="Seamless Switching">
+    ```
+    💬 Default Chat Mode
+    > I need to plan a complex feature implementation
+    
+    /plan
+    📋 Switched to Planning Mode
+    
+    > create "E-commerce checkout system"
+    📋 Plan created with 4 phases, 15 tasks
+    
+    > This looks good, let's implement it autonomously
+    
+    /auto execute
+    🤖 Switched to Autonomous Mode
+    🚀 Beginning execution of checkout system plan...
+    ```
+  </Tab>
+  
+  <Tab title="Context Preservation">
+    ```
+    # Context is maintained across mode switches
+    
+    📋 Planning Mode: Created implementation plan
+    ↓ (context preserved)
+    🤖 Autonomous Mode: Executing the plan
+    ↓ (context preserved)  
+    💬 Chat Mode: Reviewing implementation details
+    
+    # All conversation history and decisions remain available
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="File Operations"
+    icon="folder"
+    href="/cli-reference/file-operations"
+  >
+    Learn file system operations across all modes
+  </Card>
+  <Card
+    title="Agent Management"
+    icon="users"
+    href="/cli-reference/agent-management"
+  >
+    Understand agent coordination in different modes
+  </Card>
+  <Card
+    title="Workflow Patterns"
+    icon="workflow"
+    href="/user-guide/workflow-patterns"
+  >
+    Discover optimal mode usage patterns
+  </Card>
+  <Card
+    title="Advanced Configuration"
+    icon="gear"
+    href="/advanced/configuration"
+  >
+    Configure advanced mode behaviors
+  </Card>
+</CardGroup>
+
+<Tip>
+  Master mode switching to optimize your development workflow. Use Default Chat for learning, Planning Mode for complex projects, and Autonomous Mode for rapid implementation.
+</Tip>

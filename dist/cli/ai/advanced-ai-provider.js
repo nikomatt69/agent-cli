@@ -17,8 +17,6 @@ const child_process_1 = require("child_process");
 const chalk_1 = __importDefault(require("chalk"));
 const util_1 = require("util");
 const analysis_utils_1 = require("../utils/analysis-utils");
-const token_cache_1 = require("../core/token-cache");
-const completion_protocol_cache_1 = require("../core/completion-protocol-cache");
 const context_enhancer_1 = require("../core/context-enhancer");
 const performance_optimizer_1 = require("../core/performance-optimizer");
 const web_search_provider_1 = require("../core/web-search-provider");
@@ -29,6 +27,9 @@ const prompt_manager_1 = require("../prompts/prompt-manager");
 const smart_cache_manager_1 = require("../core/smart-cache-manager");
 const documentation_library_1 = require("../core/documentation-library");
 const documentation_tool_1 = require("../core/documentation-tool");
+const docs_context_manager_1 = require("../context/docs-context-manager");
+const smart_docs_tool_1 = require("../tools/smart-docs-tool");
+const docs_request_tool_1 = require("../tools/docs-request-tool");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
@@ -167,15 +168,22 @@ class AdvancedAIProvider {
     // Enhanced system prompt with advanced capabilities (using PromptManager)
     async getEnhancedSystemPrompt(context = {}) {
         try {
+            // Get documentation context if available
+            const docsContext = this.getDocumentationContext();
             // Try to load base agent prompt first
             const basePrompt = await this.promptManager.loadPromptForContext({
                 agentId: 'base-agent',
                 parameters: {
                     workingDirectory: this.workingDirectory,
                     availableTools: this.toolRouter.getAllTools().map(tool => `${tool.tool}: ${tool.description}`).join(', '),
+                    documentationContext: docsContext,
                     ...context
                 }
             });
+            // If docs are loaded, append them to the base prompt
+            if (docsContext) {
+                return `${basePrompt}\n\n${docsContext}`;
+            }
             return basePrompt;
         }
         catch (error) {
@@ -183,7 +191,9 @@ class AdvancedAIProvider {
             const toolDescriptions = this.toolRouter.getAllTools()
                 .map(tool => `${tool.tool}: ${tool.description}`)
                 .join(', ');
-            return `You are an advanced AI development assistant with enhanced capabilities:
+            // Get documentation context for fallback too
+            const docsContext = this.getDocumentationContext();
+            const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
 🧠 **Enhanced Intelligence**:
 - Context-aware analysis and reasoning
@@ -220,6 +230,34 @@ class AdvancedAIProvider {
 **Available Tools**: ${toolDescriptions}
 
 Respond in a helpful, professional manner with clear explanations and actionable insights.`;
+            // Add documentation context if available
+            if (docsContext) {
+                return `${basePrompt}\n\n${docsContext}`;
+            }
+            return basePrompt;
+        }
+    }
+    // Get current documentation context for AI
+    getDocumentationContext() {
+        try {
+            const stats = docs_context_manager_1.docsContextManager.getContextStats();
+            if (stats.loadedCount === 0) {
+                return null;
+            }
+            // Get context summary and full context
+            const contextSummary = docs_context_manager_1.docsContextManager.getContextSummary();
+            const fullContext = docs_context_manager_1.docsContextManager.getFullContext();
+            // Limit context size to prevent token overflow
+            const maxContextLength = 30000; // ~20K words
+            if (fullContext.length <= maxContextLength) {
+                return fullContext;
+            }
+            // If full context is too large, return summary only
+            return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
+        }
+        catch (error) {
+            console.error('Error getting documentation context:', error);
+            return null;
         }
     }
     // Load tool-specific prompts for enhanced execution
@@ -584,6 +622,13 @@ Respond in a helpful, professional manner with clear explanations and actionable
             doc_search: documentation_tool_1.documentationTools.search,
             doc_add: documentation_tool_1.documentationTools.add,
             doc_stats: documentation_tool_1.documentationTools.stats,
+            // Smart documentation tools for AI agents
+            smart_docs_search: smart_docs_tool_1.smartDocsTools.search,
+            smart_docs_load: smart_docs_tool_1.smartDocsTools.load,
+            smart_docs_context: smart_docs_tool_1.smartDocsTools.context,
+            // AI documentation request tools
+            docs_request: docs_request_tool_1.aiDocsTools.request,
+            docs_gap_report: docs_request_tool_1.aiDocsTools.gapReport,
         };
     }
     // Claude Code style streaming with full autonomy
@@ -627,54 +672,23 @@ Respond in a helpful, professional manner with clear explanations and actionable
                     userContent.toLowerCase().includes('find') ||
                     userContent.toLowerCase().includes('cerca') ||
                     userContent.toLowerCase().includes('search');
-                // Cache solo per domande ESATTAMENTE identiche
-                if (!isAnalysisRequest) {
-                    // Genera chiave esatta per confronto
-                    const exactKey = `${userContent.trim()}|${systemContext.substring(0, 500).trim()}`;
-                    // 1. Prova completion cache (esatto match)
-                    const params = this.getProviderParams();
-                    const completionRequest = {
-                        prefix: userContent.trim(),
-                        context: systemContext.substring(0, 500).trim(),
-                        maxTokens: Math.min(200, params.maxTokens),
-                        temperature: params.temperature,
-                        model: this.currentModel
-                    };
-                    const protocolCompletion = await completion_protocol_cache_1.completionCache.getCompletion(completionRequest);
-                    if (protocolCompletion && protocolCompletion.exactMatch) {
-                        yield { type: 'start', content: '🔮 [CACHE] Risposta esatta trovata in completion cache...' };
-                        const formattedCompletion = this.formatCachedResponse(protocolCompletion.completion);
-                        for (const chunk of this.chunkText(formattedCompletion, 80)) {
-                            yield { type: 'text_delta', content: chunk };
-                        }
-                        yield { type: 'complete', content: `✅ [CACHE] Completion cache hit - ${protocolCompletion.tokensSaved} tokens risparmiati!` };
-                        return;
-                    }
-                    // 2. Prova smart cache (esatto match)
-                    const smartCached = await this.smartCache.getCachedResponse(userContent.trim(), systemContext.substring(0, 500).trim());
-                    if (smartCached && smartCached.exactMatch) {
-                        yield { type: 'start', content: '🎯 [CACHE] Risposta esatta trovata in smart cache...' };
-                        const formattedResponse = this.formatCachedResponse(smartCached.response);
+                // Usa cache intelligente ma leggera
+                const cacheDecision = this.smartCache.shouldCache(userContent, systemContext);
+                if (cacheDecision.should && !isAnalysisRequest) {
+                    const cachedResponse = await this.smartCache.getCachedResponse(userContent, systemContext);
+                    if (cachedResponse) {
+                        yield { type: 'start', content: `🎯 Using smart cache (${cacheDecision.strategy})...` };
+                        // Stream the cached response properly formatted
+                        const formattedResponse = this.formatCachedResponse(cachedResponse.response);
                         for (const chunk of this.chunkText(formattedResponse, 80)) {
                             yield { type: 'text_delta', content: chunk };
                         }
-                        yield { type: 'complete', content: `✅ [CACHE] Smart cache hit - ${smartCached.metadata.tokensSaved} tokens risparmiati!` };
-                        return;
-                    }
-                    // 3. Prova token cache (esatto match)
-                    const tokenCached = await token_cache_1.tokenCache.getCachedResponse(userContent.trim(), systemContext.substring(0, 500).trim(), ['chat', 'autonomous']);
-                    if (tokenCached && tokenCached.exactMatch) {
-                        yield { type: 'start', content: '💾 [CACHE] Risposta esatta trovata in token cache...' };
-                        const formattedResponse = this.formatCachedResponse(tokenCached.response);
-                        for (const chunk of this.chunkText(formattedResponse, 80)) {
-                            yield { type: 'text_delta', content: chunk };
-                        }
-                        yield { type: 'complete', content: '✅ [CACHE] Token cache hit - tokens risparmiati!' };
+                        yield { type: 'complete', content: `Cache hit - ${cachedResponse.metadata.tokensSaved} tokens saved!` };
                         return;
                     }
                 }
-                else {
-                    yield { type: 'start', content: '🔍 [AI REALE] Avvio analisi fresca (bypassing cache)...' };
+                else if (isAnalysisRequest) {
+                    yield { type: 'start', content: '🔍 Starting fresh analysis (bypassing cache)...' };
                 }
             }
             yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
@@ -857,26 +871,13 @@ Respond in a helpful, professional manner with clear explanations and actionable
                                     : Array.isArray(lastUserMessage.content)
                                         ? lastUserMessage.content.map(part => typeof part === 'string' ? part : part.experimental_providerMetadata?.content || '').join('')
                                         : String(lastUserMessage.content);
-                                // Salva in tutti i sistemi di cache (multi-livello)
+                                // Salva nella cache intelligente
                                 try {
-                                    // 1. Completion cache (più veloce)
-                                    const cacheParams = this.getProviderParams();
-                                    const completionRequest = {
-                                        prefix: userContentStr,
-                                        context: systemContext.substring(0, 2000),
-                                        maxTokens: Math.min(300, cacheParams.maxTokens),
-                                        temperature: cacheParams.temperature,
-                                        model: this.currentModel
-                                    };
-                                    await completion_protocol_cache_1.completionCache.storeCompletion(completionRequest, accumulatedText.trim(), tokensUsed);
-                                    // 2. Smart cache (intelligente)
                                     await this.smartCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 1000), {
                                         tokensSaved: tokensUsed,
                                         responseTime: Date.now() - startTime,
-                                        userSatisfaction: 1.0
+                                        userSatisfaction: 1.0 // Default satisfaction
                                     });
-                                    // 3. Token cache (fallback)
-                                    await token_cache_1.tokenCache.setCachedResponse(userContentStr, accumulatedText.trim(), systemContext.substring(0, 2000), tokensUsed, ['chat', 'autonomous']);
                                 }
                                 catch (cacheError) {
                                     // Continue without caching - don't fail the stream
@@ -928,7 +929,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
             });
             // Show only essential info: tokens used and context remaining  
             if (truncatedTokens > 0) {
-                console.log(chalk_1.default.dim(`💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
+                console.log(chalk_1.default.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
             }
         }
         catch (error) {

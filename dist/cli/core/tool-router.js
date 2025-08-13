@@ -221,7 +221,7 @@ class ToolRouter {
     }
     // Log tool recommendations for debugging
     logRecommendations(message, recommendations) {
-        console.log(chalk_1.default.blue(`🔍 Tool Analysis for: "${message.substring(0, 50)}..."`));
+        console.log(chalk_1.default.blue(`🔍 Tool Analysis for: "${message.substring(0, 50)}..."\n`));
         if (recommendations.length === 0) {
             return;
         }

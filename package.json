@@ -1,7 +1,9 @@
 {
     "name": "@cadcamfun/nikcli",
-    "version": "0.1.4-beta",
-    "description": "Unified Claude Code Clone - Context-Aware AI Development Assistant",
+    "version": "0.1.5-beta",
+    "description": "NikCLI - Context-Aware AI Development Assistant",
+    "author": "nikomatt69",
+    "license": "MIT",
     "main": "dist/cli/index.js",
     "bin": "dist/cli/index.js",
     "files": [
@@ -47,6 +49,7 @@
         "@ai-sdk/google": "^0.0.54",
         "@ai-sdk/openai": "^0.0.66",
         "@chroma-core/default-embed": "^0.1.8",
+        "@supabase/supabase-js": "^2.55.0",
         "@types/blessed": "^0.1.25",
         "@types/diff": "^7.0.2",
         "@types/inquirer": "^9.0.7",
@@ -60,6 +63,7 @@
         "commander": "^11.1.0",
         "conf": "^12.0.0",
         "diff": "^8.0.2",
+        "dotenv": "^17.2.1",
         "globby": "^14.1.0",
         "gradient-string": "^2.0.2",
         "highlight.js": "^11.11.1",

@@ -130,6 +130,26 @@ const ConfigSchema = zod_1.z.object({
         allowNetwork: false,
         allowCommands: true,
     }),
+    // Cloud documentation system
+    cloudDocs: zod_1.z.object({
+        enabled: zod_1.z.boolean().default(false),
+        provider: zod_1.z.enum(['supabase', 'firebase', 'github']).default('supabase'),
+        apiUrl: zod_1.z.string().optional(),
+        apiKey: zod_1.z.string().optional(),
+        autoSync: zod_1.z.boolean().default(true),
+        contributionMode: zod_1.z.boolean().default(true),
+        maxContextSize: zod_1.z.number().min(10000).max(100000).default(50000),
+        autoLoadForAgents: zod_1.z.boolean().default(true),
+        smartSuggestions: zod_1.z.boolean().default(true),
+    }).default({
+        enabled: false,
+        provider: 'supabase',
+        autoSync: true,
+        contributionMode: true,
+        maxContextSize: 50000,
+        autoLoadForAgents: true,
+        smartSuggestions: true,
+    }),
 });
 class SimpleConfigManager {
     constructor() {
@@ -230,6 +250,15 @@ class SimpleConfigManager {
                 allowNetwork: false,
                 allowCommands: true,
             },
+            cloudDocs: {
+                enabled: true,
+                provider: 'supabase',
+                autoSync: true,
+                contributionMode: true,
+                maxContextSize: 50000,
+                autoLoadForAgents: true,
+                smartSuggestions: true,
+            },
         };
         // Create config directory in user's home directory
         const configDir = path.join(os.homedir(), '.nikcli');
@@ -308,6 +337,21 @@ class SimpleConfigManager {
             }
         }
         return undefined;
+    }
+    // Cloud documentation API keys
+    getCloudDocsApiKeys() {
+        // Fallback to environment variables if config not loaded
+        if (!this.config || !this.config.cloudDocs) {
+            return {
+                apiUrl: process.env.SUPABASE_URL,
+                apiKey: process.env.SUPABASE_ANON_KEY
+            };
+        }
+        const cloudDocsConfig = this.config.cloudDocs;
+        return {
+            apiUrl: cloudDocsConfig.apiUrl || process.env.SUPABASE_URL,
+            apiKey: cloudDocsConfig.apiKey || process.env.SUPABASE_ANON_KEY
+        };
     }
     // Model management
     setCurrentModel(model) {

@@ -1,0 +1,1006 @@
+---
+title: 'Session Management'
+description: 'Comprehensive session control and history management in NikCLI'
+icon: 'clock'
+---
+
+## Overview
+
+NikCLI's session management system provides comprehensive control over chat sessions, conversation history, and workspace state. The system enables persistent conversations, context preservation, session recovery, and advanced collaboration features across multiple projects and timeframes.
+
+<CardGroup cols={2}>
+  <Card title="Session Persistence" icon="save">
+    Automatic session saving and recovery
+  </Card>
+  <Card title="History Management" icon="clock-rotate-left">
+    Complete conversation history and search
+  </Card>
+  <Card title="Context Preservation" icon="brain">
+    Maintain workspace context between sessions
+  </Card>
+  <Card title="Collaboration" icon="users">
+    Share and collaborate on sessions
+  </Card>
+</CardGroup>
+
+## Core Session Commands
+
+### `/new` - Create New Session
+
+Start new chat sessions with optional configuration and context initialization.
+
+<Tabs>
+  <Tab title="Basic Session Creation">
+    ```bash
+    # Create new session
+    /new
+    
+    # Create with custom title
+    /new "React Component Development"
+    /new "API Integration Project"
+    /new "Database Migration Planning"
+    
+    # Create with description
+    /new "Frontend Refactoring" --description "Modernize React components and improve performance"
+    ```
+  </Tab>
+  
+  <Tab title="Session Templates">
+    ```bash
+    # Create from template
+    /new --template frontend-development
+    /new --template api-development
+    /new --template debugging-session
+    
+    # Available templates
+    /new --list-templates
+    /new --template-info frontend-development
+    
+    # Create custom template
+    /new --save-template "full-stack-development" 
+         --agents "universal-agent,react-expert,backend-agent"
+         --context "src/,api/,tests/"
+    ```
+  </Tab>
+  
+  <Tab title="Session Configuration">
+    ```bash
+    # Configure session parameters
+    /new "Performance Optimization" 
+         --model claude-3-sonnet
+         --temperature 0.3
+         --max-history 1000
+    
+    # Set session workspace
+    /new "Component Library" 
+         --workspace "packages/ui/"
+         --context "components/,hooks/,utils/"
+    
+    # Configure agents for session
+    /new "Full Stack Development"
+         --agents "react-expert,backend-agent"
+         --auto-mode false
+         --approval-required true
+    ```
+  </Tab>
+</Tabs>
+
+### `/sessions` - Session Management
+
+List, organize, and manage multiple chat sessions with advanced filtering and search.
+
+<AccordionGroup>
+  <Accordion title="Session Listing">
+    ```bash
+    # List all sessions
+    /sessions
+    
+    # List with detailed information
+    /sessions --detailed
+    /sessions --verbose --with-stats
+    
+    # List recent sessions
+    /sessions --recent 10
+    /sessions --today
+    /sessions --this-week
+    ```
+    
+    **Output Example:**
+    ```
+    Recent Sessions:
+    ┌──────────────────────┬─────────────────────┬──────────┬─────────┬──────────────┐
+    │ ID                   │ Title               │ Created  │ Messages│ Last Activity│
+    ├──────────────────────┼─────────────────────┼──────────┼─────────┼──────────────┤
+    │ ses_abc123           │ React Components    │ 2h ago   │ 45      │ 15m ago      │
+    │ ses_def456           │ API Development     │ 1d ago   │ 78      │ 3h ago       │
+    │ ses_ghi789           │ Database Migration  │ 3d ago   │ 23      │ 1d ago       │
+    └──────────────────────┴─────────────────────┴──────────┴─────────┴──────────────┘
+    ```
+  </Accordion>
+  
+  <Accordion title="Session Filtering">
+    ```bash
+    # Filter by project
+    /sessions --project "e-commerce"
+    /sessions --workspace "/path/to/project"
+    
+    # Filter by agent usage
+    /sessions --agent react-expert
+    /sessions --multi-agent
+    
+    # Filter by content
+    /sessions --search "authentication"
+    /sessions --contains "typescript"
+    
+    # Filter by date range
+    /sessions --since "2024-01-01"
+    /sessions --between "2024-01-01" "2024-01-31"
+    ```
+  </Accordion>
+  
+  <Accordion title="Session Organization">
+    ```bash
+    # Organize by tags
+    /sessions --tag frontend
+    /sessions --tag "react,typescript"
+    
+    # Organize by categories
+    /sessions --category development
+    /sessions --category debugging
+    /sessions --category planning
+    
+    # Archive old sessions
+    /sessions --archive --older-than 30d
+    /sessions --archive ses_abc123
+    
+    # Star important sessions
+    /sessions --star ses_def456
+    /sessions --starred
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/load` - Session Loading
+
+Load and resume previous chat sessions with full context restoration.
+
+<Tabs>
+  <Tab title="Basic Session Loading">
+    ```bash
+    # Load by session ID
+    /load ses_abc123
+    
+    # Load by title (fuzzy match)
+    /load "React Components"
+    /load "API Dev"
+    
+    # Load most recent session
+    /load --recent
+    /load --last
+    ```
+  </Tab>
+  
+  <Tab title="Interactive Session Selection">
+    ```bash
+    # Interactive session picker
+    /load --interactive
+    /load --picker --recent 20
+    
+    # Search and load
+    /load --search "authentication"
+    /load --find "react component"
+    
+    # Load with preview
+    /load --preview ses_abc123
+    /load --preview --interactive
+    ```
+  </Tab>
+  
+  <Tab title="Context Restoration">
+    ```bash
+    # Load with full context restoration
+    /load ses_abc123 --restore-context
+    /load ses_abc123 --restore-agents --restore-workspace
+    
+    # Selective context loading
+    /load ses_abc123 --restore-agents-only
+    /load ses_abc123 --restore-workspace-only
+    
+    # Load with conflict resolution
+    /load ses_abc123 --merge-context
+    /load ses_abc123 --resolve-conflicts auto
+    ```
+  </Tab>
+</Tabs>
+
+### `/save` - Session Persistence
+
+Manually save session state with custom metadata and organization.
+
+<AccordionGroup>
+  <Accordion title="Session Saving">
+    ```bash
+    # Save current session
+    /save
+    
+    # Save with custom title
+    /save "React Hook Implementation"
+    
+    # Save with metadata
+    /save "Authentication System" 
+          --description "JWT implementation with refresh tokens"
+          --tags "auth,jwt,security"
+          --category development
+    ```
+  </Accordion>
+  
+  <Accordion title="Save Options">
+    ```bash
+    # Save with compression
+    /save --compress --optimize-history
+    
+    # Save snapshot only (no full history)
+    /save --snapshot "Current Progress"
+    
+    # Save with external references
+    /save --include-files --include-context
+    /save --embed-workspace-state
+    ```
+  </Accordion>
+  
+  <Accordion title="Auto-Save Configuration">
+    ```bash
+    # Configure auto-save
+    /save --auto-save enable
+    /save --auto-save-interval 10m
+    /save --auto-save-on-exit true
+    
+    # Auto-save policies
+    /save --auto-save-policy significant-changes
+    /save --auto-save-threshold 5-messages
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Session Features
+
+### `/export` - Session Export
+
+Export sessions in various formats for sharing, backup, and integration.
+
+<Tabs>
+  <Tab title="Export Formats">
+    ```bash
+    # Export as Markdown
+    /export ses_abc123 --format markdown
+    /export ses_abc123 --markdown --file "session-export.md"
+    
+    # Export as JSON
+    /export ses_abc123 --format json --pretty
+    /export --json --include-metadata --include-context
+    
+    # Export as HTML
+    /export ses_abc123 --format html --styled
+    /export --html --include-code-highlighting
+    ```
+  </Tab>
+  
+  <Tab title="Export Options">
+    ```bash
+    # Export with filtering
+    /export ses_abc123 --messages-only
+    /export ses_abc123 --exclude-system-messages
+    /export ses_abc123 --important-messages-only
+    
+    # Export date range
+    /export ses_abc123 --from "2024-01-01" --to "2024-01-31"
+    /export ses_abc123 --last 20-messages
+    
+    # Export with anonymization
+    /export ses_abc123 --anonymize --remove-paths
+    /export ses_abc123 --sanitize --remove-sensitive
+    ```
+  </Tab>
+  
+  <Tab title="Batch Export">
+    ```bash
+    # Export multiple sessions
+    /export --sessions ses_abc123,ses_def456 --format markdown
+    /export --all-sessions --archive-format zip
+    
+    # Export by criteria
+    /export --tag frontend --format markdown
+    /export --project "e-commerce" --format json
+    /export --recent 30d --format html
+    ```
+  </Tab>
+</Tabs>
+
+### `/import` - Session Import
+
+Import sessions from various sources and formats for migration and sharing.
+
+<AccordionGroup>
+  <Accordion title="Import Sources">
+    ```bash
+    # Import from file
+    /import session-backup.json
+    /import conversation-export.md --format markdown
+    
+    # Import from URL
+    /import https://example.com/session-export.json
+    /import --url --validate --preview
+    
+    # Import from clipboard
+    /import --clipboard --format auto-detect
+    ```
+  </Accordion>
+  
+  <Accordion title="Import Options">
+    ```bash
+    # Import with validation
+    /import session.json --validate --check-integrity
+    
+    # Import with merge options
+    /import session.json --merge-with-current
+    /import session.json --create-new-session
+    
+    # Import with transformations
+    /import session.json --update-timestamps
+    /import session.json --resolve-references
+    ```
+  </Accordion>
+  
+  <Accordion title="Migration Import">
+    ```bash
+    # Import from other CLI tools
+    /import --from-chatgpt conversation.json
+    /import --from-claude-desktop session.json
+    
+    # Import from version control
+    /import --from-git-history --branch main --path docs/
+    
+    # Import from backup systems
+    /import --from-backup backup-2024-01-15.zip
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/fork` - Session Branching
+
+Create session branches for exploring different approaches and maintaining conversation variants.
+
+<Tabs>
+  <Tab title="Basic Forking">
+    ```bash
+    # Fork current session
+    /fork "Alternative Implementation"
+    
+    # Fork specific session
+    /fork ses_abc123 "Performance Optimization Branch"
+    
+    # Fork from specific message
+    /fork --from-message 25 "Different Approach"
+    ```
+  </Tab>
+  
+  <Tab title="Branch Management">
+    ```bash
+    # List session branches
+    /fork --list
+    /fork --branches --tree-view
+    
+    # Switch between branches
+    /fork --switch branch-name
+    /fork --checkout ses_def456_branch1
+    
+    # Merge branches
+    /fork --merge branch-name
+    /fork --merge --strategy selective
+    ```
+  </Tab>
+  
+  <Tab title="Branch Operations">
+    ```bash
+    # Compare branches
+    /fork --compare main alternative
+    /fork --diff --show-changes
+    
+    # Delete branches
+    /fork --delete old-branch
+    /fork --cleanup --unused-branches
+    
+    # Branch metadata
+    /fork --info branch-name
+    /fork --history --branch main
+    ```
+  </Tab>
+</Tabs>
+
+## History and Search
+
+### `/history` - Conversation History
+
+Access and manage comprehensive conversation history with advanced search and analysis.
+
+<AccordionGroup>
+  <Accordion title="History Viewing">
+    ```bash
+    # Show session history
+    /history
+    
+    # Show detailed history
+    /history --detailed --with-timestamps
+    /history --verbose --include-metadata
+    
+    # Show specific range
+    /history --last 20
+    /history --from-message 10 --to-message 30
+    /history --today
+    /history --since "2024-01-01"
+    ```
+  </Accordion>
+  
+  <Accordion title="History Search">
+    ```bash
+    # Search conversation history
+    /history search "react component"
+    /history --search "authentication" --case-sensitive
+    
+    # Search by message type
+    /history --user-messages "TODO"
+    /history --agent-responses "function"
+    /history --system-messages "error"
+    
+    # Search with context
+    /history search "database" --context 3
+    /history --find "optimization" --show-surrounding
+    ```
+  </Accordion>
+  
+  <Accordion title="History Analysis">
+    ```bash
+    # Analyze conversation patterns
+    /history analyze
+    /history --patterns --topics --trends
+    
+    # Generate conversation summary
+    /history summary
+    /history --summarize --key-points --decisions
+    
+    # Extract action items
+    /history actions
+    /history --todos --next-steps --follow-ups
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/search-sessions` - Cross-Session Search
+
+Search across all sessions for specific content, patterns, or solutions.
+
+<Tabs>
+  <Tab title="Content Search">
+    ```bash
+    # Search across all sessions
+    /search-sessions "react hooks"
+    /search-sessions "authentication implementation"
+    
+    # Advanced search with filters
+    /search-sessions "database migration" 
+                     --sessions-with-tag backend
+                     --recent 30d
+    
+    # Search with regular expressions
+    /search-sessions --regex "function\s+\w+Component"
+    /search-sessions --pattern "interface\s+\w+Props"
+    ```
+  </Tab>
+  
+  <Tab title="Semantic Search">
+    ```bash
+    # Semantic content search
+    /search-sessions --semantic "user authentication patterns"
+    /search-sessions --meaning "performance optimization techniques"
+    
+    # Similar problem search
+    /search-sessions --similar-to-current
+    /search-sessions --related-topics
+    
+    # Solution search
+    /search-sessions --solutions-for "state management"
+    /search-sessions --examples-of "error handling"
+    ```
+  </Tab>
+  
+  <Tab title="Search Results">
+    ```bash
+    # Format search results
+    /search-sessions "typescript" --results-format summary
+    /search-sessions "testing" --results-format detailed
+    /search-sessions "deployment" --results-format snippets
+    
+    # Search result actions
+    /search-sessions "components" --open-session-on-select
+    /search-sessions "API" --create-reference-collection
+    ```
+  </Tab>
+</Tabs>
+
+### `/timeline` - Session Timeline
+
+Visualize session activity and progress over time with interactive timeline views.
+
+<AccordionGroup>
+  <Accordion title="Timeline Views">
+    ```bash
+    # Show session timeline
+    /timeline
+    /timeline --session ses_abc123
+    
+    # Timeline with different granularities
+    /timeline --by-hour
+    /timeline --by-day --last 30d
+    /timeline --by-week --this-month
+    
+    # Activity timeline
+    /timeline --activity --sessions --agents
+    /timeline --heatmap --intensity
+    ```
+  </Accordion>
+  
+  <Accordion title="Timeline Analysis">
+    ```bash
+    # Productivity analysis
+    /timeline --productivity --sessions-per-day
+    /timeline --patterns --peak-hours --efficiency
+    
+    # Project timeline
+    /timeline --project "e-commerce" --milestones
+    /timeline --workspace "/path/to/project" --progress
+    
+    # Agent usage timeline
+    /timeline --agents --usage-patterns --effectiveness
+    ```
+  </Accordion>
+  
+  <Accordion title="Timeline Export">
+    ```bash
+    # Export timeline data
+    /timeline --export csv --date-range 30d
+    /timeline --export json --detailed --all-sessions
+    
+    # Timeline reporting
+    /timeline --report weekly --email
+    /timeline --dashboard --live-updates
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Session Collaboration
+
+### `/share` - Session Sharing
+
+Share sessions with team members and collaborators with granular permission control.
+
+<Tabs>
+  <Tab title="Basic Sharing">
+    ```bash
+    # Share current session
+    /share
+    /share --public-link --expires 7d
+    
+    # Share specific session
+    /share ses_abc123 --with user@example.com
+    /share ses_abc123 --team frontend-developers
+    
+    # Share with permissions
+    /share ses_abc123 --read-only
+    /share ses_abc123 --comment-only
+    /share ses_abc123 --full-access
+    ```
+  </Tab>
+  
+  <Tab title="Collaboration Features">
+    ```bash
+    # Real-time collaboration
+    /share ses_abc123 --real-time --live-cursors
+    /share --collaborative-editing --conflict-resolution
+    
+    # Session commenting
+    /share ses_abc123 --enable-comments --thread-discussions
+    /share --annotation-mode --highlight-suggestions
+    
+    # Version control integration
+    /share ses_abc123 --git-integration --branch-per-session
+    /share --sync-with-repo --auto-commit-changes
+    ```
+  </Tab>
+  
+  <Tab title="Access Management">
+    ```bash
+    # Manage sharing permissions
+    /share --list-shared-sessions
+    /share --permissions ses_abc123
+    /share --revoke-access user@example.com ses_abc123
+    
+    # Sharing policies
+    /share --policy team-only
+    /share --policy project-members
+    /share --policy public-readonly
+    
+    # Audit sharing activity
+    /share --audit-log --access-history
+    /share --security-report --unauthorized-access
+    ```
+  </Tab>
+</Tabs>
+
+### `/collaborate` - Active Collaboration
+
+Manage active collaboration sessions with real-time features and coordination.
+
+<AccordionGroup>
+  <Accordion title="Collaboration Setup">
+    ```bash
+    # Start collaboration session
+    /collaborate start "Frontend Architecture Review"
+    /collaborate --invite user1@example.com,user2@example.com
+    
+    # Join collaboration session
+    /collaborate join collab_xyz789
+    /collaborate --session-code ABC123
+    
+    # Configure collaboration
+    /collaborate configure --max-participants 5
+                          --allow-anonymous false
+                          --require-approval true
+    ```
+  </Accordion>
+  
+  <Accordion title="Real-Time Features">
+    ```bash
+    # Real-time presence
+    /collaborate presence
+    /collaborate --show-cursors --show-typing --show-status
+    
+    # Live session synchronization
+    /collaborate sync --real-time --conflict-resolution auto
+    /collaborate --sync-interval 500ms --max-lag 2s
+    
+    # Collaborative editing
+    /collaborate edit --operational-transform
+    /collaborate --merge-strategy last-write-wins
+    ```
+  </Accordion>
+  
+  <Accordion title="Collaboration Management">
+    ```bash
+    # Manage participants
+    /collaborate participants
+    /collaborate --add-participant user@example.com
+    /collaborate --remove-participant user@example.com
+    /collaborate --transfer-ownership new-owner@example.com
+    
+    # Session control
+    /collaborate pause --reason "break time"
+    /collaborate resume
+    /collaborate end --save-session --notify-participants
+    
+    # Collaboration analytics
+    /collaborate analytics --participation --contributions
+    /collaborate --effectiveness --satisfaction-survey
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/review` - Session Review
+
+Comprehensive session review and analysis for learning and improvement.
+
+<Tabs>
+  <Tab title="Review Process">
+    ```bash
+    # Start session review
+    /review ses_abc123
+    /review --current-session --comprehensive
+    
+    # Structured review
+    /review ses_abc123 --checklist development-review
+    /review --template code-review --criteria quality,efficiency
+    
+    # Collaborative review
+    /review ses_abc123 --reviewers user1@example.com,user2@example.com
+    /review --review-session --schedule "tomorrow 2pm"
+    ```
+  </Tab>
+  
+  <Tab title="Review Analysis">
+    ```bash
+    # Code quality review
+    /review --code-quality --security --performance
+    /review --technical-debt --refactoring-opportunities
+    
+    # Decision review
+    /review --decisions --rationale --alternatives
+    /review --architecture-choices --trade-offs
+    
+    # Learning review
+    /review --lessons-learned --knowledge-gaps --improvements
+    /review --best-practices --patterns --anti-patterns
+    ```
+  </Tab>
+  
+  <Tab title="Review Outcomes">
+    ```bash
+    # Generate review report
+    /review --report --summary --recommendations
+    /review --action-items --follow-ups --next-steps
+    
+    # Review feedback
+    /review --feedback --rating --comments
+    /review --improvement-suggestions --process-feedback
+    
+    # Review integration
+    /review --integrate-feedback --update-practices
+    /review --share-learnings --team-knowledge-base
+    ```
+  </Tab>
+</Tabs>
+
+## Session Analytics and Insights
+
+### `/stats` - Session Statistics
+
+Comprehensive statistics and analytics about session usage, productivity, and patterns.
+
+<AccordionGroup>
+  <Accordion title="Usage Statistics">
+    ```bash
+    # Overall usage stats
+    /stats
+    /stats --overview --summary
+    
+    # Detailed session statistics
+    /stats --sessions --detailed
+    /stats --messages --agents --tools
+    
+    # Time-based statistics
+    /stats --daily --weekly --monthly
+    /stats --trends --growth --patterns
+    ```
+  </Accordion>
+  
+  <Accordion title="Productivity Metrics">
+    ```bash
+    # Productivity analysis
+    /stats productivity
+    /stats --efficiency --output-quality --task-completion
+    
+    # Session effectiveness
+    /stats effectiveness
+    /stats --goal-achievement --problem-resolution --learning-outcomes
+    
+    # Comparative analysis
+    /stats compare --periods "this-month:last-month"
+    /stats --benchmark --industry-standards --team-average
+    ```
+  </Accordion>
+  
+  <Accordion title="Advanced Analytics">
+    ```bash
+    # Behavioral analytics
+    /stats behavior
+    /stats --usage-patterns --preferences --workflows
+    
+    # Content analytics
+    /stats content
+    /stats --topics --technologies --complexity-levels
+    
+    # Predictive analytics
+    /stats predict
+    /stats --usage-forecast --trend-analysis --recommendations
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/insights` - Session Insights
+
+AI-powered insights and recommendations based on session history and patterns.
+
+<Tabs>
+  <Tab title="Productivity Insights">
+    ```bash
+    # Productivity insights
+    /insights productivity
+    /insights --efficiency-tips --optimization-suggestions
+    
+    # Workflow insights
+    /insights workflow
+    /insights --process-improvements --automation-opportunities
+    
+    # Time management insights
+    /insights time-management
+    /insights --peak-productivity-hours --session-length-optimization
+    ```
+  </Tab>
+  
+  <Tab title="Learning Insights">
+    ```bash
+    # Learning pattern analysis
+    /insights learning
+    /insights --knowledge-gaps --skill-development --learning-path
+    
+    # Knowledge retention insights
+    /insights retention
+    /insights --review-schedule --spaced-repetition --reinforcement
+    
+    # Expertise development
+    /insights expertise
+    /insights --specialization-recommendations --growth-areas
+    ```
+  </Tab>
+  
+  <Tab title="Collaboration Insights">
+    ```bash
+    # Team collaboration insights
+    /insights collaboration
+    /insights --team-dynamics --communication-patterns --effectiveness
+    
+    # Knowledge sharing insights
+    /insights knowledge-sharing
+    /insights --expertise-distribution --mentoring-opportunities
+    
+    # Project insights
+    /insights project
+    /insights --project-health --risk-assessment --success-factors
+    ```
+  </Tab>
+</Tabs>
+
+## Session Backup and Recovery
+
+### `/backup` - Session Backup
+
+Comprehensive backup system for session data, configuration, and workspace state.
+
+<AccordionGroup>
+  <Accordion title="Backup Creation">
+    ```bash
+    # Create full backup
+    /backup create --full --all-sessions
+    /backup --include-config --include-workspace-state
+    
+    # Incremental backup
+    /backup create --incremental --since-last-backup
+    /backup --changes-only --differential
+    
+    # Selective backup
+    /backup create --sessions ses_abc123,ses_def456
+    /backup --tag frontend --recent 30d
+    ```
+  </Accordion>
+  
+  <Accordion title="Backup Storage">
+    ```bash
+    # Local backup storage
+    /backup --local --path "/path/to/backups"
+    /backup --compress --encrypt --password-protect
+    
+    # Cloud backup storage
+    /backup --cloud aws-s3 --bucket nikcli-backups
+    /backup --cloud google-drive --folder "NikCLI Backups"
+    
+    # Version control backup
+    /backup --git --repository backup-repo
+    /backup --git-lfs --large-files
+    ```
+  </Accordion>
+  
+  <Accordion title="Backup Management">
+    ```bash
+    # List backups
+    /backup list
+    /backup --show-details --verify-integrity
+    
+    # Backup scheduling
+    /backup schedule --daily --time 2am
+    /backup --auto-backup --trigger session-count=10
+    
+    # Backup cleanup
+    /backup cleanup --keep-last 30
+    /backup --retention-policy "daily:30d,weekly:12w,monthly:12m"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### `/restore` - Session Recovery
+
+Restore sessions and data from backups with flexible recovery options.
+
+<Tabs>
+  <Tab title="Basic Recovery">
+    ```bash
+    # Restore from backup
+    /restore backup-2024-01-15.zip
+    /restore --backup-id backup_xyz789
+    
+    # Restore specific sessions
+    /restore backup.zip --sessions ses_abc123,ses_def456
+    /restore --session-filter "tag:frontend"
+    
+    # Point-in-time recovery
+    /restore --timestamp "2024-01-15 14:30:00"
+    /restore --before "last Tuesday"
+    ```
+  </Tab>
+  
+  <Tab title="Recovery Options">
+    ```bash
+    # Recovery with conflict resolution
+    /restore backup.zip --merge-conflicts
+    /restore --conflict-resolution keep-backup
+    /restore --conflict-resolution keep-current
+    
+    # Selective recovery
+    /restore backup.zip --sessions-only
+    /restore --config-only --workspace-state-only
+    
+    # Recovery verification
+    /restore backup.zip --verify --dry-run
+    /restore --test-integrity --validate-data
+    ```
+  </Tab>
+  
+  <Tab title="Disaster Recovery">
+    ```bash
+    # Complete system recovery
+    /restore --disaster-recovery --full-system
+    /restore --complete-restoration --verify-all
+    
+    # Progressive recovery
+    /restore --phased --start-with-recent --batch-size 10
+    
+    # Recovery monitoring
+    /restore --monitor-progress --log-recovery
+    /restore --recovery-report --validate-completion
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/cli-reference/configuration"
+  >
+    Learn about NikCLI configuration and customization options
+  </Card>
+  <Card
+    title="MCP Protocol"
+    icon="plug"
+    href="/cli-reference/mcp-protocol"
+  >
+    Explore Model Context Protocol integration and features
+  </Card>
+  <Card
+    title="Advanced Features"
+    icon="rocket"
+    href="/cli-reference/advanced-features"
+  >
+    Discover advanced CLI capabilities and power-user features
+  </Card>
+  <Card
+    title="Token Management"
+    icon="coins"
+    href="/advanced/token-management"
+  >
+    Understand token management and optimization strategies
+  </Card>
+</CardGroup>
+
+<Tip>
+  Use `/sessions --recent` to quickly access your most recent work, and consider using session templates to standardize your workflow setup for different types of projects.
+</Tip>

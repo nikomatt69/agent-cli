@@ -5,6 +5,10 @@
  * Consolidated Entry Point with Modular Architecture
  */
 
+// Load environment variables first
+import dotenv from 'dotenv';
+dotenv.config();
+
 import chalk from 'chalk';
 import boxen from 'boxen';
 import * as readline from 'readline';

@@ -43,6 +43,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StreamingModule = exports.ServiceModule = exports.SystemModule = exports.IntroductionModule = exports.MainOrchestrator = void 0;
 exports.main = main;
+// Load environment variables first
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
 const readline = __importStar(require("readline"));

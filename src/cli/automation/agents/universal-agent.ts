@@ -86,7 +86,7 @@ export class UniversalAgent implements Agent {
     'documentation-generation'
   ];
 
-  public readonly version: string = '0.1.4-beta';
+  public readonly version: string = '0.1.5-beta';
   public status: AgentStatus = 'initializing';
   public currentTasks: number = 0;
   public readonly maxConcurrentTasks: number = 3;
