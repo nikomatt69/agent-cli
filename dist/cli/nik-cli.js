@@ -810,7 +810,7 @@ class NikCLI {
         this.showRecentUpdates();
     }
     showAdvancedHeader() {
-        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.14-beta')}\n` +
+        const header = (0, boxen_1.default)(`${chalk_1.default.cyanBright.bold('🤖 NikCLI')} ${chalk_1.default.gray('v0.1.15-beta')}\n` +
             `${chalk_1.default.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk_1.default.blue('Status:')} ${this.getOverallStatus()}  ${chalk_1.default.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk_1.default.blue('Mode:')} ${this.currentMode}  ${chalk_1.default.blue('Live Updates:')} Enabled`, {
