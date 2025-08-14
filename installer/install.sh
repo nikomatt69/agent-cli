@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --tag beta
-#   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --version 0.1.12-beta
+#   curl -fsSL https://raw.githubusercontent.com/nikomatt69/agent-cli/main/installer/install.sh | bash -s -- --version 0.1.14-beta
 
 TAG="beta"
 VERSION=""

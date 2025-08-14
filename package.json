@@ -1,6 +1,6 @@
 {
     "name": "@cadcamfun/nikcli",
-    "version": "0.1.12-beta",
+    "version": "0.1.14-beta",
     "description": "NikCLI - Context-Aware AI Development Assistant",
     "author": "nikomatt69",
     "license": "MIT",
@@ -99,8 +99,6 @@
         "@types/gradient-string": "^1.1.6",
         "@types/js-yaml": "^4.0.9",
         "@types/marked-terminal": "^6.1.1",
-        "@types/node": "^24.2.0",
-        "@types/react": "^19.1.9",
         "@types/react-dom": "^19.1.7",
         "@typescript-eslint/eslint-plugin": "^6.18.0",
         "@typescript-eslint/parser": "^6.18.0",
