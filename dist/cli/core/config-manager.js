@@ -155,6 +155,14 @@ class SimpleConfigManager {
                 provider: 'anthropic',
                 model: 'claude-3-haiku-20240229',
             },
+            'gpt-5-mini-2025-08-07': {
+                provider: 'openai',
+                model: 'gpt-5-mini-2025-08-07',
+            },
+            'gpt-5-nano-2025-08-07': {
+                provider: 'openai',
+                model: 'gpt-5-nano-2025-08-07',
+            },
             'gpt-4o-mini': {
                 provider: 'openai',
                 model: 'gpt-4o-mini',
@@ -174,14 +182,6 @@ class SimpleConfigManager {
             'gpt-4': {
                 provider: 'openai',
                 model: 'gpt-4',
-            },
-            'gpt-3.5-turbo': {
-                provider: 'openai',
-                model: 'gpt-3.5-turbo',
-            },
-            'gpt-3.5-turbo-16k': {
-                provider: 'openai',
-                model: 'gpt-3.5-turbo-16k',
             },
             'gemini-pro': {
                 provider: 'google',

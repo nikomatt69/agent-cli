@@ -65,7 +65,7 @@ const ConfigSchema = z.object({
     networkRequests: z.enum(['always', 'risky', 'never']).default('always'),
   }).default({
     fileOperations: 'risky',
-    gitOperations: 'risky', 
+    gitOperations: 'risky',
     packageOperations: 'risky',
     systemCommands: 'always',
     networkRequests: 'always',
@@ -133,6 +133,14 @@ export class SimpleConfigManager {
       provider: 'anthropic',
       model: 'claude-3-haiku-20240229',
     },
+    'gpt-5-mini-2025-08-07': {
+      provider: 'openai',
+      model: 'gpt-5-mini-2025-08-07',
+    },
+    'gpt-5-nano-2025-08-07': {
+      provider: 'openai',
+      model: 'gpt-5-nano-2025-08-07',
+    },
     'gpt-4o-mini': {
       provider: 'openai',
       model: 'gpt-4o-mini',
@@ -152,14 +160,6 @@ export class SimpleConfigManager {
     'gpt-4': {
       provider: 'openai',
       model: 'gpt-4',
-    },
-    'gpt-3.5-turbo': {
-      provider: 'openai',
-      model: 'gpt-3.5-turbo',
-    },
-    'gpt-3.5-turbo-16k': {
-      provider: 'openai',
-      model: 'gpt-3.5-turbo-16k',
     },
     'gemini-pro': {
       provider: 'google',
@@ -330,9 +330,9 @@ export class SimpleConfigManager {
         apiKey: process.env.SUPABASE_ANON_KEY
       };
     }
-    
+
     const cloudDocsConfig = this.config.cloudDocs;
-    
+
     return {
       apiUrl: cloudDocsConfig.apiUrl || process.env.SUPABASE_URL,
       apiKey: cloudDocsConfig.apiKey || process.env.SUPABASE_ANON_KEY
