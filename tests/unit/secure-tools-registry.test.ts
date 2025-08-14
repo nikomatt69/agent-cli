@@ -57,16 +57,16 @@ describe('SecureToolsRegistry', () => {
         await fs.writeFile('test.png', binaryContent);
 
         const result = await toolsRegistry.readFile('test.png');
-        
+
         expect(result.success).toBe(true);
         expect(result.data?.extension).toBe('png');
       });
 
       it('should track execution time', async () => {
         await createTestFile('test.txt', 'content');
-        
+
         const result = await toolsRegistry.readFile('test.txt');
-        
+
         expect(result.executionTime).toBeGreaterThanOrEqual(0);
       });
     });
@@ -296,7 +296,7 @@ describe('SecureToolsRegistry', () => {
 
       it('should set working directory', async () => {
         await fs.mkdir('test-dir');
-        
+
         const result = await toolsRegistry.executeCommand('pwd', {
           skipConfirmation: true,
           cwd: 'test-dir'
@@ -373,7 +373,7 @@ describe('SecureToolsRegistry', () => {
 
       it('should execute batch session asynchronously', async () => {
         const commands = ['echo "Batch test"'];
-        
+
         const sessionResult = await toolsRegistry.createBatchSession(commands, {
           sessionDuration: 60000
         });
@@ -393,7 +393,7 @@ describe('SecureToolsRegistry', () => {
 
         // Wait a bit for async execution
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         const updatedSession = toolsRegistry.getBatchSession(sessionId);
         expect(['approved', 'executing', 'completed']).toContain(updatedSession?.status);
       });
@@ -411,7 +411,7 @@ describe('SecureToolsRegistry', () => {
 
       it('should cleanup expired sessions', async () => {
         const commands = ['echo "Expired session"'];
-        
+
         const sessionResult = await toolsRegistry.createBatchSession(commands, {
           sessionDuration: 1 // 1ms - will expire immediately
         });
@@ -503,7 +503,7 @@ describe('SecureToolsRegistry', () => {
       it('should filter history by security level', async () => {
         await createTestFile('test.txt', 'content');
         await toolsRegistry.readFile('test.txt'); // Safe operation
-        
+
         // Mock a confirmed operation
         const inquirer = await import('inquirer');
         vi.spyOn(inquirer.default, 'prompt').mockResolvedValue({ confirmed: true });
@@ -543,7 +543,7 @@ describe('SecureToolsRegistry', () => {
 
       it('should track failed operations in statistics', async () => {
         // Try to read non-existent file
-        await toolsRegistry.readFile('nonexistent.txt').catch(() => {});
+        await toolsRegistry.readFile('nonexistent.txt').catch(() => { });
 
         const stats = toolsRegistry.getSecurityStats();
         expect(stats.failedOperations).toBe(1);
@@ -581,7 +581,7 @@ describe('SecureToolsRegistry', () => {
 
     it('should handle tool execution timeout', async () => {
       // This would require more complex mocking for actual timeout testing
-      expect(true).toBe(true); // Placeholder for timeout test
+      // Timeout test placeholder - implementation needed
     });
   });
 

@@ -284,7 +284,7 @@ class LSPManager {
         return status;
     }
     async shutdown() {
-        console.log(chalk_1.default.blue('🛑 Shutting down LSP clients...'));
+        console.log(chalk_1.default.blue('\n🛑 Shutting down LSP clients...'));
         const shutdownPromises = Array.from(this.clients.values()).map(client => client.shutdown().catch(err => console.log(chalk_1.default.yellow(`⚠️ Error shutting down client: ${err.message}`))));
         await Promise.allSettled(shutdownPromises);
         this.clients.clear();

@@ -11,7 +11,7 @@ const chalk_1 = __importDefault(require("chalk"));
 class ContextAwareRAGSystem {
     constructor(workingDirectory) {
         this.workingDir = (0, path_1.resolve)(workingDirectory);
-        this.memoryPath = (0, path_1.join)(this.workingDir, '.claude-memory');
+        this.memoryPath = (0, path_1.join)(this.workingDir, '.nikcli');
         this.ensureMemoryDir();
         this.loadMemory();
     }
