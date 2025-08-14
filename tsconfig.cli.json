@@ -1,20 +1,20 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
     "target": "es2020",
     "lib": [
       "es2020"
     ],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noEmit": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "strict": false,
-    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "downlevelIteration": true,
-    "noEmit": false,
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./src",
@@ -22,13 +22,27 @@
     "sourceMap": false,
     "removeComments": true,
     "paths": {
-      "@/*": ["*"],
-      "@cli/*": ["cli/*"],
-      "@agents/*": ["cli/automation/agents/*"],
-      "@core/*": ["cli/core/*"],
-      "@utils/*": ["cli/utils/*"],
-      "@tools/*": ["cli/tools/*"],
-      "@ai/*": ["cli/ai/*"]
+      "@/*": [
+        "*"
+      ],
+      "@cli/*": [
+        "cli/*"
+      ],
+      "@agents/*": [
+        "cli/automation/agents/*"
+      ],
+      "@core/*": [
+        "cli/core/*"
+      ],
+      "@utils/*": [
+        "cli/utils/*"
+      ],
+      "@tools/*": [
+        "cli/tools/*"
+      ],
+      "@ai/*": [
+        "cli/ai/*"
+      ]
     }
   },
   "include": [

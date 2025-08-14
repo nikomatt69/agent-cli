@@ -16,6 +16,9 @@ import {
 } from '../../types/types';
 
 import { logger } from '../../utils/logger';
+import { lspManager } from '../../lsp/lsp-manager';
+import { ContextAwareRAGSystem } from '../../context/context-aware-rag';
+import { AgentTaskSchema, AgentTaskResultSchema } from '../../schemas/core-schemas';
 
 const execAsync = promisify(exec);
 
@@ -86,7 +89,7 @@ export class UniversalAgent implements Agent {
     'documentation-generation'
   ];
 
-  public readonly version: string = '0.1.11-beta';
+  public readonly version: string = '0.1.12-beta';
   public status: AgentStatus = 'initializing';
   public currentTasks: number = 0;
   public readonly maxConcurrentTasks: number = 3;
@@ -95,6 +98,7 @@ export class UniversalAgent implements Agent {
   private context?: AgentContext;
   private config: AgentConfig;
   private guidance: string = '';
+  private contextSystem: ContextAwareRAGSystem;
   private metrics: AgentMetrics = {
     tasksExecuted: 0,
     tasksSucceeded: 0,
@@ -114,6 +118,7 @@ export class UniversalAgent implements Agent {
   constructor(workingDirectory: string = process.cwd()) {
     this.id = nanoid();
     this.workingDirectory = workingDirectory;
+    this.contextSystem = new ContextAwareRAGSystem(workingDirectory);
     this.config = {
       autonomyLevel: 'semi-autonomous',
       maxConcurrentTasks: this.maxConcurrentTasks,
@@ -195,6 +200,9 @@ export class UniversalAgent implements Agent {
 
       // Analyze task to determine best approach
       const approach = await this.analyzeTask(task);
+
+      // LSP + Context Analysis for enhanced task execution
+      await this.performLSPContextAnalysis(task);
 
       // Execute based on task type and requirements
       let result: any;
@@ -961,5 +969,42 @@ export class UniversalAgent implements Agent {
     const totalTasks = this.metrics.tasksSucceeded + this.metrics.tasksFailed;
     this.metrics.successRate = totalTasks > 0 ? this.metrics.tasksSucceeded / totalTasks : 0;
     this.metrics.averageExecutionTime = totalTasks > 0 ? this.metrics.totalExecutionTime / totalTasks : 0;
+  }
+
+  private async performLSPContextAnalysis(task: AgentTask): Promise<void> {
+    try {
+      // Get workspace insights
+      const insights = await lspManager.getWorkspaceInsights(this.workingDirectory);
+      
+      if (insights.diagnostics.errors > 0) {
+        await logger.logTask('warn', task.id, this.id, 
+          `LSP found ${insights.diagnostics.errors} errors in workspace`, insights);
+      }
+      
+      // Update context with task information
+      this.contextSystem.recordInteraction(
+        task.description || task.title,
+        `Starting ${task.type} task`,
+        [{
+          type: 'analyze',
+          target: task.title,
+          params: { capabilities: task.requiredCapabilities },
+          result: 'started',
+          duration: 0
+        }]
+      );
+      
+      // Get memory stats for context awareness
+      const memoryStats = this.contextSystem.getMemoryStats();
+      
+      if (memoryStats.totalFiles > 0) {
+        logger.logTask('info', task.id, this.id, 
+          `Context loaded: ${memoryStats.totalFiles} files in memory`);
+      }
+      
+    } catch (error: any) {
+      await logger.logTask('warn', task.id, this.id, 
+        `LSP/Context analysis failed: ${error.message}`);
+    }
   }
 }

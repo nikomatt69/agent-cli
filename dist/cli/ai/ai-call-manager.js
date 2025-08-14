@@ -1,0 +1,364 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.aiCallManager = exports.AICallManager = void 0;
+const model_provider_1 = require("./model-provider");
+const secure_tools_registry_1 = require("../tools/secure-tools-registry");
+const ragSystem = __importStar(require("../context/rag-system"));
+const chalk_1 = __importDefault(require("chalk"));
+const ora_1 = __importDefault(require("ora"));
+const zod_1 = require("zod");
+const crypto_1 = require("crypto");
+const ExecutionPlanSchema = zod_1.z.object({
+    description: zod_1.z.string().describe('Brief description of what this plan will accomplish'),
+    toolCalls: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().describe('Unique identifier for this tool call'),
+        name: zod_1.z.string().describe('Name of the tool to call'),
+        arguments: zod_1.z.record(zod_1.z.any()).describe('Arguments to pass to the tool'),
+        reasoning: zod_1.z.string().optional().describe('Why this tool call is needed')
+    })),
+    estimatedDuration: zod_1.z.number().describe('Estimated duration in minutes'),
+    riskLevel: zod_1.z.enum(['low', 'medium', 'high']).describe('Risk level of this execution plan'),
+    requiresApproval: zod_1.z.boolean().describe('Whether this plan requires user approval')
+});
+class AICallManager {
+    constructor() {
+        this.executionHistory = [];
+    }
+    async generateExecutionPlan(userRequest, context) {
+        const spinner = (0, ora_1.default)('🧠 Generating AI execution plan...').start();
+        try {
+            let ragContextText = null;
+            if (context?.useRAG !== false) {
+                spinner.text = '🔍 Searching relevant code context...';
+                const query = context?.ragQuery || userRequest;
+                try {
+                    const searchResults = await ragSystem.search(query);
+                    if (searchResults.documents && searchResults.documents.length > 0 && searchResults.documents[0].length > 0) {
+                        ragContextText = searchResults.documents[0].join("\n\n---\n\n");
+                        spinner.succeed(`🔍 Found ${searchResults.documents[0].length} relevant code chunks`);
+                    }
+                    else {
+                        spinner.warn('🔍 No relevant code context found');
+                    }
+                }
+                catch (error) {
+                    spinner.warn(`🔍 RAG search failed: ${error.message}`);
+                }
+                spinner.start('🧠 Generating execution plan with context...');
+            }
+            const systemPrompt = `You are an intelligent AI assistant that creates secure execution plans.
+
+Available secure tools:
+- readFile: Read file contents safely with path validation
+- writeFile: Write file contents with user confirmation
+- listDirectory: List directory contents with sandboxing
+- replaceInFile: Replace content in files with confirmation
+- executeCommand: Execute shell commands with security analysis and confirmation
+- createBatchSession: Create batch sessions for one-time approval of multiple commands
+
+Security Guidelines:
+- Always use path validation for file operations
+- Request user confirmation for write operations
+- Analyze commands for security risks
+- Use batch sessions for multiple related commands
+- Prefer safe, read-only operations when possible
+
+${ragContextText ? `RELEVANT CODE CONTEXT:
+${ragContextText}
+
+` : ''}Context:
+${context ? `
+Working Directory: ${context.workingDirectory || 'current directory'}
+Available Files: ${context.availableFiles?.slice(0, 10).join(', ') || 'none listed'}${context.availableFiles && context.availableFiles.length > 10 ? ` (and ${context.availableFiles.length - 10} more)` : ''}
+Project Info: ${context.projectInfo ? JSON.stringify(context.projectInfo, null, 2) : 'none'}
+` : 'No additional context provided'}
+
+User Request: ${userRequest}
+
+
+Create a detailed execution plan that accomplishes the user's request safely and efficiently.
+Use the relevant code context above to make informed decisions about file paths, function names, and implementation details.
+Break down complex tasks into atomic tool calls.
+Estimate realistic durations and assess risk levels accurately.`;
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userRequest }
+            ];
+            try {
+                const planData = await model_provider_1.modelProvider.generateStructured({
+                    messages,
+                    schema: ExecutionPlanSchema,
+                    schemaName: 'ExecutionPlan',
+                    schemaDescription: 'Structured plan for secure tool execution',
+                    temperature: 0.1,
+                });
+                const plan = {
+                    id: `plan_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`,
+                    description: planData.description,
+                    toolCalls: planData.toolCalls.map(tc => ({ ...tc, id: tc.id || "", name: tc.name || "", arguments: tc.arguments || {} })),
+                    estimatedDuration: planData.estimatedDuration,
+                    riskLevel: planData.riskLevel,
+                    requiresApproval: planData.requiresApproval,
+                    createdAt: new Date(),
+                };
+                console.log(chalk_1.default.green(`✅ Execution plan generated: ${plan.description}`));
+                console.log(chalk_1.default.gray(`   Tool calls: ${plan.toolCalls.length}`));
+                console.log(chalk_1.default.gray(`   Risk level: ${plan.riskLevel}`));
+                console.log(chalk_1.default.gray(`   Requires approval: ${plan.requiresApproval ? 'Yes' : 'No'}`));
+                return plan;
+            }
+            catch (error) {
+                console.log(chalk_1.default.red(`❌ Failed to generate execution plan: ${error.message}`));
+                throw new Error(`Failed to generate execution plan: ${error.message}`);
+            }
+        }
+        catch (error) {
+            spinner.fail(chalk_1.default.red(`Error generating execution plan: ${error.message}`));
+            throw error;
+        }
+    }
+    async executePlan(plan, options = {}) {
+        console.log(chalk_1.default.blue.bold(`
+🚀 Executing Plan: ${plan.description}`));
+        console.log(chalk_1.default.gray(`Plan ID: ${plan.id}`));
+        console.log(chalk_1.default.gray(`Tool calls: ${plan.toolCalls.length}`));
+        if (plan.requiresApproval && !options.skipApproval) {
+            console.log(chalk_1.default.yellow.bold('\n⚠️ This plan requires your approval to proceed.'));
+            plan.toolCalls.forEach((toolCall, index) => {
+                console.log(`  ${index + 1}. ${toolCall.name}: ${toolCall.reasoning || ''}`);
+                console.log(`     Arguments: ${JSON.stringify(toolCall.arguments)}`);
+            });
+            const inquirer = await Promise.resolve().then(() => __importStar(require('inquirer')));
+            const { confirm } = await inquirer.default.prompt([
+                {
+                    type: 'confirm',
+                    name: 'confirm',
+                    message: 'Do you want to execute this plan?',
+                    default: false,
+                },
+            ]);
+            if (!confirm) {
+                console.log(chalk_1.default.red.bold('Execution cancelled by user.'));
+                return [];
+            }
+        }
+        const results = [];
+        let batchSession;
+        try {
+            if (options.useBatchSession && plan.requiresApproval && plan.toolCalls.some(tc => tc.name === 'executeCommand')) {
+                const commands = plan.toolCalls
+                    .filter(tc => tc.name === 'executeCommand')
+                    .map(tc => tc.arguments.command);
+                if (commands.length > 0) {
+                    console.log(chalk_1.default.blue('\n🔐 Creating batch session for command execution...'));
+                    const batchResult = await secure_tools_registry_1.secureTools.createBatchSession(commands, {
+                        sessionDuration: options.sessionDuration,
+                        onProgress: (command, index, total) => {
+                            console.log(chalk_1.default.blue(`[${index}/${total}] Executing: ${command}`));
+                        },
+                        onComplete: (results) => {
+                            console.log(chalk_1.default.green(`✅ Batch execution completed: ${results.length} commands`));
+                        },
+                        onError: (error, command, index) => {
+                            console.log(chalk_1.default.red(`❌ Batch execution failed at command ${index + 1}: ${command}`));
+                            console.log(chalk_1.default.red(`Error: ${error.message}`));
+                        }
+                    });
+                    if (batchResult.success && batchResult.data) {
+                        batchSession = batchResult.data;
+                        await secure_tools_registry_1.secureTools.executeBatchAsync(batchSession.id);
+                    }
+                }
+            }
+            for (let i = 0; i < plan.toolCalls.length; i++) {
+                const toolCall = plan.toolCalls[i];
+                const startTime = Date.now();
+                console.log(chalk_1.default.blue(`\n[${i + 1}/${plan.toolCalls.length}] ${toolCall.name}`));
+                if (toolCall.reasoning) {
+                    console.log(chalk_1.default.gray(`   Reasoning: ${toolCall.reasoning}`));
+                }
+                try {
+                    let result;
+                    switch (toolCall.name) {
+                        case 'readFile':
+                            const readResult = await secure_tools_registry_1.secureTools.readFile(toolCall.arguments.filePath);
+                            result = readResult.data;
+                            break;
+                        case 'writeFile':
+                            const writeResult = await secure_tools_registry_1.secureTools.writeFile(toolCall.arguments.filePath, toolCall.arguments.content, {
+                                skipConfirmation: options.skipApproval,
+                                createDirectories: toolCall.arguments.createDirectories
+                            });
+                            result = writeResult.data;
+                            break;
+                        case 'listDirectory':
+                            const listResult = await secure_tools_registry_1.secureTools.listDirectory(toolCall.arguments.directoryPath, {
+                                recursive: toolCall.arguments.recursive,
+                                includeHidden: toolCall.arguments.includeHidden,
+                                pattern: toolCall.arguments.pattern ? new RegExp(toolCall.arguments.pattern) : undefined
+                            });
+                            result = listResult.data;
+                            break;
+                        case 'replaceInFile':
+                            const replaceResult = await secure_tools_registry_1.secureTools.replaceInFile(toolCall.arguments.filePath, toolCall.arguments.replacements, {
+                                skipConfirmation: options.skipApproval,
+                                createBackup: toolCall.arguments.createBackup
+                            });
+                            result = replaceResult.data;
+                            break;
+                        case 'executeCommand':
+                            if (batchSession) {
+                                result = { message: 'Command queued in batch session', batchSessionId: batchSession.id };
+                            }
+                            else {
+                                const commandResult = await secure_tools_registry_1.secureTools.executeCommand(toolCall.arguments.command, {
+                                    cwd: toolCall.arguments.cwd,
+                                    timeout: toolCall.arguments.timeout,
+                                    env: toolCall.arguments.env,
+                                    skipConfirmation: options.skipApproval,
+                                    allowDangerous: toolCall.arguments.allowDangerous
+                                });
+                                result = commandResult.data;
+                            }
+                            break;
+                        default:
+                            throw new Error(`Unknown tool: ${toolCall.name}`);
+                    }
+                    const executionTime = Date.now() - startTime;
+                    results.push({
+                        id: toolCall.id,
+                        name: toolCall.name,
+                        success: true,
+                        result,
+                        executionTime
+                    });
+                    console.log(chalk_1.default.green(`✅ [${i + 1}/${plan.toolCalls.length}] Completed (${executionTime}ms)`));
+                }
+                catch (error) {
+                    const executionTime = Date.now() - startTime;
+                    results.push({
+                        id: toolCall.id,
+                        name: toolCall.name,
+                        success: false,
+                        error: error.message,
+                        executionTime
+                    });
+                    console.log(chalk_1.default.red(`❌ [${i + 1}/${plan.toolCalls.length}] Failed: ${error.message}`));
+                    if (plan.riskLevel === 'high') {
+                        console.log(chalk_1.default.red('🛑 Stopping execution due to high-risk failure'));
+                        break;
+                    }
+                }
+            }
+            this.executionHistory.push({
+                plan,
+                results,
+                batchSession,
+                completedAt: new Date()
+            });
+            console.log(chalk_1.default.green.bold(`\n✅ Plan execution completed`));
+            console.log(chalk_1.default.gray(`Successful: ${results.filter(r => r.success).length}/${results.length}`));
+            console.log(chalk_1.default.gray(`Failed: ${results.filter(r => !r.success).length}/${results.length}`));
+            return results;
+        }
+        catch (error) {
+            console.log(chalk_1.default.red.bold(`\n❌ Plan execution failed: ${error.message}`));
+            throw error;
+        }
+    }
+    async executeUserRequest(userRequest, context, options) {
+        console.log(chalk_1.default.blue.bold('\n🎯 Processing User Request'));
+        console.log(chalk_1.default.gray(`Request: ${userRequest}`));
+        const plan = await this.generateExecutionPlan(userRequest, context);
+        const results = await this.executePlan(plan, options);
+        return { plan, results };
+    }
+    getExecutionHistory(limit) {
+        const history = this.executionHistory.slice().reverse();
+        return limit ? history.slice(0, limit) : history;
+    }
+    getExecutionStats() {
+        const history = this.executionHistory;
+        const totalPlans = history.length;
+        const successfulPlans = history.filter(h => h.results.every(r => r.success)).length;
+        const failedPlans = totalPlans - successfulPlans;
+        const allResults = history.flatMap(h => h.results);
+        const totalToolCalls = allResults.length;
+        const successfulToolCalls = allResults.filter(r => r.success).length;
+        const averageExecutionTime = totalToolCalls > 0
+            ? allResults.reduce((sum, r) => sum + r.executionTime, 0) / totalToolCalls
+            : 0;
+        const toolCounts = new Map();
+        allResults.forEach(r => {
+            toolCounts.set(r.name, (toolCounts.get(r.name) || 0) + 1);
+        });
+        const mostUsedTools = Array.from(toolCounts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+        return {
+            totalPlans,
+            successfulPlans,
+            failedPlans,
+            totalToolCalls,
+            successfulToolCalls,
+            averageExecutionTime,
+            mostUsedTools
+        };
+    }
+    printExecutionStats() {
+        const stats = this.getExecutionStats();
+        console.log(chalk_1.default.blue.bold('\n📊 AI Call Manager Statistics'));
+        console.log(chalk_1.default.gray('─'.repeat(50)));
+        console.log(chalk_1.default.white(`Total Plans: ${stats.totalPlans}`));
+        console.log(chalk_1.default.green(`Successful Plans: ${stats.successfulPlans}`));
+        console.log(chalk_1.default.red(`Failed Plans: ${stats.failedPlans}`));
+        console.log(chalk_1.default.white(`Total Tool Calls: ${stats.totalToolCalls}`));
+        console.log(chalk_1.default.green(`Successful Tool Calls: ${stats.successfulToolCalls}`));
+        console.log(chalk_1.default.blue(`Average Execution Time: ${Math.round(stats.averageExecutionTime)}ms`));
+        if (stats.mostUsedTools.length > 0) {
+            console.log(chalk_1.default.blue('\n🔧 Most Used Tools:'));
+            stats.mostUsedTools.forEach(tool => {
+                console.log(chalk_1.default.gray(`  • ${tool.name}: ${tool.count} calls`));
+            });
+        }
+    }
+}
+exports.AICallManager = AICallManager;
+exports.aiCallManager = new AICallManager();

@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import boxen from 'boxen';
 import { DiffViewer, FileDiff } from './diff-viewer';
+import { inputQueue } from '../core/input-queue';
 
 export interface ApprovalRequest {
   id: string;
@@ -307,6 +308,7 @@ export class ApprovalSystem {
       });
     }
 
+    inputQueue.enableBypass();
     try {
       const answers = await inquirer.prompt(questions);
 
@@ -336,6 +338,8 @@ export class ApprovalSystem {
         approved: false,
         timestamp: new Date(),
       };
+    } finally {
+      inputQueue.disableBypass();
     }
   }
 

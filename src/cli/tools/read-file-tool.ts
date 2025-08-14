@@ -3,14 +3,26 @@ import { BaseTool, ToolExecutionResult } from './base-tool';
 import { sanitizePath } from './secure-file-tools';
 import { CliUI } from '../utils/cli-ui';
 import { advancedUI } from '../ui/advanced-cli-ui';
+import { lspManager } from '../lsp/lsp-manager';
+import { ContextAwareRAGSystem } from '../context/context-aware-rag';
+import { z } from 'zod';
+import { 
+    ReadFileOptionsSchema, 
+    ReadFileResultSchema, 
+    type ReadFileOptions, 
+    type ReadFileResult 
+} from '../schemas/tool-schemas';
 
 /**
  * Production-ready Read File Tool
  * Safely reads file contents with security checks and error handling
  */
 export class ReadFileTool extends BaseTool {
+    private contextSystem: ContextAwareRAGSystem;
+
     constructor(workingDirectory: string) {
         super('read-file-tool', workingDirectory);
+        this.contextSystem = new ContextAwareRAGSystem(workingDirectory);
     }
 
     async execute(filePath: string, options: ReadFileOptions = {}): Promise<ToolExecutionResult> {
@@ -44,32 +56,42 @@ export class ReadFileTool extends BaseTool {
 
     private async executeInternal(filePath: string, options: ReadFileOptions = {}): Promise<ReadFileResult> {
         try {
+            // Zod validation for input parameters
+            const validatedOptions = ReadFileOptionsSchema.parse(options);
+            
+            if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+                throw new Error('filePath must be a non-empty string');
+            }
+
             // Sanitize and validate file path
             const sanitizedPath = sanitizePath(filePath, this.workingDirectory);
 
             // Check file size if maxSize is specified
-            if (options.maxSize) {
+            if (validatedOptions.maxSize) {
                 const stats = await import('fs/promises').then(fs => fs.stat(sanitizedPath));
-                if (stats.size > options.maxSize) {
-                    throw new Error(`File too large: ${stats.size} bytes (max: ${options.maxSize})`);
+                if (stats.size > validatedOptions.maxSize) {
+                    throw new Error(`File too large: ${stats.size} bytes (max: ${validatedOptions.maxSize})`);
                 }
             }
 
             // Read file with specified encoding
-            const encoding = options.encoding || 'utf8';
+            const encoding = validatedOptions.encoding || 'utf8';
             const content = await readFile(sanitizedPath, encoding as BufferEncoding);
+
+            // LSP + Context Analysis
+            await this.performLSPContextAnalysis(sanitizedPath, content);
 
             // Apply content filters if specified
             let processedContent = content;
-            if (options.stripComments && this.isCodeFile(filePath)) {
+            if (validatedOptions.stripComments && this.isCodeFile(filePath)) {
                 processedContent = this.stripComments(processedContent, this.getFileExtension(filePath));
             }
 
-            if (options.maxLines && typeof processedContent === 'string') {
+            if (validatedOptions.maxLines && typeof processedContent === 'string') {
                 const lines = processedContent.split('\n');
-                if (lines.length > options.maxLines) {
-                    processedContent = lines.slice(0, options.maxLines).join('\n') +
-                        `\n... (truncated ${lines.length - options.maxLines} lines)`;
+                if (lines.length > validatedOptions.maxLines) {
+                    processedContent = lines.slice(0, validatedOptions.maxLines).join('\n') +
+                        `\n... (truncated ${lines.length - validatedOptions.maxLines} lines)`;
                 }
             }
 
@@ -87,12 +109,15 @@ export class ReadFileTool extends BaseTool {
                 }
             };
 
+            // Zod validation for result
+            const validatedResult = ReadFileResultSchema.parse(result);
+
             // Show file content in structured UI if not binary and not too large
-            if (!result.metadata?.isBinary && typeof processedContent === 'string' && processedContent.length < 50000) {
+            if (!validatedResult.metadata?.isBinary && typeof processedContent === 'string' && processedContent.length < 50000) {
                 advancedUI.showFileContent(sanitizedPath, processedContent);
             }
 
-            return result;
+            return validatedResult;
 
         } catch (error: any) {
             const errorResult: ReadFileResult = {
@@ -242,38 +267,57 @@ export class ReadFileTool extends BaseTool {
         const lastDot = filePath.lastIndexOf('.');
         return lastDot >= 0 ? filePath.substring(lastDot) : '';
     }
+
+    private async performLSPContextAnalysis(filePath: string, content: string): Promise<void> {
+        try {
+            // LSP Analysis
+            const lspContext = await lspManager.analyzeFile(filePath);
+            
+            if (lspContext.diagnostics.length > 0) {
+                const errors = lspContext.diagnostics.filter(d => d.severity === 1);
+                const warnings = lspContext.diagnostics.filter(d => d.severity === 2);
+                
+                if (errors.length > 0) {
+                    CliUI.logInfo(`LSP analysis: ${errors.length} errors in ${filePath}`);
+                }
+                
+                if (warnings.length > 0) {
+                    CliUI.logInfo(`LSP analysis: ${warnings.length} warnings in ${filePath}`);
+                }
+            }
+            
+            // Context Analysis & Memory Update
+            this.contextSystem.recordInteraction(
+                `Reading file: ${filePath}`,
+                `File read operation with LSP analysis`,
+                [{
+                    type: 'read_file',
+                    target: filePath,
+                    params: { contentLength: content.length },
+                    result: 'success',
+                    duration: 0
+                }]
+            );
+            
+            // Update workspace context
+            await this.contextSystem.analyzeFile(filePath);
+            
+        } catch (error: any) {
+            CliUI.logWarning(`LSP/Context analysis failed for ${filePath}: ${error.message}`);
+        }
+    }
 }
 
-export interface ReadFileOptions {
-    encoding?: string;
-    maxSize?: number; // Maximum file size in bytes
-    maxLines?: number; // Maximum number of lines to read
-    stripComments?: boolean; // Remove comments from code files
-}
+export const FileInfoSchema = z.object({
+    path: z.string(),
+    size: z.number().int().min(0),
+    isFile: z.boolean(),
+    isDirectory: z.boolean(),
+    created: z.date(),
+    modified: z.date(),
+    accessed: z.date(),
+    extension: z.string(),
+    isReadable: z.boolean()
+});
 
-export interface ReadFileResult {
-    success: boolean;
-    filePath: string;
-    content: string | Buffer;
-    size: number;
-    encoding: string;
-    error?: string;
-    metadata: {
-        lines?: number;
-        isEmpty: boolean;
-        isBinary: boolean;
-        extension: string;
-    };
-}
-
-export interface FileInfo {
-    path: string;
-    size: number;
-    isFile: boolean;
-    isDirectory: boolean;
-    created: Date;
-    modified: Date;
-    accessed: Date;
-    extension: string;
-    isReadable: boolean;
-}
+export type FileInfo = z.infer<typeof FileInfoSchema>;

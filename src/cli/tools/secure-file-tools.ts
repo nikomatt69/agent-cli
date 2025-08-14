@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
+import { inputQueue } from '../core/input-queue';
 
 /**
  * Utility to sanitize and validate file paths to prevent directory traversal attacks
@@ -93,16 +94,21 @@ export class WriteFileTool {
       // Show confirmation prompt unless explicitly skipped
       if (!options.skipConfirmation) {
         const action = fileExists ? 'overwrite' : 'create';
-        const { confirmed } = await inquirer.prompt([{
-          type: 'confirm',
-          name: 'confirmed',
-          message: `${action === 'overwrite' ? '⚠️  Overwrite' : '📝 Create'} file: ${filePath}?`,
-          default: false,
-        }]);
+        inputQueue.enableBypass();
+        try {
+          const { confirmed } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirmed',
+            message: `${action === 'overwrite' ? '⚠️  Overwrite' : '📝 Create'} file: ${filePath}?`,
+            default: false,
+          }]);
 
-        if (!confirmed) {
-          console.log(chalk.yellow('✋ File operation cancelled by user'));
-          return;
+          if (!confirmed) {
+            console.log(chalk.yellow('✋ File operation cancelled by user'));
+            return;
+          }
+        } finally {
+          inputQueue.disableBypass();
         }
       }
 
@@ -265,16 +271,21 @@ export class ReplaceInFileTool {
         console.log(chalk.blue(`\n📝 Proposed changes to ${filePath}:`));
         console.log(chalk.gray(`${totalReplacements} replacement(s) will be made`));
         
-        const { confirmed } = await inquirer.prompt([{
-          type: 'confirm',
-          name: 'confirmed',
-          message: 'Apply these changes?',
-          default: false,
-        }]);
+        inputQueue.enableBypass();
+        try {
+          const { confirmed } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirmed',
+            message: 'Apply these changes?',
+            default: false,
+          }]);
 
-        if (!confirmed) {
-          console.log(chalk.yellow('✋ File replacement cancelled by user'));
-          return { replacements: 0 };
+          if (!confirmed) {
+            console.log(chalk.yellow('✋ File replacement cancelled by user'));
+            return { replacements: 0 };
+          }
+        } finally {
+          inputQueue.disableBypass();
         }
       }
 

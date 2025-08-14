@@ -12,6 +12,7 @@ import { lspService } from './services/lsp-service';
 import { diffManager } from './ui/diff-manager';
 import { ExecutionPolicyManager } from './policies/execution-policy';
 import { simpleConfigManager as configManager } from './core/config-manager';
+import { inputQueue } from './core/input-queue';
 
 interface StreamMessage {
   id: string;
@@ -44,6 +45,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
   private activeAgents = new Map<string, any>();
   private streamBuffer = '';
   private lastUpdate = Date.now();
+  private inputQueueEnabled = true; // Abilita/disabilita input queue
 
   constructor() {
     super();
@@ -99,6 +101,28 @@ class StreamingOrchestratorImpl extends EventEmitter {
     this.rl.on('line', async (input: string) => {
       const trimmed = input.trim();
       if (!trimmed) {
+        this.showPrompt();
+        return;
+      }
+
+      // Se il sistema sta processando e la queue è abilitata, metti in coda
+      // ma rispetta il bypass per approval inputs
+      if (this.inputQueueEnabled && (this.processingMessage || this.activeAgents.size > 0) && inputQueue.shouldQueue(trimmed)) {
+        // Determina priorità basata sul contenuto
+        let priority: 'high' | 'normal' | 'low' = 'normal';
+        if (trimmed.startsWith('/') || trimmed.startsWith('@')) {
+          priority = 'high'; // Comandi e agenti hanno priorità alta
+        } else if (trimmed.toLowerCase().includes('urgent') || trimmed.toLowerCase().includes('stop')) {
+          priority = 'high';
+        } else if (trimmed.toLowerCase().includes('later') || trimmed.toLowerCase().includes('low priority')) {
+          priority = 'low';
+        }
+
+        const queueId = inputQueue.enqueue(trimmed, priority, 'user');
+        this.queueMessage({
+          type: 'system',
+          content: `📥 Input queued (${priority} priority, ID: ${queueId.slice(-6)}): ${trimmed.substring(0, 40)}${trimmed.length > 40 ? '...' : ''}`
+        });
         this.showPrompt();
         return;
       }
@@ -218,6 +242,9 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
       // Process next message
       setTimeout(() => this.processNextMessage(), 100);
+
+      // Processa input dalla queue se disponibili
+      this.processQueuedInputs();
     }
   }
 
@@ -274,6 +301,9 @@ class StreamingOrchestratorImpl extends EventEmitter {
         break;
       case 'help':
         this.showHelp();
+        break;
+      case 'queue':
+        this.handleQueueCommand(args);
         break;
       default:
         this.queueMessage({
@@ -464,6 +494,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
     const active = this.activeAgents.size;
     const queued = agentService.getQueuedTasks().length;
     const pending = diffManager.getPendingCount();
+    const queueStatus = inputQueue.getStatus();
 
     console.log(chalk.cyan.bold('\\n🎛️ Orchestrator Status'));
     console.log(chalk.gray('─'.repeat(40)));
@@ -473,6 +504,11 @@ class StreamingOrchestratorImpl extends EventEmitter {
     console.log(`${chalk.blue('Messages:')} ${this.messageQueue.length}`);
     console.log(`${chalk.blue('Pending Diffs:')} ${pending}`);
     console.log(`${chalk.blue('Context Left:')} ${this.context.contextLeft}%`);
+    console.log(`${chalk.blue('Input Queue:')} ${this.inputQueueEnabled ? 'Enabled' : 'Disabled'}`);
+    if (this.inputQueueEnabled) {
+      console.log(`${chalk.blue('  Queued Inputs:')} ${queueStatus.queueLength}`);
+      console.log(`${chalk.blue('  Processing:')} ${queueStatus.isProcessing ? 'Yes' : 'No'}`);
+    }
   }
 
   private showActiveAgents(): void {
@@ -514,6 +550,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
     console.log(`${chalk.green('/diff')} [file]   Show file changes`);
     console.log(`${chalk.green('/accept')} [all]  Accept file changes`);
     console.log(`${chalk.green('/clear')}         Clear message queue`);
+    console.log(`${chalk.green('/queue')} [cmd]   Manage input queue`);
     console.log(`${chalk.green('/help')}          Show detailed help`);
 
     console.log(chalk.cyan.bold('\\n🤖 Agent Usage:'));
@@ -545,6 +582,54 @@ class StreamingOrchestratorImpl extends EventEmitter {
     console.log('• Manual - Ask for confirmation');
     console.log('• Plan - Create execution plans first');
     console.log('• Auto-accept - Apply all changes automatically');
+
+    console.log(chalk.white.bold('\\nQueue Commands:'));
+    console.log('• /queue status - Show queue status');
+    console.log('• /queue clear - Clear all queued inputs');
+    console.log('• /queue enable/disable - Toggle input queue');
+    console.log('• /queue process - Process next queued input');
+  }
+
+  private handleQueueCommand(args: string[]): void {
+    const [subCmd] = args;
+
+    switch (subCmd) {
+      case 'status':
+        inputQueue.showStats();
+        break;
+      case 'clear':
+        const cleared = inputQueue.clear();
+        this.queueMessage({
+          type: 'system',
+          content: `🗑️ Cleared ${cleared} inputs from queue`
+        });
+        break;
+      case 'enable':
+        this.inputQueueEnabled = true;
+        this.queueMessage({
+          type: 'system',
+          content: '✅ Input queue enabled'
+        });
+        break;
+      case 'disable':
+        this.inputQueueEnabled = false;
+        this.queueMessage({
+          type: 'system',
+          content: '⚠️ Input queue disabled'
+        });
+        break;
+      case 'process':
+        this.processQueuedInputs();
+        break;
+      default:
+        console.log(chalk.cyan.bold('\\n📥 Input Queue Commands:'));
+        console.log(chalk.gray('─'.repeat(40)));
+        console.log(`${chalk.green('/queue status')}   - Show queue statistics`);
+        console.log(`${chalk.green('/queue clear')}    - Clear all queued inputs`);
+        console.log(`${chalk.green('/queue enable')}   - Enable input queue`);
+        console.log(`${chalk.green('/queue disable')}  - Disable input queue`);
+        console.log(`${chalk.green('/queue process')}  - Process next queued input`);
+    }
   }
 
   private stopAllAgents(): void {
@@ -565,6 +650,34 @@ class StreamingOrchestratorImpl extends EventEmitter {
     setInterval(() => {
       this.absorbCompletedMessages();
     }, 5000);
+
+    // Process queued inputs every 2 seconds
+    setInterval(() => {
+      this.processQueuedInputs();
+    }, 2000);
+  }
+
+  private async processQueuedInputs(): Promise<void> {
+    if (!this.inputQueueEnabled || this.processingMessage || this.activeAgents.size > 0) {
+      return; // Non processare se il sistema è occupato
+    }
+
+    const status = inputQueue.getStatus();
+    if (status.queueLength === 0) {
+      return; // Nessun input in coda
+    }
+
+    // Processa il prossimo input dalla queue
+    const result = await inputQueue.processNext(async (input: string) => {
+      await this.queueUserInput(input);
+    });
+
+    if (result) {
+      this.queueMessage({
+        type: 'system',
+        content: `🔄 Processing queued input: ${result.input.substring(0, 40)}${result.input.length > 40 ? '...' : ''}`
+      });
+    }
   }
 
   private showPrompt(): void {
@@ -579,7 +692,12 @@ class StreamingOrchestratorImpl extends EventEmitter {
 
     const contextStr = chalk.dim(`${this.context.contextLeft}%`);
 
-    const prompt = `\n┌─[${agentIndicator}:${chalk.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
+    // Mostra stato della queue se abilitata
+    const queueStatus = this.inputQueueEnabled ? inputQueue.getStatus() : null;
+    const queueStr = queueStatus && queueStatus.queueLength > 0 ?
+      chalk.yellow(` | 📥${queueStatus.queueLength}`) : '';
+
+    const prompt = `\n┌─[${agentIndicator}:${chalk.green(dir)}${modeStr}]─[${contextStr}${queueStr}]\n└─❯ `;
     this.rl.setPrompt(prompt);
     this.rl.prompt();
   }

@@ -41,6 +41,7 @@ import { AgentTask } from './types/types';
 import { ExecutionPlan } from './planning/types';
 import { registerAgents } from './register-agents';
 import { advancedUI } from './ui/advanced-cli-ui';
+import { inputQueue } from './core/input-queue';
 
 // Configure marked for terminal rendering
 marked.setOptions({
@@ -1125,7 +1126,7 @@ export class NikCLI {
 
     private showAdvancedHeader(): void {
         const header = boxen(
-            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.11-beta')}\n` +
+            `${chalk.cyanBright.bold('🤖 NikCLI')} ${chalk.gray('v0.1.12-beta')}\n` +
             `${chalk.gray('Autonomous AI Developer Assistant')}\n\n` +
             `${chalk.blue('Status:')} ${this.getOverallStatus()}  ${chalk.blue('Active Tasks:')} ${this.indicators.size}\n` +
             `${chalk.blue('Mode:')} ${this.currentMode}  ${chalk.blue('Live Updates:')} Enabled`,
@@ -1396,6 +1397,25 @@ export class NikCLI {
                 return;
             }
 
+            // Se il sistema sta processando, metti in coda
+            // ma rispetta il bypass per approval inputs
+            if (this.assistantProcessing && inputQueue.shouldQueue(trimmed)) {
+                // Determina priorità basata sul contenuto
+                let priority: 'high' | 'normal' | 'low' = 'normal';
+                if (trimmed.startsWith('/') || trimmed.startsWith('@')) {
+                    priority = 'high'; // Comandi e agenti hanno priorità alta
+                } else if (trimmed.toLowerCase().includes('urgent') || trimmed.toLowerCase().includes('stop')) {
+                    priority = 'high';
+                } else if (trimmed.toLowerCase().includes('later') || trimmed.toLowerCase().includes('low priority')) {
+                    priority = 'low';
+                }
+
+                const queueId = inputQueue.enqueue(trimmed, priority, 'user');
+                console.log(chalk.cyan(`📥 Input queued (${priority} priority): ${trimmed.substring(0, 40)}${trimmed.length > 40 ? '...' : ''}`));
+                this.showPrompt();
+                return;
+            }
+
             // Indicate assistant is processing while handling the input
             this.assistantProcessing = true;
             this.showPrompt();
@@ -1415,6 +1435,9 @@ export class NikCLI {
                 // Done processing; return to idle
                 this.assistantProcessing = false;
                 this.showPrompt();
+
+                // Processa input dalla queue se disponibili
+                this.processQueuedInputs();
             }
         });
 
@@ -1480,6 +1503,78 @@ export class NikCLI {
             bar.stop();
         }
         this.progressBars.clear();
+    }
+
+    /**
+     * Processa input dalla queue quando il sistema è libero
+     */
+    private async processQueuedInputs(): Promise<void> {
+        if (this.assistantProcessing) {
+            return; // Non processare se il sistema è occupato
+        }
+
+        const status = inputQueue.getStatus();
+        if (status.queueLength === 0) {
+            return; // Nessun input in coda
+        }
+
+        // Processa il prossimo input dalla queue
+        const result = await inputQueue.processNext(async (input: string) => {
+            console.log(chalk.blue(`🔄 Processing queued input: ${input.substring(0, 40)}${input.length > 40 ? '...' : ''}`));
+
+            // Simula il processing dell'input
+            this.assistantProcessing = true;
+            this.showPrompt();
+
+            try {
+                // Route slash and agent-prefixed commands, otherwise treat as chat
+                if (input.startsWith('/')) {
+                    await this.dispatchSlash(input);
+                } else if (input.startsWith('@')) {
+                    await this.dispatchAt(input);
+                } else if (input.startsWith('*')) {
+                    await this.dispatchStar(input);
+                } else {
+                    await this.handleChatInput(input);
+                }
+            } finally {
+                this.assistantProcessing = false;
+                this.showPrompt();
+            }
+        });
+
+        if (result) {
+            console.log(chalk.green(`✅ Queued input processed: ${result.input.substring(0, 40)}${result.input.length > 40 ? '...' : ''}`));
+
+            // Processa il prossimo input se disponibile
+            setTimeout(() => this.processQueuedInputs(), 100);
+        }
+    }
+
+    /**
+     * Gestisce i comandi della queue
+     */
+    private handleQueueCommand(args: string[]): void {
+        const [subCmd] = args;
+
+        switch (subCmd) {
+            case 'status':
+                inputQueue.showStats();
+                break;
+            case 'clear':
+                const cleared = inputQueue.clear();
+                console.log(chalk.green(`🗑️ Cleared ${cleared} inputs from queue`));
+                break;
+            case 'process':
+                this.processQueuedInputs();
+                break;
+            default:
+                console.log(chalk.cyan.bold('\n📥 Input Queue Commands:'));
+                console.log(chalk.gray('─'.repeat(40)));
+                console.log(`${chalk.green('/queue status')}   - Show queue statistics`);
+                console.log(`${chalk.green('/queue clear')}    - Clear all queued inputs`);
+                console.log(`${chalk.green('/queue process')}  - Process next queued input`);
+        }
     }
 
     /**
@@ -1774,6 +1869,9 @@ export class NikCLI {
                 // Help and Exit
                 case 'help':
                     this.showSlashHelp();
+                    break;
+                case 'queue':
+                    this.handleQueueCommand(args);
                     break;
                 case 'clear':
                     await this.clearSession();
@@ -5810,9 +5908,16 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const modeIcon = this.currentMode === 'auto' ? '🚀' :
             this.currentMode === 'plan' ? '🎯' : '💬';
         const agentInfo = this.currentAgent ? `@${this.currentAgent}:` : '';
-        const statusDot = this.assistantProcessing ? chalk.green('●') + chalk.dim('….') : chalk.red('●');
 
-        const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusDot}]\n└─❯ `;
+        // Ottieni stato della queue
+        const queueStatus = inputQueue.getStatus();
+        const queueCount = queueStatus.queueLength;
+        const queueIndicator = queueCount > 0 ? chalk.yellow(`📥${queueCount}`) : '';
+
+        const statusDot = this.assistantProcessing ? chalk.green('●') + chalk.dim('….') : chalk.red('●');
+        const statusWithQueue = queueIndicator ? `${statusDot} ${queueIndicator}` : statusDot;
+
+        const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusWithQueue}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
