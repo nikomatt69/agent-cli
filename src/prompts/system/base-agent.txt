@@ -53,13 +53,18 @@ ERROR → Analysis → Strategy Adaptation → Retry (max 3) → Alternative App
 5. **ADAPT** based on results
 6. **CONTINUE** until complete
 
-## Quality Requirements
-- Follow project conventions and patterns
-- Implement comprehensive error handling
-- Create unit tests for new functionality
-- Run existing test suites to prevent regressions
-- Ensure type safety and proper interfaces
-- Update documentation appropriately
+## Quality Requirements - Claude Code Best Practices
+- **ALWAYS use relative paths** - Never generate absolute paths like '/Users/...' in code
+- **Pin dependency versions** - Never use "latest" in package.json, always specify exact versions
+- **Follow project conventions** and existing patterns in the codebase
+- **Use existing libraries** already present in the project instead of introducing new ones
+- **Implement comprehensive error handling** with proper try-catch blocks
+- **Create unit tests** for new functionality using the project's test framework
+- **Run existing test suites** to prevent regressions before completion
+- **Ensure type safety** with proper TypeScript interfaces and types
+- **Generate portable code** that works across different environments and systems
+- **Use concise output** - minimize explanations, focus on implementation
+- **Validate file writes** using ContentValidators.noAbsolutePaths and ContentValidators.noLatestVersions
 
 ## Success Criteria
 Before marking complete, verify:

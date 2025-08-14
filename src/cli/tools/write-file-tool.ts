@@ -121,7 +121,9 @@ export class WriteFileTool extends BaseTool {
                 }
             };
 
-            CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
+            // Show relative path in logs for cleaner output
+            const relativePath = sanitizedPath.replace(this.workingDirectory, '').replace(/^\//, '') || sanitizedPath;
+            CliUI.logSuccess(`File written: ${relativePath} (${writeFileResult.bytesWritten} bytes)`);
             return {
                 success: true,
                 data: writeFileResult,
@@ -159,7 +161,8 @@ export class WriteFileTool extends BaseTool {
                 }
             };
 
-            CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
+            const relativePath = filePath.replace(this.workingDirectory, '').replace(/^\//, '') || filePath;
+            CliUI.logError(`Failed to write file ${relativePath}: ${error.message}`);
             return {
                 success: false,
                 data: errorResult,
@@ -453,4 +456,105 @@ export interface ValidationResult {
     isValid: boolean;
     errors: string[];
     warnings?: string[];
+}
+
+/**
+ * Built-in validators for common code quality issues
+ */
+export class ContentValidators {
+    /**
+     * Validates that content doesn't contain absolute paths (Claude Code best practice)
+     */
+    static noAbsolutePaths: ContentValidator = async (content: string, _filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        // Check for absolute paths in import/require statements
+        const absolutePathRegex = /(?:import|require|from)\s+['"`]([^'"`]*\/Users\/[^'"`]*|[^'"`]*\/home\/[^'"`]*|[^'"`]*C:\\[^'"`]*)/g;
+        const matches = content.match(absolutePathRegex);
+        
+        if (matches) {
+            errors.push(`Found absolute paths in imports: ${matches.join(', ')}`);
+        }
+        
+        // Check for absolute paths in general (more permissive warning)
+        const generalAbsoluteRegex = /(\/Users\/\w+|\/home\/\w+|C:\\[^\\]*\\)/g;
+        const generalMatches = content.match(generalAbsoluteRegex);
+        
+        if (generalMatches) {
+            const uniquePaths = [...new Set(generalMatches)];
+            warnings.push(`Consider using relative paths instead of: ${uniquePaths.join(', ')}`);
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
+
+    /**
+     * Validates that package.json doesn't use "latest" versions
+     */
+    static noLatestVersions: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.endsWith('package.json')) {
+            try {
+                const packageObj = JSON.parse(content);
+                
+                const checkDependencies = (deps: any, section: string) => {
+                    if (deps) {
+                        Object.entries(deps).forEach(([name, version]) => {
+                            if (version === 'latest') {
+                                warnings.push(`${section}.${name} uses "latest" - consider pinning to specific version`);
+                            }
+                        });
+                    }
+                };
+                
+                checkDependencies(packageObj.dependencies, 'dependencies');
+                checkDependencies(packageObj.devDependencies, 'devDependencies');
+                checkDependencies(packageObj.peerDependencies, 'peerDependencies');
+                
+            } catch (parseError) {
+                warnings.push('Could not parse package.json to validate versions');
+            }
+        }
+        
+        return {
+            isValid: true, // This is a warning-only validator
+            errors,
+            warnings
+        };
+    };
+
+    /**
+     * Validates TypeScript/JavaScript code quality
+     */
+    static codeQuality: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+            // Check for console.log in production code
+            if (content.includes('console.log(') && !filePath.includes('test')) {
+                warnings.push('Consider using proper logging instead of console.log');
+            }
+            
+            // Check for missing exports in index files
+            if (filePath.endsWith('index.ts') || filePath.endsWith('index.js')) {
+                if (!content.includes('export') && content.trim().length > 0) {
+                    warnings.push('Index file should typically export something');
+                }
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
 }

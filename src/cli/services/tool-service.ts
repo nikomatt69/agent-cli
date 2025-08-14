@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 import { ExecutionPolicyManager, ToolApprovalRequest } from '../policies/execution-policy';
 import { ApprovalSystem, ApprovalRequest, ApprovalResponse } from '../ui/approval-system';
 import { simpleConfigManager } from '../core/config-manager';
+import { ContentValidators } from '../tools/write-file-tool';
 
 export interface ToolExecution {
   id: string;
@@ -293,12 +294,30 @@ export class ToolService {
     const fullPath = path.resolve(this.workingDirectory, args.filePath);
     const dir = path.dirname(fullPath);
     
+    // Validate content using Claude Code best practices
+    const pathValidation = await ContentValidators.noAbsolutePaths(args.content, args.filePath);
+    if (!pathValidation.isValid) {
+      throw new Error(`Content validation failed: ${pathValidation.errors.join(', ')}`);
+    }
+    
+    const versionValidation = await ContentValidators.noLatestVersions(args.content, args.filePath);
+    if (versionValidation.warnings && versionValidation.warnings.length > 0) {
+      console.log(`⚠️  ${versionValidation.warnings.join(', ')}`);
+    }
+    
     // Ensure directory exists
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
     fs.writeFileSync(fullPath, args.content, 'utf8');
+    
+    // Show relative path in logs
+    const relativePath = args.filePath.startsWith(this.workingDirectory) 
+      ? args.filePath.replace(this.workingDirectory, '').replace(/^\//, '')
+      : args.filePath;
+    
+    console.log(chalk.green(`✅ File written: ${relativePath} (${args.content.length} bytes)`));
     
     return {
       written: true,

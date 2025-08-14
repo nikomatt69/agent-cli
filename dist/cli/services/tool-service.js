@@ -44,6 +44,7 @@ const child_process_1 = require("child_process");
 const execution_policy_1 = require("../policies/execution-policy");
 const approval_system_1 = require("../ui/approval-system");
 const config_manager_1 = require("../core/config-manager");
+const write_file_tool_1 = require("../tools/write-file-tool");
 class ToolService {
     constructor() {
         this.tools = new Map();
@@ -240,10 +241,22 @@ class ToolService {
     async writeFile(args) {
         const fullPath = path.resolve(this.workingDirectory, args.filePath);
         const dir = path.dirname(fullPath);
+        const pathValidation = await write_file_tool_1.ContentValidators.noAbsolutePaths(args.content, args.filePath);
+        if (!pathValidation.isValid) {
+            throw new Error(`Content validation failed: ${pathValidation.errors.join(', ')}`);
+        }
+        const versionValidation = await write_file_tool_1.ContentValidators.noLatestVersions(args.content, args.filePath);
+        if (versionValidation.warnings && versionValidation.warnings.length > 0) {
+            console.log(`⚠️  ${versionValidation.warnings.join(', ')}`);
+        }
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
         fs.writeFileSync(fullPath, args.content, 'utf8');
+        const relativePath = args.filePath.startsWith(this.workingDirectory)
+            ? args.filePath.replace(this.workingDirectory, '').replace(/^\//, '')
+            : args.filePath;
+        console.log(chalk_1.default.green(`✅ File written: ${relativePath} (${args.content.length} bytes)`));
         return {
             written: true,
             size: args.content.length

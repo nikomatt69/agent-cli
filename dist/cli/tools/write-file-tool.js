@@ -32,8 +32,9 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WriteFileTool = void 0;
+exports.ContentValidators = exports.WriteFileTool = void 0;
 const promises_1 = require("fs/promises");
 const path_1 = require("path");
 const base_tool_1 = require("./base-tool");
@@ -126,7 +127,8 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     mode: options.mode || 0o644
                 }
             };
-            cli_ui_1.CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
+            const relativePath = sanitizedPath.replace(this.workingDirectory, '').replace(/^\//, '') || sanitizedPath;
+            cli_ui_1.CliUI.logSuccess(`File written: ${relativePath} (${writeFileResult.bytesWritten} bytes)`);
             return {
                 success: true,
                 data: writeFileResult,
@@ -162,7 +164,8 @@ class WriteFileTool extends base_tool_1.BaseTool {
                     mode: options.mode || 0o644
                 }
             };
-            cli_ui_1.CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
+            const relativePath = filePath.replace(this.workingDirectory, '').replace(/^\//, '') || filePath;
+            cli_ui_1.CliUI.logError(`Failed to write file ${relativePath}: ${error.message}`);
             return {
                 success: false,
                 data: errorResult,
@@ -342,3 +345,75 @@ class WriteFileTool extends base_tool_1.BaseTool {
     }
 }
 exports.WriteFileTool = WriteFileTool;
+class ContentValidators {
+}
+exports.ContentValidators = ContentValidators;
+_a = ContentValidators;
+ContentValidators.noAbsolutePaths = async (content, _filePath) => {
+    const errors = [];
+    const warnings = [];
+    const absolutePathRegex = /(?:import|require|from)\s+['"`]([^'"`]*\/Users\/[^'"`]*|[^'"`]*\/home\/[^'"`]*|[^'"`]*C:\\[^'"`]*)/g;
+    const matches = content.match(absolutePathRegex);
+    if (matches) {
+        errors.push(`Found absolute paths in imports: ${matches.join(', ')}`);
+    }
+    const generalAbsoluteRegex = /(\/Users\/\w+|\/home\/\w+|C:\\[^\\]*\\)/g;
+    const generalMatches = content.match(generalAbsoluteRegex);
+    if (generalMatches) {
+        const uniquePaths = [...new Set(generalMatches)];
+        warnings.push(`Consider using relative paths instead of: ${uniquePaths.join(', ')}`);
+    }
+    return {
+        isValid: errors.length === 0,
+        errors,
+        warnings
+    };
+};
+ContentValidators.noLatestVersions = async (content, filePath) => {
+    const errors = [];
+    const warnings = [];
+    if (filePath.endsWith('package.json')) {
+        try {
+            const packageObj = JSON.parse(content);
+            const checkDependencies = (deps, section) => {
+                if (deps) {
+                    Object.entries(deps).forEach(([name, version]) => {
+                        if (version === 'latest') {
+                            warnings.push(`${section}.${name} uses "latest" - consider pinning to specific version`);
+                        }
+                    });
+                }
+            };
+            checkDependencies(packageObj.dependencies, 'dependencies');
+            checkDependencies(packageObj.devDependencies, 'devDependencies');
+            checkDependencies(packageObj.peerDependencies, 'peerDependencies');
+        }
+        catch (parseError) {
+            warnings.push('Could not parse package.json to validate versions');
+        }
+    }
+    return {
+        isValid: true,
+        errors,
+        warnings
+    };
+};
+ContentValidators.codeQuality = async (content, filePath) => {
+    const errors = [];
+    const warnings = [];
+    if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+        if (content.includes('console.log(') && !filePath.includes('test')) {
+            warnings.push('Consider using proper logging instead of console.log');
+        }
+        if (filePath.endsWith('index.ts') || filePath.endsWith('index.js')) {
+            if (!content.includes('export') && content.trim().length > 0) {
+                warnings.push('Index file should typically export something');
+            }
+        }
+    }
+    return {
+        isValid: errors.length === 0,
+        errors,
+        warnings
+    };
+};
