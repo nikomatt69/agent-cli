@@ -194,9 +194,19 @@ export class DocumentationLibrary {
    */
   private extractTextFromHTML(html: string): string {
     // Rimuovi tag HTML
-    let text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    let text = html;
+    // Rimuovi tutti i blocchi <script>...</script> in modo sicuro
+    let prev;
+    do {
+      prev = text;
+      text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    } while (text !== prev);
+    // Rimuovi tutti i blocchi <style>...</style> in modo sicuro
+    do {
+      prev = text;
+      text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    } while (text !== prev);
+    text = text
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
