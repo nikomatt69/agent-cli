@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.smartCache = exports.SmartCacheManager = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const crypto_1 = require("crypto");
+const performance_optimizer_1 = require("./performance-optimizer");
 class SmartCacheManager {
     constructor() {
         this.cache = new Map();
@@ -195,7 +196,7 @@ class SmartCacheManager {
                 entry.accessCount++;
                 this.accessPatterns.set(content, (this.accessPatterns.get(content) || 0) + 1);
                 entry.exactMatch = overallSimilarity >= 0.99;
-                console.log(chalk_1.default.blue(`🎯 `));
+                performance_optimizer_1.QuietCacheLogger.logCacheSave(entry.metadata.tokensSaved);
                 return entry;
             }
         }
@@ -230,7 +231,7 @@ class SmartCacheManager {
         };
         this.cache.set(entry.id, entry);
         this.accessPatterns.set(content, (this.accessPatterns.get(content) || 0) + 1);
-        console.log(chalk_1.default.green(`💾 Cached (${strategy.name}): ${content.substring(0, 50)}...`));
+        performance_optimizer_1.QuietCacheLogger.logCacheSave(entry.metadata.tokensSaved);
     }
     evictOldEntries(strategy) {
         const entries = Array.from(this.cache.entries())
@@ -278,15 +279,11 @@ class SmartCacheManager {
                 removed++;
             }
         }
-        if (removed > 0) {
-            console.log(chalk_1.default.yellow(`🧹 Cleaned up ${removed} old cache entries`));
-        }
     }
     setStrategyEnabled(strategyId, enabled) {
         const strategy = this.strategies.get(strategyId);
         if (strategy) {
             strategy.enabled = enabled;
-            console.log(chalk_1.default.blue(`${enabled ? '✅' : '❌'} ${strategy.name} cache ${enabled ? 'enabled' : 'disabled'}`));
         }
     }
     showStatus() {

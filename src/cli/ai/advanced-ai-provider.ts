@@ -39,6 +39,7 @@ import { aiDocsTools } from '../tools/docs-request-tool';
 import { intelligentFeedbackWrapper } from '../core/intelligent-feedback-wrapper';
 import FeedbackAwareTools from '../core/feedback-aware-tools';
 import { validatorManager, ValidationContext, ExtendedValidationResult } from '../core/validator-manager';
+import { TokenOptimizer, TokenOptimizationConfig, QuietCacheLogger } from '../core/performance-optimizer';
 
 const execAsync = promisify(exec);
 
@@ -58,6 +59,8 @@ export interface AutonomousProvider {
 }
 
 export class AdvancedAIProvider implements AutonomousProvider {
+  private tokenOptimizer: TokenOptimizer;
+
   generateWithTools(planningMessages: CoreMessage[]) {
     throw new Error('Method not implemented.');
   }
@@ -93,12 +96,14 @@ export class AdvancedAIProvider implements AutonomousProvider {
     return totalTokens;
   }
 
-  // Intelligent message truncation to stay within token limits - AGGRESSIVE MODE
-  private truncateMessages(messages: CoreMessage[], maxTokens: number = 120000): CoreMessage[] {
-    const currentTokens = this.estimateMessagesTokens(messages);
+  // Intelligent message truncation with token optimization - AGGRESSIVE MODE
+  private async truncateMessages(messages: CoreMessage[], maxTokens: number = 120000): Promise<CoreMessage[]> {
+    // First apply token optimization to all messages
+    const optimizedMessages = await this.optimizeMessages(messages);
+    const currentTokens = this.estimateMessagesTokens(optimizedMessages);
 
     if (currentTokens <= maxTokens) {
-      return messages;
+      return optimizedMessages;
     }
 
     // Messages too long - applying intelligent truncation
@@ -183,17 +188,52 @@ export class AdvancedAIProvider implements AutonomousProvider {
   private smartCache: typeof smartCache;
   private docLibrary: typeof docLibrary;
 
-  constructor() {
+  constructor(optimizationConfig?: TokenOptimizationConfig) {
+    this.tokenOptimizer = new TokenOptimizer(optimizationConfig);
     this.currentModel = configManager.get('currentModel') || 'claude-sonnet-4-20250514';
     this.contextEnhancer = new ContextEnhancer();
-    this.performanceOptimizer = new PerformanceOptimizer();
+    this.performanceOptimizer = new PerformanceOptimizer(optimizationConfig);
     this.webSearchProvider = new WebSearchProvider();
     this.ideContextEnricher = new IDEContextEnricher();
     this.advancedTools = new AdvancedTools();
     this.toolRouter = new ToolRouter();
-    this.promptManager = PromptManager.getInstance(process.cwd());
+    this.promptManager = PromptManager.getInstance(process.cwd(), optimizationConfig);
     this.smartCache = smartCache;
     this.docLibrary = docLibrary;
+  }
+
+  // Optimize messages with token compression
+  private async optimizeMessages(messages: CoreMessage[]): Promise<CoreMessage[]> {
+    const optimizedMessages: CoreMessage[] = [];
+
+    for (const message of messages) {
+      if (typeof message.content === 'string') {
+        const result = await this.tokenOptimizer.optimizePrompt(message.content);
+        optimizedMessages.push({
+          ...message,
+          content: result.content
+        } as CoreMessage);
+      } else if (message.role === 'tool' && Array.isArray(message.content)) {
+        // Handle tool messages with array content
+        const optimizedContent = await Promise.all(
+          message.content.map(async (part: any) => {
+            if (part.type === 'text' && typeof part.text === 'string') {
+              const result = await this.tokenOptimizer.optimizePrompt(part.text);
+              return { ...part, text: result.content };
+            }
+            return part;
+          })
+        );
+        optimizedMessages.push({
+          ...message,
+          content: optimizedContent
+        } as CoreMessage);
+      } else {
+        optimizedMessages.push(message);
+      }
+    }
+
+    return optimizedMessages;
   }
 
   // Tool call tracking for intelligent continuation
@@ -211,6 +251,14 @@ export class AdvancedAIProvider implements AutonomousProvider {
 
   // Advanced context enhancement system
   private async enhanceContext(messages: CoreMessage[]): Promise<CoreMessage[]> {
+    // Store enhanced context for reuse
+    const contextKey = this.generateContextKey(messages);
+    if (this.enhancedContext.has(contextKey)) {
+      const cached = this.enhancedContext.get(contextKey);
+      QuietCacheLogger.logCacheSave(cached.tokensSaved || 0);
+      return cached.messages;
+    }
+
     const enhancedMessages = await this.contextEnhancer.enhance(messages, {
       workingDirectory: this.workingDirectory,
       executionContext: this.executionContext,
@@ -218,24 +266,47 @@ export class AdvancedAIProvider implements AutonomousProvider {
       analysisCache: this.analysisCache
     });
 
+    // Apply token optimization to enhanced messages
+    const optimizedMessages = await this.optimizeMessages(enhancedMessages);
+
+    // Calculate token savings
+    const originalTokens = this.estimateMessagesTokens(enhancedMessages);
+    const optimizedTokens = this.estimateMessagesTokens(optimizedMessages);
+    const tokensSaved = originalTokens - optimizedTokens;
+
+    // Cache enhanced context
+    this.enhancedContext.set(contextKey, {
+      messages: optimizedMessages,
+      tokensSaved,
+      timestamp: Date.now()
+    });
+
     // Update conversation memory
-    this.conversationMemory = enhancedMessages.slice(-20); // Keep last 20 messages
+    this.conversationMemory = optimizedMessages.slice(-20); // Keep last 20 messages
 
     // Reset tool history and rounds for new conversation context
-    const lastUserMessage = enhancedMessages.filter(m => m.role === 'user').pop();
+    const lastUserMessage = optimizedMessages.filter(m => m.role === 'user').pop();
     if (lastUserMessage) {
       this.toolCallHistory = []; // Fresh start for new queries
       this.completedRounds = 0; // Reset rounds counter
     }
 
-    return enhancedMessages;
+    return optimizedMessages;
+  }
+
+  /**
+   * Generate context key for caching
+   */
+  private generateContextKey(messages: CoreMessage[]): string {
+    const content = messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('|');
+    return require('crypto').createHash('md5').update(content).digest('hex').substring(0, 16);
   }
 
   // Enhanced system prompt with advanced capabilities (using PromptManager)
   private async getEnhancedSystemPrompt(context: any = {}): Promise<string> {
     try {
       // Get documentation context if available
-      const docsContext = this.getDocumentationContext();
+      const docsContext = await this.getDocumentationContext();
 
       // Try to load base agent prompt first
       const basePrompt = await this.promptManager.loadPromptForContext({
@@ -261,7 +332,7 @@ export class AdvancedAIProvider implements AutonomousProvider {
         .join(', ');
 
       // Get documentation context for fallback too
-      const docsContext = this.getDocumentationContext();
+      const docsContext = await this.getDocumentationContext();
 
       const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
@@ -311,7 +382,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
   }
 
   // Get current documentation context for AI
-  private getDocumentationContext(): string | null {
+  private async getDocumentationContext(): Promise<string | null> {
     try {
       const stats = docsContextManager.getContextStats();
 
@@ -323,14 +394,26 @@ Respond in a helpful, professional manner with clear explanations and actionable
       const contextSummary = docsContextManager.getContextSummary();
       const fullContext = docsContextManager.getFullContext();
 
-      // Limit context size to prevent token overflow
-      const maxContextLength = 30000; // ~20K words
-      if (fullContext.length <= maxContextLength) {
-        return fullContext;
+      // Apply token optimization to documentation context
+      let optimizedContext = fullContext;
+      if (fullContext.length > 1000) {
+        const optimizationResult = await this.tokenOptimizer.optimizePrompt(fullContext);
+        optimizedContext = optimizationResult.content;
+        
+        if (optimizationResult.tokensSaved > 50) {
+          QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
+        }
       }
 
-      // If full context is too large, return summary only
-      return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
+      // Limit context size to prevent token overflow
+      const maxContextLength = 25000; // Reduced due to optimization
+      if (optimizedContext.length <= maxContextLength) {
+        return optimizedContext;
+      }
+
+      // If still too large, return optimized summary
+      const optimizedSummary = await this.tokenOptimizer.optimizePrompt(contextSummary);
+      return `# DOCUMENTATION CONTEXT SUMMARY\n\n${optimizedSummary.content}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
     } catch (error) {
       console.error('Error getting documentation context:', error);
       return null;
@@ -433,10 +516,10 @@ Respond in a helpful, professional manner with clear explanations and actionable
             // 🧠 VALIDATION WITH LSP - Before writing anything
             let validationResult = null;
             let finalContent = content;
-            
+
             if (validate) {
               console.log(chalk.cyan(`🔍 Validating ${path} with LSP before writing...`));
-              
+
               const validationContext: ValidationContext = {
                 filePath: fullPath,
                 content,
@@ -444,9 +527,9 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 agentId,
                 projectType: this.detectProjectType(this.workingDirectory)
               };
-              
+
               validationResult = await validatorManager.validateContent(validationContext);
-              
+
               if (!validationResult.isValid) {
                 // Auto-fix was attempted in ValidatorManager
                 if (validationResult.fixedContent) {
@@ -467,7 +550,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 if (validationResult.fixedContent) {
                   finalContent = validationResult.fixedContent;
                 }
-                
+
                 if (validationResult.formatted) {
                   console.log(chalk.green(`✅ File formatted and validated successfully`));
                 } else {
@@ -488,7 +571,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
             // Write the validated file
             writeFileSync(fullPath, finalContent, 'utf-8');
             const stats = statSync(fullPath);
-            
+
             console.log(chalk.green(`✅ File written successfully: ${path} (${stats.size} bytes)`));
 
             // Update context
@@ -816,10 +899,10 @@ Respond in a helpful, professional manner with clear explanations and actionable
     const enhancedMessages = await this.enhanceContext(messages);
 
     // Optimize messages for performance
-    const optimizedMessages = this.performanceOptimizer.optimizeMessages(enhancedMessages);
+    const optimizedMessages = await this.performanceOptimizer.optimizeMessages(enhancedMessages);
 
     // Apply AGGRESSIVE truncation to prevent prompt length errors
-    const truncatedMessages = this.truncateMessages(optimizedMessages, 100000); // REDUCED: 100k tokens safety margin
+    const truncatedMessages = await this.truncateMessages(optimizedMessages, 100000); // REDUCED: 100k tokens safety margin
 
     const model = this.getModel() as any;
     const tools = this.getAdvancedTools();
@@ -1848,7 +1931,7 @@ Requirements:
 
       if (existsSync(packageJsonPath)) {
         const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-        
+
         // Check for React/Next.js
         if (packageJson.dependencies?.['next'] || packageJson.devDependencies?.['next']) {
           return 'next.js';
@@ -1862,7 +1945,7 @@ Requirements:
         if (packageJson.dependencies?.['typescript'] || packageJson.devDependencies?.['typescript']) {
           return 'typescript';
         }
-        
+
         return 'node';
       }
 

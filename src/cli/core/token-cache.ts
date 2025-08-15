@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import crypto from 'crypto';
 import chalk from 'chalk';
+import { QuietCacheLogger } from './performance-optimizer';
 
 export interface CacheEntry {
     key: string;
@@ -136,7 +137,7 @@ export class TokenCacheManager {
             const entry = this.cache.get(exactKey)!;
             entry.hitCount++;
             entry.similarity = 1.0;
-            console.log(chalk.green(`🎯 Cache HIT (exact): saved ~${entry.tokensSaved} tokens`));
+            QuietCacheLogger.logCacheSave(entry.tokensSaved);
             return entry;
         }
 
@@ -170,7 +171,7 @@ export class TokenCacheManager {
         if (similarEntries.length > 0) {
             const bestMatch = similarEntries[0];
             bestMatch.hitCount++;
-            console.log(chalk.cyan(`🎯 Cache HIT (similar ${Math.round(bestMatch.similarity * 100)}%): saved ~${bestMatch.tokensSaved} tokens`));
+            QuietCacheLogger.logCacheSave(bestMatch.tokensSaved);
             return bestMatch;
         }
 
@@ -213,7 +214,7 @@ export class TokenCacheManager {
             await this.saveCache();
         }
 
-        console.log(chalk.blue(`💾 Cached response (${this.cache.size} entries)`));
+        QuietCacheLogger.logCacheSave(entry.tokensSaved);
     }
 
     /**
@@ -242,9 +243,7 @@ export class TokenCacheManager {
         const toRemove = entries.slice(this.maxCacheSize);
         toRemove.forEach(([key]) => this.cache.delete(key));
 
-        if (toRemove.length > 0) {
-            console.log(chalk.yellow(`🧹 Cleaned up ${toRemove.length} old cache entries`));
-        }
+        // Silent cleanup
     }
 
     /**
@@ -264,10 +263,10 @@ export class TokenCacheManager {
                 this.cache.set(entry.key, entry);
             });
 
-            console.log(chalk.dim(`📚 Loaded ${this.cache.size} cached responses`));
+            // Silent load
         } catch (error) {
             // Cache file doesn't exist or is corrupted, start fresh
-            console.log(chalk.dim('💾 Starting with empty cache'));
+            // Silent start with empty cache
         }
     }
 
@@ -278,7 +277,7 @@ export class TokenCacheManager {
         try {
             const data = Array.from(this.cache.values());
             await fs.writeFile(this.cacheFile, JSON.stringify(data, null, 2));
-            console.log(chalk.dim(`💾 Saved ${data.length} cache entries`));
+            // Silent save
         } catch (error: any) {
             console.log(chalk.red(`❌ Failed to save cache: ${error.message}`));
         }
@@ -333,7 +332,6 @@ export class TokenCacheManager {
 
         const removed = beforeSize - this.cache.size;
         if (removed > 0) {
-            console.log(chalk.yellow(`🧹 Removed ${removed} expired cache entries`));
             await this.saveCache();
         }
 

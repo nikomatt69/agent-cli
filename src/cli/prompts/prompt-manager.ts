@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { CliUI } from '../utils/cli-ui';
+import { TokenOptimizer, TokenOptimizationConfig } from '../core/performance-optimizer';
 
 /**
  * PromptManager - Sistema per gestire e caricare system prompts specifici
@@ -30,14 +31,16 @@ export class PromptManager {
   private promptCache: Map<string, LoadedPrompt> = new Map();
   private cacheEnabled: boolean = true;
   private maxCacheSize: number = 5; // Limita cache a massimo 5 prompt
+  private tokenOptimizer: TokenOptimizer;
 
-  constructor(projectRoot: string) {
+  constructor(projectRoot: string, optimizationConfig?: TokenOptimizationConfig) {
     this.promptsDirectory = join(projectRoot, 'prompts');
+    this.tokenOptimizer = new TokenOptimizer(optimizationConfig);
   }
 
-  static getInstance(projectRoot?: string): PromptManager {
+  static getInstance(projectRoot?: string, optimizationConfig?: TokenOptimizationConfig): PromptManager {
     if (!PromptManager.instance && projectRoot) {
-      PromptManager.instance = new PromptManager(projectRoot);
+      PromptManager.instance = new PromptManager(projectRoot, optimizationConfig);
     }
     return PromptManager.instance;
   }
@@ -51,24 +54,33 @@ export class PromptManager {
   }
 
   /**
-   * Carica il system prompt appropriato per il contesto dato
+   * Carica il system prompt appropriato per il contesto dato con optimization
    */
   async loadPromptForContext(context: PromptContext): Promise<string> {
     const promptPath = this.resolvePromptPath(context);
 
     if (!promptPath) {
-
       return this.getDefaultPrompt(context);
     }
 
     try {
       const prompt = await this.loadPrompt(promptPath);
-
-      return this.interpolatePrompt(prompt.content, context);
+      const interpolated = this.interpolatePrompt(prompt.content, context);
+      
+      // Apply token optimization
+      const optimizationResult = await this.tokenOptimizer.optimizePrompt(interpolated);
+      return optimizationResult.content;
     } catch (error: any) {
       CliUI.logError(`Failed to load prompt ${promptPath}: ${error.message}`);
       return this.getDefaultPrompt(context);
     }
+  }
+
+  /**
+   * Load prompt with token optimization
+   */
+  async loadOptimizedPrompt(context: PromptContext): Promise<string> {
+    return this.loadPromptForContext(context);
   }
 
   /**

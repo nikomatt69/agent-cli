@@ -41,6 +41,7 @@ const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
 const chalk_1 = __importDefault(require("chalk"));
+const performance_optimizer_1 = require("./performance-optimizer");
 class CompletionProtocolCache {
     constructor(cacheDir = './.nikcli') {
         this.patterns = new Map();
@@ -99,7 +100,7 @@ class CompletionProtocolCache {
         bestPattern.lastUsed = new Date();
         this.patterns.set(bestPattern.id, bestPattern);
         const tokensSaved = this.estimateTokens(prefix + completion);
-        console.log(chalk_1.default.green(`🔮 Protocol Cache HIT (${Math.round(bestPattern.confidence * 100)}%): saved ~${tokensSaved} tokens`));
+        performance_optimizer_1.QuietCacheLogger.logCacheSave(tokensSaved);
         const exactMatch = bestPattern.confidence >= 0.99;
         return {
             completion,
@@ -276,9 +277,6 @@ class CompletionProtocolCache {
                 }
             }
         }
-        if (toRemove.length > 0) {
-            console.log(chalk_1.default.yellow(`🧹 Cleaned ${toRemove.length} completion patterns`));
-        }
     }
     levenshteinDistance(str1, str2) {
         const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
@@ -309,10 +307,8 @@ class CompletionProtocolCache {
                 }
             }
             this.rebuildIndexes();
-            console.log(chalk_1.default.dim(`🔮 Loaded ${this.patterns.size} completion patterns`));
         }
         catch (error) {
-            console.log(chalk_1.default.dim('🔮 Starting with empty completion cache'));
         }
     }
     async saveCache() {
@@ -323,7 +319,6 @@ class CompletionProtocolCache {
                 patterns: Array.from(this.patterns.values())
             };
             await fs.writeFile(this.cacheFile, JSON.stringify(data, null, 2));
-            console.log(chalk_1.default.dim(`🔮 Saved ${this.patterns.size} completion patterns`));
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Failed to save completion cache: ${error.message}`));
