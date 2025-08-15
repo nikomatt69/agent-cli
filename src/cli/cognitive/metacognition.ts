@@ -1,7 +1,7 @@
 // 🧠 Meta-Cognitive System for Self-Reflection and Self-Improvement
 import { 
-  Task, TaskResult, Performance, Insights, Learning, 
-  Improvement, Recommendation, ThoughtStep
+  Task, TaskResult, Performance, Insights, 
+  ThoughtStep
 } from './types';
 
 export interface MetaCognitiveState {

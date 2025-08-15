@@ -83,6 +83,7 @@ export interface MemoryItem {
   associations: Association[];
   accessCount: number;
   lastAccess: number;
+  embedding?: number[];
 }
 
 export interface ThoughtStep {
@@ -144,6 +145,7 @@ export interface Performance {
   userSatisfaction: number;
   executionTime: number;
   resourceUsage: ResourceUsage;
+  overall?: number;
 }
 
 export interface Insights {
@@ -272,6 +274,27 @@ export enum RiskLevel {
   MEDIUM = 'medium',
   HIGH = 'high',
   VERY_HIGH = 'very_high'
+}
+
+// Task result interface
+export interface TaskResult {
+  success: boolean;
+  result?: any;
+  error?: string;
+  performance?: Performance;
+  timestamp: number;
+  metadata?: any;
+}
+
+// Relevant context interface
+export interface RelevantContext {
+  id: string;
+  content: any;
+  relevance: number;
+  type: string;
+  source: string;
+  timestamp: number;
+  associations?: Association[];
 }
 
 // Helper types

@@ -1,7 +1,7 @@
 // 🧠 Contextual Memory System
 import { 
   TaskContext, MemoryItem, MemoryType, Task, TaskResult,
-  RelevantContext, Performance, Association
+  Performance, Association
 } from './types';
 
 // Vector Store Interface for similarity search
@@ -168,7 +168,7 @@ export class ContextualMemory {
     minRelevance?: number;
     includeRecent?: boolean;
     contextTypes?: string[];
-  }): Promise<RelevantContext[]> {
+  }): Promise<any[]> {
     const { 
       maxResults = 10, 
       minRelevance = 0.3, 
@@ -176,7 +176,7 @@ export class ContextualMemory {
       contextTypes = ['all']
     } = options || {};
     
-    const results: RelevantContext[] = [];
+    const results: any[] = [];
     
     // 1. Search semantic memory for conceptual matches
     const semanticMatches = await this.searchSemanticMemory(query);
