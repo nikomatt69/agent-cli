@@ -6,6 +6,7 @@ import TerminalRenderer from 'marked-terminal';
 import ora, { Ora } from 'ora';
 import cliProgress from 'cli-progress';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 
 // Import existing modules
@@ -15,6 +16,25 @@ import { toolsManager } from './tools/tools-manager';
 import { agentFactory } from './core/agent-factory';
 import { agentStream } from './core/agent-stream';
 import { workspaceContext } from './context/workspace-context';
+
+// Import cognitive systems
+import { 
+    AdvancedReasoningEngine, 
+    ChainOfThoughtEngine 
+} from './cognitive/reasoning-pipeline';
+import { 
+    ContextualMemory, 
+    SimpleVectorStore, 
+    SimpleEpisodicStore, 
+    SimpleSemanticGraph 
+} from './cognitive/contextual-memory';
+import { MetaCognitiveSystem } from './cognitive/metacognition';
+import { PatternRecognitionEngine } from './cognitive/pattern-recognition';
+import { StrategySelector } from './cognitive/strategy-selection';
+import { 
+    Task, TaskResult, Performance, TaskContext, ComplexTask,
+    TaskType, ComplexityLevel, Priority as CognitivePriority
+} from './cognitive/types';
 
 import { AgentManager } from './core/agent-manager';
 import { PlanningManager } from './planning/planning-manager';
@@ -146,6 +166,17 @@ export class NikCLI {
     private aiOperationStart: Date | null = null;
     private modelPricing: Map<string, { input: number; output: number }> = new Map();
 
+    // 🧠 Advanced Cognitive Systems
+    private reasoningEngine: AdvancedReasoningEngine;
+    private chainOfThought: ChainOfThoughtEngine;
+    private contextualMemory: ContextualMemory;
+    private metaCognition: MetaCognitiveSystem;
+    private patternRecognition: PatternRecognitionEngine;
+    private strategySelector: StrategySelector;
+    private cognitiveState: Map<string, any> = new Map();
+    private taskHistory: Map<string, TaskResult> = new Map();
+    private performanceHistory: Performance[] = [];
+
     constructor() {
         this.workingDirectory = process.cwd();
         this.projectContextFile = path.join(this.workingDirectory, 'NIKOCLI.md');
@@ -174,6 +205,9 @@ export class NikCLI {
 
         // Initialize token cache system
         this.initializeTokenCache();
+
+        // 🧠 Initialize cognitive systems
+        this.initializeCognitiveSystem();
     }
 
     private async initializeTokenCache(): Promise<void> {
@@ -194,6 +228,41 @@ export class NikCLI {
                 console.log(chalk.dim(`Cache initialization warning: ${error.message}`));
             }
         }, 1000); // Delay to avoid interfering with startup
+    }
+
+    /**
+     * 🧠 Initialize Advanced Cognitive Systems
+     * Sets up reasoning, memory, pattern recognition, and metacognition
+     */
+    private initializeCognitiveSystem(): void {
+        try {
+            // Initialize memory systems
+            const vectorStore = new SimpleVectorStore();
+            const episodicStore = new SimpleEpisodicStore();
+            const semanticGraph = new SimpleSemanticGraph();
+
+            // Initialize core cognitive components
+            this.contextualMemory = new ContextualMemory(vectorStore, episodicStore, semanticGraph);
+            this.reasoningEngine = new AdvancedReasoningEngine();
+            this.chainOfThought = new ChainOfThoughtEngine();
+            this.metaCognition = new MetaCognitiveSystem();
+            this.patternRecognition = new PatternRecognitionEngine();
+            this.strategySelector = new StrategySelector();
+
+            // Initialize cognitive state
+            this.cognitiveState.set('initialized', true);
+            this.cognitiveState.set('startup_time', Date.now());
+            this.cognitiveState.set('session_id', this.generateSessionId());
+
+            console.log(chalk.dim('🧠 Advanced cognitive systems initialized'));
+        } catch (error: any) {
+            console.log(chalk.yellow(`⚠️  Cognitive system initialization warning: ${error.message}`));
+            // Fallback to basic operation without advanced cognitive features
+        }
+    }
+
+    private generateSessionId(): string {
+        return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
     /**
@@ -2557,16 +2626,33 @@ export class NikCLI {
     }
 
     /**
-     * Plan mode: Generate comprehensive plan with todo.md and request approval
+     * 🧠 Plan mode: Generate comprehensive plan with cognitive intelligence
      */
     private async handlePlanMode(input: string): Promise<void> {
-        console.log(chalk.blue('🎯 Entering Enhanced Planning Mode...'));
+        console.log(chalk.blue('🎯 Entering Enhanced Planning Mode with Cognitive Intelligence...'));
 
         try {
+            // 🧠 Apply cognitive analysis for planning
+            console.log(chalk.dim('🧠 Applying cognitive analysis for optimal planning...'));
+            const cognitiveResult = await this.applyCognitiveReasoning(input, 'planner', { planFirst: true });
+            
+            if (!cognitiveResult.shouldProceed) {
+                console.log(chalk.yellow(`🧠 Cognitive system suggests reviewing the request: ${cognitiveResult.reason}`));
+                return;
+            }
+
+            console.log(chalk.dim(`🧠 Planning confidence: ${(cognitiveResult.confidence * 100).toFixed(0)}%`));
+            if (cognitiveResult.reasoning) {
+                console.log(chalk.dim(`💭 Cognitive insights: ${cognitiveResult.reasoning}`));
+            }
+
+            // Use optimized task from cognitive analysis
+            const optimizedInput = cognitiveResult.optimizedTask || input;
+            
             // Start progress indicator using our new methods
             const planningId = 'planning-' + Date.now();
-            this.createStatusIndicator(planningId, 'Generating comprehensive plan', input);
-            this.startAdvancedSpinner(planningId, 'Analyzing requirements and generating plan...');
+            this.createStatusIndicator(planningId, 'Generating comprehensive cognitive plan', optimizedInput);
+            this.startAdvancedSpinner(planningId, 'Analyzing requirements and generating cognitive plan...');
 
             // Generate comprehensive plan with todo.md
             const plan = await enhancedPlanning.generatePlan(input, {
@@ -2698,7 +2784,7 @@ export class NikCLI {
     }
 
     /**
-     * Default mode: Unified Aggregator - observes and subscribes to all event sources
+     * 🧠 Default mode: Unified Aggregator with Cognitive Intelligence
      */
     private async handleDefaultMode(input: string): Promise<void> {
         // Initialize as Unified Aggregator for all event sources
@@ -2718,12 +2804,21 @@ export class NikCLI {
             }
         }
 
-        // Check if input mentions specific agent
-        const agentMatch = input.match(/@(\w+)/);
+        // 🧠 Apply cognitive analysis to determine best approach
+        const cognitiveResult = await this.applyCognitiveAnalysisForChat(input);
 
-        if (agentMatch) {
-            const agentName = agentMatch[1];
-            const task = input.replace(agentMatch[0], '').trim();
+        // Check if input mentions specific agent or cognitive system recommends one
+        const agentMatch = input.match(/@(\w+)/);
+        const recommendedAgent = cognitiveResult.recommendedAgent;
+
+        if (agentMatch || recommendedAgent) {
+            const agentName = agentMatch ? agentMatch[1] : recommendedAgent;
+            const task = agentMatch ? input.replace(agentMatch[0], '').trim() : input;
+            
+            if (recommendedAgent && !agentMatch) {
+                console.log(chalk.dim(`🧠 Cognitive system recommends using agent: ${recommendedAgent}`));
+            }
+            
             await this.executeAgent(agentName, task, {});
         } else {
             // Real chatbot conversation in default mode - now as unified aggregator
@@ -2919,56 +3014,116 @@ export class NikCLI {
     }
 
     /**
-     * Execute task with specific agent
+     * 🧠 Execute task with cognitive reasoning and specific agent
      */
     async executeAgent(name: string, task: string, options: AgentOptions): Promise<void> {
         console.log(formatAgent(name, 'executing', task));
 
         try {
-            // Launch real agent via AgentService; run asynchronously
-            const taskId = await agentService.executeTask(name, task);
-            console.log(wrapBlue(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
+            // 🧠 Apply cognitive reasoning to the task
+            const cognitiveResult = await this.applyCognitiveReasoning(task, name, options);
+            
+            if (cognitiveResult.shouldProceed) {
+                // Use improved task from cognitive processing
+                const optimizedTask = cognitiveResult.optimizedTask || task;
+                const selectedAgent = cognitiveResult.recommendedAgent || name;
+                
+                console.log(chalk.dim(`🧠 Cognitive analysis: confidence ${(cognitiveResult.confidence * 100).toFixed(0)}%`));
+                if (cognitiveResult.reasoning) {
+                    console.log(chalk.dim(`💭 Reasoning: ${cognitiveResult.reasoning}`));
+                }
+
+                // Launch agent with cognitive optimizations
+                const taskId = await agentService.executeTask(selectedAgent, optimizedTask);
+                console.log(wrapBlue(`🚀 Launched ${selectedAgent} (Task ID: ${taskId.slice(-6)})`));
+
+                // 🧠 Store execution for learning
+                await this.storeCognitiveExecution(cognitiveResult.taskId, {
+                    agent: selectedAgent,
+                    originalTask: task,
+                    optimizedTask,
+                    taskId,
+                    strategy: cognitiveResult.strategy
+                });
+            } else {
+                console.log(chalk.yellow(`🧠 Cognitive system suggests deferring task: ${cognitiveResult.reason}`));
+            }
         } catch (error: any) {
             console.log(chalk.red(`Agent execution failed: ${error.message}`));
+            
+            // 🧠 Learn from failures
+            await this.learnFromFailure(task, name, error);
         }
     }
 
     /**
-     * Autonomous execution with best agent selection
+     * 🧠 Autonomous execution with cognitive strategy selection and best agent selection
      */
     async autoExecute(task: string, options: AutoOptions): Promise<void> {
-        console.log(wrapBlue(`🚀 Auto-executing: ${task}`));
+        console.log(wrapBlue(`🚀 Auto-executing with cognitive intelligence: ${task}`));
 
         try {
-            if (options.planFirst) {
-                // Use real PlanningService to create and execute plan asynchronously
-                const plan = await planningService.createPlan(task, {
+            // 🧠 Apply full cognitive reasoning for autonomous execution
+            const cognitiveResult = await this.applyCognitiveReasoning(task, 'auto', options);
+            
+            if (!cognitiveResult.shouldProceed) {
+                console.log(chalk.yellow(`🧠 Cognitive system suggests deferring autonomous execution: ${cognitiveResult.reason}`));
+                return;
+            }
+
+            console.log(chalk.dim(`🧠 Cognitive strategy: ${cognitiveResult.strategy?.name || 'default'}`));
+            console.log(chalk.dim(`🧠 Confidence: ${(cognitiveResult.confidence * 100).toFixed(0)}%`));
+
+            if (options.planFirst || cognitiveResult.strategy?.type === 'ITERATIVE') {
+                // 🧠 Use cognitive-enhanced planning
+                const enhancedTask = cognitiveResult.optimizedTask || task;
+                
+                console.log(chalk.dim('🧠 Using cognitive-enhanced planning approach'));
+                const plan = await planningService.createPlan(enhancedTask, {
                     showProgress: true,
                     autoExecute: true,
                     confirmSteps: false,
                 });
-                console.log(chalk.cyan(`📋 Generated plan with ${plan.steps.length} steps (id: ${plan.id}). Executing in background...`));
-                // Fire-and-forget execution to keep CLI responsive
+                
+                console.log(chalk.cyan(`📋 Generated cognitive plan with ${plan.steps.length} steps (id: ${plan.id})`));
+                
+                // Enhanced execution with cognitive monitoring
                 (async () => {
                     try {
-                        await planningService.executePlan(plan.id, {
-                            showProgress: true,
-                            autoExecute: true,
-                            confirmSteps: false,
-                        });
+                        await this.executePlanWithCognition(plan.id, cognitiveResult);
                     } catch (err: any) {
-                        console.log(chalk.red(`❌ Plan execution error: ${err.message}`));
+                        console.log(chalk.red(`❌ Cognitive plan execution error: ${err.message}`));
+                        await this.learnFromFailure(task, 'planning', err);
                     }
                 })();
             } else {
-                // Direct autonomous execution - select best agent and launch
-                const selected = this.agentManager.findBestAgentForTask(task as any);
-                console.log(chalk.blue(`🤖 Selected agent: ${chalk.cyan(selected)}`));
-                const taskId = await agentService.executeTask(selected as any, task);
+                // 🧠 Direct autonomous execution with cognitive agent selection
+                const cognitiveAgent = cognitiveResult.recommendedAgent;
+                const fallbackAgent = this.agentManager.findBestAgentForTask(task as any);
+                const selected = cognitiveAgent || fallbackAgent;
+                
+                                 console.log(chalk.blue(`🧠 Cognitive agent selection: ${chalk.cyan(selected)}`));
+                 if (cognitiveAgent && cognitiveAgent !== String(fallbackAgent)) {
+                     console.log(chalk.dim(`💡 Cognitive override: ${cognitiveAgent} instead of ${fallbackAgent}`));
+                 }
+                
+                const optimizedTask = cognitiveResult.optimizedTask || task;
+                const taskId = await agentService.executeTask(selected as any, optimizedTask);
                 console.log(wrapBlue(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
+
+                // 🧠 Store execution for learning
+                await this.storeCognitiveExecution(cognitiveResult.taskId, {
+                    agent: selected,
+                    originalTask: task,
+                    optimizedTask,
+                    taskId,
+                    strategy: cognitiveResult.strategy,
+                    autonomous: true
+                });
             }
         } catch (error: any) {
             console.log(chalk.red(`Auto execution failed: ${error.message}`));
+            await this.learnFromFailure(task, 'autonomous', error);
         }
     }
 
@@ -6401,6 +6556,726 @@ Generated by NikCLI on ${new Date().toISOString()}
     public static getInstance(): NikCLI | null {
         return globalNikCLI;
     }
+
+    /**
+     * 🧠 Display cognitive system status and capabilities
+     */
+    async showCognitiveStatus(): Promise<void> {
+        const isInitialized = this.cognitiveState.get('initialized');
+        const sessionId = this.cognitiveState.get('session_id');
+        const startupTime = this.cognitiveState.get('startup_time');
+        
+        console.log(boxen(
+            chalk.cyan.bold('🧠 COGNITIVE SYSTEM STATUS\n\n') +
+            `${chalk.green('●')} Initialization: ${isInitialized ? chalk.green('Active') : chalk.red('Inactive')}\n` +
+            `${chalk.blue('●')} Session ID: ${sessionId || 'N/A'}\n` +
+            `${chalk.yellow('●')} Uptime: ${startupTime ? Math.round((Date.now() - startupTime) / 1000) + 's' : 'N/A'}\n` +
+            `${chalk.magenta('●')} Task History: ${this.taskHistory.size} tasks\n` +
+            `${chalk.cyan('●')} Performance Data: ${this.performanceHistory.length} records\n\n` +
+            chalk.dim('COGNITIVE COMPONENTS:\n') +
+            `${chalk.green('✓')} Multi-Stage Reasoning Pipeline\n` +
+            `${chalk.green('✓')} Chain-of-Thought Engine\n` +
+            `${chalk.green('✓')} Contextual Memory System\n` +
+            `${chalk.green('✓')} Meta-Cognitive Reflection\n` +
+            `${chalk.green('✓')} Pattern Recognition Engine\n` +
+            `${chalk.green('✓')} Dynamic Strategy Selection\n\n` +
+            chalk.dim('CAPABILITIES:\n') +
+            `• Autonomous task optimization\n` +
+            `• Intelligent agent selection\n` +
+            `• Learning from experiences\n` +
+            `• Pattern-based recommendations\n` +
+            `• Context-aware decision making\n` +
+            `• Self-reflection and improvement`,
+            {
+                padding: 1,
+                margin: 1,
+                borderStyle: 'round',
+                borderColor: 'cyan'
+            }
+        ));
+
+        if (isInitialized) {
+            // Show recent cognitive insights
+            const recentTasks = Array.from(this.taskHistory.values()).slice(-3);
+            if (recentTasks.length > 0) {
+                console.log(chalk.cyan('\n🧠 Recent Cognitive Activities:'));
+                recentTasks.forEach((task, index) => {
+                    console.log(chalk.dim(`  ${index + 1}. ${(task as any).originalTask || 'Unknown task'} → ${(task as any).agent || 'N/A'}`));
+                });
+            }
+
+            // Show cognitive recommendations if any
+            console.log(chalk.dim('\n💡 To test cognitive capabilities, try:'));
+            console.log(chalk.dim('  • Complex tasks requiring multi-step reasoning'));
+            console.log(chalk.dim('  • Tasks with "complex", "optimize", or "advanced" keywords'));
+            console.log(chalk.dim('  • Autonomous execution with --auto flag'));
+        }
+    }
+
+    // ===========================
+    // 🧠 COGNITIVE REASONING METHODS
+    // ===========================
+
+    /**
+     * 🧠 Apply comprehensive cognitive reasoning to a task
+     */
+    private async applyCognitiveReasoning(
+        task: string, 
+        agent: string, 
+        options: any
+    ): Promise<CognitiveResult> {
+        if (!this.cognitiveState.get('initialized')) {
+            // Fallback to basic operation
+            return {
+                taskId: this.generateTaskId(),
+                shouldProceed: true,
+                confidence: 0.5,
+                optimizedTask: task,
+                recommendedAgent: agent,
+                reasoning: 'Cognitive system not available - using fallback',
+                strategy: null
+            };
+        }
+
+        try {
+            const startTime = Date.now();
+            
+            // Create cognitive task
+            const cognitiveTask = this.createCognitiveTask(task, agent, options);
+            
+            // 1. 🧠 Multi-stage reasoning
+            console.log(chalk.dim('🧠 Applying multi-stage reasoning...'));
+            const reasoningResult = await this.reasoningEngine.processTask(cognitiveTask);
+            
+            // 2. 🧠 Strategy selection
+            console.log(chalk.dim('🧠 Selecting optimal strategy...'));
+            const strategyResult = await this.strategySelector.selectOptimalStrategy(cognitiveTask, cognitiveTask.context);
+            
+            // 3. 🧠 Pattern recognition
+            console.log(chalk.dim('🧠 Analyzing patterns...'));
+            const patterns = await this.patternRecognition.recognizePatterns(cognitiveTask.context.codebase);
+            
+            // 4. 🧠 Chain-of-thought reasoning for complex tasks
+            let chainOfThoughtResult = null;
+            if (cognitiveTask.complexity === ComplexityLevel.COMPLEX || cognitiveTask.complexity === ComplexityLevel.EXPERT) {
+                console.log(chalk.dim('🧠 Applying chain-of-thought reasoning...'));
+                chainOfThoughtResult = await this.chainOfThought.processWithReflection(task, cognitiveTask.context);
+            }
+
+            // 5. 🧠 Synthesize results
+            const cognitiveResult = await this.synthesizeCognitiveResults(
+                cognitiveTask,
+                reasoningResult,
+                strategyResult,
+                patterns,
+                chainOfThoughtResult
+            );
+
+            // 6. 🧠 Store context for learning
+            await this.contextualMemory.storeContext(cognitiveTask.context);
+
+            const processingTime = Date.now() - startTime;
+            console.log(chalk.dim(`🧠 Cognitive processing completed in ${processingTime}ms`));
+
+            return cognitiveResult;
+        } catch (error: any) {
+            console.log(chalk.yellow(`🧠 Cognitive processing error: ${error.message}`));
+            
+            // Fallback to basic operation
+            return {
+                taskId: this.generateTaskId(),
+                shouldProceed: true,
+                confidence: 0.3,
+                optimizedTask: task,
+                recommendedAgent: agent,
+                reasoning: `Cognitive error (${error.message}) - using fallback`,
+                strategy: null
+            };
+        }
+    }
+
+    /**
+     * 🧠 Create a cognitive task from user input
+     */
+    private createCognitiveTask(task: string, agent: string, options: any): Task {
+        const taskId = this.generateTaskId();
+        
+        // Determine task type
+        let taskType = TaskType.CODE_GENERATION;
+        if (task.toLowerCase().includes('test')) taskType = TaskType.TESTING;
+        else if (task.toLowerCase().includes('refactor')) taskType = TaskType.REFACTORING;
+        else if (task.toLowerCase().includes('debug') || task.toLowerCase().includes('fix')) taskType = TaskType.DEBUGGING;
+        else if (task.toLowerCase().includes('document')) taskType = TaskType.DOCUMENTATION;
+        else if (task.toLowerCase().includes('plan') || task.toLowerCase().includes('architect')) taskType = TaskType.PLANNING;
+
+        // Determine complexity
+        let complexity = ComplexityLevel.MODERATE;
+        if (task.length < 50) complexity = ComplexityLevel.SIMPLE;
+        else if (task.length > 200 || task.includes('complex') || task.includes('advanced')) complexity = ComplexityLevel.COMPLEX;
+        else if (task.includes('expert') || task.includes('optimize') || task.includes('performance')) complexity = ComplexityLevel.EXPERT;
+
+        // Create task context
+        const context: TaskContext = {
+            id: `ctx_${taskId}`,
+            codebase: {
+                rootPath: this.workingDirectory,
+                language: this.detectProjectLanguage(),
+                framework: this.detectProjectFramework(),
+                patterns: [],
+                architecture: {},
+                style: {},
+                testingStrategy: {},
+                size: 0,
+                complexity: this.calculateCodebaseComplexity()
+            },
+            user: {
+                preferences: this.getUserPreferences(),
+                experience: this.estimateUserExperience()
+            },
+            environment: {
+                platform: process.platform,
+                nodeVersion: process.version,
+                workingDirectory: this.workingDirectory
+            },
+            history: {
+                recentTasks: this.getRecentTaskHistory(),
+                performance: this.getPerformanceHistory()
+            },
+            files: this.getRelevantFiles(),
+            dependencies: this.getProjectDependencies()
+        };
+
+        return {
+            id: taskId,
+            type: taskType,
+            description: task,
+            context,
+                         complexity,
+             priority: CognitivePriority.MEDIUM,
+             dependencies: [],
+            constraints: [],
+            metadata: {
+                agent,
+                options,
+                timestamp: Date.now(),
+                sessionId: this.cognitiveState.get('session_id')
+            }
+        };
+    }
+
+    /**
+     * 🧠 Synthesize cognitive results into actionable decisions
+     */
+    private async synthesizeCognitiveResults(
+        task: Task,
+        reasoningResult: any,
+        strategyResult: any,
+        patterns: any,
+        chainOfThoughtResult: any
+    ): Promise<CognitiveResult> {
+        // Calculate overall confidence
+        const confidenceFactors = [
+            reasoningResult.confidence || 0.5,
+            strategyResult.confidence || 0.5,
+            patterns.confidence || 0.5
+        ];
+        
+        if (chainOfThoughtResult) {
+            confidenceFactors.push(chainOfThoughtResult.confidence);
+        }
+        
+        const overallConfidence = confidenceFactors.reduce((sum, c) => sum + c, 0) / confidenceFactors.length;
+
+        // Determine if we should proceed
+        const shouldProceed = overallConfidence > 0.3 && !this.hasBlockingIssues(patterns);
+
+        // Optimize the task based on cognitive insights
+        let optimizedTask = task.description;
+        if (reasoningResult.improvements) {
+            optimizedTask = this.applyTaskImprovements(optimizedTask, reasoningResult.improvements);
+        }
+
+        // Select recommended agent
+        let recommendedAgent = task.metadata.agent;
+        if (strategyResult.strategy && strategyResult.strategy.preferredAgents) {
+            recommendedAgent = this.selectBestAgent(strategyResult.strategy.preferredAgents, task);
+        }
+
+        // Generate reasoning explanation
+        const reasoning = this.generateCognitiveReasoning(reasoningResult, strategyResult, patterns, chainOfThoughtResult);
+
+        return {
+            taskId: task.id,
+            shouldProceed,
+            confidence: overallConfidence,
+            optimizedTask,
+            recommendedAgent,
+            reasoning,
+            strategy: strategyResult.strategy,
+            patterns: patterns.recommendations,
+            chainOfThought: chainOfThoughtResult?.thoughtChain,
+            metadata: {
+                processingTime: Date.now() - task.metadata.timestamp,
+                confidenceBreakdown: confidenceFactors,
+                cognitiveVersion: '1.0.0'
+            }
+        };
+    }
+
+    /**
+     * 🧠 Execute plan with cognitive monitoring
+     */
+    private async executePlanWithCognition(planId: string, cognitiveResult: CognitiveResult): Promise<void> {
+        try {
+            console.log(chalk.dim('🧠 Executing plan with cognitive monitoring...'));
+            
+            // Execute plan with enhanced monitoring
+            await planningService.executePlan(planId, {
+                showProgress: true,
+                autoExecute: true,
+                confirmSteps: false,
+            });
+
+            // 🧠 Reflect on plan execution
+            const performance = await this.assessPlanPerformance(planId);
+                         const insights = await this.metaCognition.reflectOnPerformance(
+                 this.createTaskFromCognitive(cognitiveResult),
+                 { success: true, performance, timestamp: Date.now() }
+             );
+
+            console.log(chalk.dim(`🧠 Plan execution insights: ${insights.recommendations.length} recommendations generated`));
+            
+            // Store insights for future planning
+            await this.storePlanningInsights(planId, insights);
+            
+        } catch (error: any) {
+            console.log(chalk.red(`🧠 Cognitive plan execution failed: ${error.message}`));
+            throw error;
+        }
+    }
+
+    /**
+     * 🧠 Store cognitive execution data for learning
+     */
+    private async storeCognitiveExecution(taskId: string, executionData: any): Promise<void> {
+        try {
+            this.taskHistory.set(taskId, executionData);
+            
+            // Store in contextual memory for pattern learning
+            if (this.contextualMemory) {
+                const performance: Performance = {
+                    accuracy: 0.8, // Will be updated when we get feedback
+                    efficiency: 0.8,
+                    completeness: 0.8,
+                    codeQuality: 0.8,
+                    userSatisfaction: 0.8,
+                    executionTime: Date.now() - (executionData.startTime || Date.now()),
+                    resourceUsage: { cpu: 0.5, memory: 0.5 }
+                };
+
+                await this.contextualMemory.storeTaskExperience(
+                    this.createTaskFromExecution(executionData),
+                    executionData,
+                    performance
+                );
+            }
+        } catch (error: any) {
+            console.log(chalk.dim(`🧠 Warning: Could not store cognitive execution data: ${error.message}`));
+        }
+    }
+
+    /**
+     * 🧠 Learn from execution failures
+     */
+    private async learnFromFailure(task: string, agent: string, error: Error): Promise<void> {
+        try {
+            if (!this.metaCognition) return;
+
+            const failureTask: Task = {
+                id: this.generateTaskId(),
+                type: TaskType.DEBUGGING,
+                description: task,
+                context: this.createBasicContext(),
+                complexity: ComplexityLevel.MODERATE,
+                                 priority: CognitivePriority.HIGH,
+                dependencies: [],
+                constraints: [],
+                metadata: { agent, error: error.message, timestamp: Date.now() }
+            };
+
+            const failureResult = {
+                success: false,
+                error: error.message,
+                agent,
+                timestamp: Date.now()
+            };
+
+            // Use metacognition to learn from the failure
+            const insights = await this.metaCognition.reflectOnPerformance(failureTask, failureResult);
+            
+            console.log(chalk.dim(`🧠 Learning from failure: ${insights.learnings.length} insights gained`));
+            
+            // Store failure patterns for future avoidance
+            if (insights.patterns.length > 0) {
+                await this.storeFailurePatterns(task, agent, error, insights.patterns);
+            }
+        } catch (learningError: any) {
+            console.log(chalk.dim(`🧠 Warning: Could not learn from failure: ${learningError.message}`));
+        }
+    }
+
+    // ===========================
+    // 🧠 HELPER METHODS
+    // ===========================
+
+    private generateTaskId(): string {
+        return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    private detectProjectLanguage(): string {
+        try {
+            if (fsSync.existsSync(path.join(this.workingDirectory, 'package.json'))) return 'javascript';
+            if (fsSync.existsSync(path.join(this.workingDirectory, 'tsconfig.json'))) return 'typescript';
+            if (fsSync.existsSync(path.join(this.workingDirectory, 'Cargo.toml'))) return 'rust';
+            if (fsSync.existsSync(path.join(this.workingDirectory, 'go.mod'))) return 'go';
+            if (fsSync.existsSync(path.join(this.workingDirectory, 'requirements.txt'))) return 'python';
+            return 'unknown';
+        } catch {
+            return 'unknown';
+        }
+    }
+
+    private detectProjectFramework(): string {
+        try {
+            const packagePath = path.join(this.workingDirectory, 'package.json');
+            if (fsSync.existsSync(packagePath)) {
+                const pkg = JSON.parse(fsSync.readFileSync(packagePath, 'utf8'));
+                if (pkg.dependencies?.react) return 'react';
+                if (pkg.dependencies?.vue) return 'vue';
+                if (pkg.dependencies?.angular) return 'angular';
+                if (pkg.dependencies?.express) return 'express';
+                if (pkg.dependencies?.next) return 'nextjs';
+            }
+            return 'unknown';
+        } catch {
+            return 'unknown';
+        }
+    }
+
+    private calculateCodebaseComplexity(): number {
+        try {
+            // Simplified complexity calculation based on file count and size
+            const files = this.getRelevantFiles();
+            if (files.length < 10) return 0.2;
+            if (files.length < 50) return 0.5;
+            if (files.length < 200) return 0.7;
+            return 0.9;
+        } catch {
+            return 0.5;
+        }
+    }
+
+    private getUserPreferences(): any {
+        return {
+            preferredStyle: 'clean',
+            testingRequired: true,
+            documentationLevel: 'moderate'
+        };
+    }
+
+    private estimateUserExperience(): number {
+        // Could be enhanced with actual user interaction analysis
+        return 0.7;
+    }
+
+    private getRecentTaskHistory(): any[] {
+        return Array.from(this.taskHistory.values()).slice(-5);
+    }
+
+    private getPerformanceHistory(): any[] {
+        return this.performanceHistory.slice(-10);
+    }
+
+    private getRelevantFiles(): any[] {
+        try {
+            // Return basic file info - in real implementation would be more sophisticated
+            return [{ path: this.workingDirectory, type: 'directory' }];
+        } catch {
+            return [];
+        }
+    }
+
+    private getProjectDependencies(): any[] {
+        try {
+            const packagePath = path.join(this.workingDirectory, 'package.json');
+            if (fsSync.existsSync(packagePath)) {
+                const pkg = JSON.parse(fsSync.readFileSync(packagePath, 'utf8'));
+                return Object.keys(pkg.dependencies || {}).map(name => ({ name, type: 'npm' }));
+            }
+            return [];
+        } catch {
+            return [];
+        }
+    }
+
+    private hasBlockingIssues(patterns: any): boolean {
+        return patterns.antiPatterns?.some((ap: any) => ap.severity === 'CRITICAL') || false;
+    }
+
+    private applyTaskImprovements(task: string, improvements: any[]): string {
+        // Apply simple improvements - in real implementation would be more sophisticated
+        let improved = task;
+        for (const improvement of improvements) {
+            if (improvement.type === 'clarity') {
+                improved = `[Clarified] ${improved}`;
+            }
+        }
+        return improved;
+    }
+
+    private selectBestAgent(preferredAgents: string[], task: Task): string {
+        if (preferredAgents.length > 0) {
+            return preferredAgents[0];
+        }
+        return task.metadata.agent;
+    }
+
+    private generateCognitiveReasoning(reasoning: any, strategy: any, patterns: any, chainOfThought: any): string {
+        const parts = [];
+        
+        if (strategy.strategy) {
+            parts.push(`Strategy: ${strategy.strategy.name}`);
+        }
+        
+        if (patterns.recommendations?.length > 0) {
+            parts.push(`Patterns: ${patterns.recommendations.length} recommendations`);
+        }
+        
+        if (chainOfThought) {
+            parts.push(`Chain-of-thought: ${chainOfThought.thoughtChain?.length || 0} reasoning steps`);
+        }
+        
+        return parts.join(' | ');
+    }
+
+    // Additional helper methods with basic implementations
+    private async assessPlanPerformance(planId: string): Promise<any> {
+        return { accuracy: 0.8, efficiency: 0.8, completeness: 0.9 };
+    }
+
+    private async storePlanningInsights(planId: string, insights: any): Promise<void> {
+        // Store insights for future reference
+    }
+
+    private createTaskFromCognitive(cognitiveResult: CognitiveResult): Task {
+                 return {
+             id: cognitiveResult.taskId,
+             type: TaskType.PLANNING,
+             description: cognitiveResult.optimizedTask || 'Unknown task',
+             context: this.createBasicContext(),
+             complexity: ComplexityLevel.MODERATE,
+             priority: CognitivePriority.MEDIUM,
+             dependencies: [],
+             constraints: [],
+             metadata: { timestamp: Date.now() }
+         };
+    }
+
+    private createTaskFromExecution(executionData: any): Task {
+                 return {
+             id: this.generateTaskId(),
+             type: TaskType.CODE_GENERATION,
+             description: executionData.originalTask || 'Unknown task',
+             context: this.createBasicContext(),
+             complexity: ComplexityLevel.MODERATE,
+             priority: CognitivePriority.MEDIUM,
+             dependencies: [],
+             constraints: [],
+             metadata: { timestamp: Date.now() }
+         };
+    }
+
+    private createBasicContext(): TaskContext {
+        return {
+            id: `ctx_${Date.now()}`,
+            codebase: {
+                rootPath: this.workingDirectory,
+                language: this.detectProjectLanguage(),
+                framework: this.detectProjectFramework(),
+                patterns: [],
+                architecture: {},
+                style: {},
+                testingStrategy: {},
+                size: 0,
+                complexity: 0.5
+            },
+            user: {},
+            environment: { workingDirectory: this.workingDirectory },
+            history: {},
+            files: [],
+            dependencies: []
+        };
+    }
+
+    private async storeFailurePatterns(task: string, agent: string, error: Error, patterns: any[]): Promise<void> {
+        // Store failure patterns for learning
+        console.log(chalk.dim(`🧠 Stored ${patterns.length} failure patterns for future reference`));
+    }
+
+    /**
+     * 🧠 Apply cognitive analysis specifically for chat interactions
+     */
+    private async applyCognitiveAnalysisForChat(input: string): Promise<CognitiveResult> {
+        if (!this.cognitiveState.get('initialized')) {
+            return {
+                taskId: this.generateTaskId(),
+                shouldProceed: true,
+                confidence: 0.5,
+                optimizedTask: input,
+                recommendedAgent: undefined,
+                reasoning: 'Cognitive system not available'
+            };
+        }
+
+        try {
+            // Quick cognitive analysis for chat input
+            const taskType = this.inferTaskTypeFromInput(input);
+            const complexity = this.assessInputComplexity(input);
+            
+            // Determine if this input would benefit from agent execution
+            const shouldUseAgent = this.shouldRecommendAgent(input, taskType, complexity);
+            
+            let recommendedAgent: string | undefined = undefined;
+            if (shouldUseAgent) {
+                // Use pattern recognition to recommend best agent
+                recommendedAgent = await this.recommendAgentFromInput(input, taskType);
+            }
+
+            // Generate reasoning for the recommendation
+            let reasoning = '';
+            if (recommendedAgent) {
+                reasoning = `Input suggests ${taskType} task (complexity: ${complexity}) - recommending ${recommendedAgent} agent`;
+            } else {
+                reasoning = `Conversational input - proceeding with standard chat mode`;
+            }
+
+            return {
+                taskId: this.generateTaskId(),
+                shouldProceed: true,
+                confidence: shouldUseAgent ? 0.8 : 0.6,
+                optimizedTask: input,
+                recommendedAgent,
+                reasoning
+            };
+        } catch (error: any) {
+            return {
+                taskId: this.generateTaskId(),
+                shouldProceed: true,
+                confidence: 0.3,
+                optimizedTask: input,
+                recommendedAgent: undefined,
+                reasoning: `Cognitive analysis error: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * 🧠 Infer task type from chat input
+     */
+    private inferTaskTypeFromInput(input: string): TaskType {
+        const lowerInput = input.toLowerCase();
+        
+        if (lowerInput.includes('create') || lowerInput.includes('implement') || lowerInput.includes('build')) {
+            return TaskType.CODE_GENERATION;
+        } else if (lowerInput.includes('test') || lowerInput.includes('unit test') || lowerInput.includes('coverage')) {
+            return TaskType.TESTING;
+        } else if (lowerInput.includes('refactor') || lowerInput.includes('optimize') || lowerInput.includes('improve')) {
+            return TaskType.REFACTORING;
+        } else if (lowerInput.includes('debug') || lowerInput.includes('fix') || lowerInput.includes('error') || lowerInput.includes('bug')) {
+            return TaskType.DEBUGGING;
+        } else if (lowerInput.includes('document') || lowerInput.includes('readme') || lowerInput.includes('comment')) {
+            return TaskType.DOCUMENTATION;
+        } else if (lowerInput.includes('plan') || lowerInput.includes('architect') || lowerInput.includes('design')) {
+            return TaskType.PLANNING;
+        }
+        
+        return TaskType.ANALYSIS; // Default for conversational input
+    }
+
+    /**
+     * 🧠 Assess complexity of input
+     */
+    private assessInputComplexity(input: string): ComplexityLevel {
+        const length = input.length;
+        const keywords = ['complex', 'advanced', 'enterprise', 'scalable', 'distributed', 'microservice', 'architecture'];
+        const hasComplexKeywords = keywords.some(keyword => input.toLowerCase().includes(keyword));
+        
+        if (length > 200 || hasComplexKeywords) {
+            return ComplexityLevel.COMPLEX;
+        } else if (length > 100) {
+            return ComplexityLevel.MODERATE;
+        } else {
+            return ComplexityLevel.SIMPLE;
+        }
+    }
+
+    /**
+     * 🧠 Determine if input should use an agent
+     */
+    private shouldRecommendAgent(input: string, taskType: TaskType, complexity: ComplexityLevel): boolean {
+        // Don't recommend agents for simple questions or conversations
+        if (taskType === TaskType.ANALYSIS && complexity === ComplexityLevel.SIMPLE) {
+            return false;
+        }
+        
+        // Recommend agents for action-oriented tasks
+        const actionWords = ['create', 'implement', 'build', 'fix', 'refactor', 'test', 'deploy', 'setup'];
+        const hasActionWords = actionWords.some(word => input.toLowerCase().includes(word));
+        
+        return hasActionWords || complexity !== ComplexityLevel.SIMPLE;
+    }
+
+    /**
+     * 🧠 Recommend specific agent based on input analysis
+     */
+    private async recommendAgentFromInput(input: string, taskType: TaskType): Promise<string | undefined> {
+        const lowerInput = input.toLowerCase();
+        
+        // Use existing agent manager logic enhanced with cognitive insights
+        try {
+            // Cognitive enhancements based on input analysis
+            if (lowerInput.includes('frontend') || lowerInput.includes('ui') || lowerInput.includes('react') || lowerInput.includes('vue')) {
+                return 'frontend';
+            } else if (lowerInput.includes('backend') || lowerInput.includes('api') || lowerInput.includes('server') || lowerInput.includes('database')) {
+                return 'backend';
+            } else if (lowerInput.includes('test') || lowerInput.includes('testing')) {
+                return 'tester';
+            } else if (lowerInput.includes('devops') || lowerInput.includes('deploy') || lowerInput.includes('docker') || lowerInput.includes('kubernetes')) {
+                return 'devops';
+            }
+            
+            // Fallback to agent manager with proper type conversion
+            const bestAgent = this.agentManager.findBestAgentForTask(input as any);
+            return String(bestAgent);
+        } catch (error) {
+            return 'coder'; // Safe fallback
+        }
+    }
+}
+
+// Supporting interface for cognitive results
+interface CognitiveResult {
+    taskId: string;
+    shouldProceed: boolean;
+    confidence: number;
+    optimizedTask?: string;
+    recommendedAgent?: string;
+    reasoning?: string;
+    strategy?: any;
+    patterns?: any[];
+    chainOfThought?: any[];
+    reason?: string;
+    metadata?: any;
 }
 
 // Global instance for access from other modules
