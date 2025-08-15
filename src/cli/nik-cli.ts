@@ -3960,7 +3960,7 @@ Planning:
                     // Test API key
                     const apiKey = configManager.getApiKey(currentModel);
                     if (apiKey) {
-                        console.log(chalk.green(`✅ API Key: ${apiKey.slice(0, 10)}...${apiKey.slice(-4)} (${apiKey.length} chars)`));
+                        console.log(chalk.green(`✅ API Key: Configured (${apiKey.length} chars)`));
                     } else {
                         console.log(chalk.red(`❌ API Key: Not configured`));
                     }
