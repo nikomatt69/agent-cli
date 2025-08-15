@@ -8,6 +8,7 @@ class PromptManager {
     constructor(projectRoot) {
         this.promptCache = new Map();
         this.cacheEnabled = true;
+        this.maxCacheSize = 5;
         this.promptsDirectory = (0, path_1.join)(projectRoot, 'prompts');
     }
     static getInstance(projectRoot) {
@@ -16,15 +17,17 @@ class PromptManager {
         }
         return PromptManager.instance;
     }
+    async loadPromptForAgent(agentId) {
+        const context = { agentId };
+        return this.loadPromptForContext(context);
+    }
     async loadPromptForContext(context) {
         const promptPath = this.resolvePromptPath(context);
         if (!promptPath) {
-            cli_ui_1.CliUI.logWarning(`No specific prompt found for context: ${JSON.stringify(context)}`);
             return this.getDefaultPrompt(context);
         }
         try {
             const prompt = await this.loadPrompt(promptPath);
-            cli_ui_1.CliUI.logDebug(`Loaded prompt: ${promptPath}`);
             return this.interpolatePrompt(prompt.content, context);
         }
         catch (error) {
@@ -84,6 +87,13 @@ class PromptManager {
             category: this.getCategoryFromPath(relativePath)
         };
         if (this.cacheEnabled) {
+            if (this.promptCache.size >= this.maxCacheSize) {
+                const oldestKey = this.promptCache.keys().next().value;
+                if (oldestKey) {
+                    this.promptCache.delete(oldestKey);
+                    cli_ui_1.CliUI.logDebug(`Evicted oldest prompt from cache: ${oldestKey}`);
+                }
+            }
             this.promptCache.set(relativePath, prompt);
         }
         return prompt;
@@ -125,36 +135,6 @@ class PromptManager {
         return 'general';
     }
     async preloadPrompts() {
-        cli_ui_1.CliUI.logInfo('🔄 Pre-loading system prompts...');
-        const promptDirs = [
-            'tools/atomic-tools',
-            'tools/analysis-tools',
-            'tools/agent-actions',
-            'tools/cli-commands',
-            'tools/workflow-steps',
-            'tools/safety-prompts',
-            'system'
-        ];
-        let loadedCount = 0;
-        for (const dir of promptDirs) {
-            try {
-                const dirPath = (0, path_1.join)(this.promptsDirectory, dir);
-                if ((0, fs_1.existsSync)(dirPath)) {
-                    const files = require('fs').readdirSync(dirPath);
-                    for (const file of files) {
-                        if (file.endsWith('.txt')) {
-                            const relativePath = (0, path_1.join)(dir, file);
-                            await this.loadPrompt(relativePath);
-                            loadedCount++;
-                        }
-                    }
-                }
-            }
-            catch (error) {
-                cli_ui_1.CliUI.logWarning(`Failed to preload prompts from ${dir}: ${error.message}`);
-            }
-        }
-        cli_ui_1.CliUI.logSuccess(`✅ Pre-loaded ${loadedCount} system prompts`);
     }
     listAvailablePrompts() {
         const categories = {};

@@ -29,6 +29,7 @@ export class PromptManager {
   private promptsDirectory: string;
   private promptCache: Map<string, LoadedPrompt> = new Map();
   private cacheEnabled: boolean = true;
+  private maxCacheSize: number = 5; // Limita cache a massimo 5 prompt
 
   constructor(projectRoot: string) {
     this.promptsDirectory = join(projectRoot, 'prompts');
@@ -42,19 +43,27 @@ export class PromptManager {
   }
 
   /**
+   * Carica SOLO il prompt specifico per un agente (ottimizzato per token usage)
+   */
+  async loadPromptForAgent(agentId: string): Promise<string> {
+    const context: PromptContext = { agentId };
+    return this.loadPromptForContext(context);
+  }
+
+  /**
    * Carica il system prompt appropriato per il contesto dato
    */
   async loadPromptForContext(context: PromptContext): Promise<string> {
     const promptPath = this.resolvePromptPath(context);
 
     if (!promptPath) {
-      CliUI.logWarning(`No specific prompt found for context: ${JSON.stringify(context)}`);
+
       return this.getDefaultPrompt(context);
     }
 
     try {
       const prompt = await this.loadPrompt(promptPath);
-      CliUI.logDebug(`Loaded prompt: ${promptPath}`);
+
       return this.interpolatePrompt(prompt.content, context);
     } catch (error: any) {
       CliUI.logError(`Failed to load prompt ${promptPath}: ${error.message}`);
@@ -143,9 +152,19 @@ export class PromptManager {
       category: this.getCategoryFromPath(relativePath)
     };
 
-    // Cache the prompt
+    // Cache the prompt con limite di dimensione
     if (this.cacheEnabled) {
+      // Se cache è piena, rimuovi il prompt più vecchio
+      if (this.promptCache.size >= this.maxCacheSize) {
+        const oldestKey = this.promptCache.keys().next().value;
+        if (oldestKey) {
+          this.promptCache.delete(oldestKey);
+          CliUI.logDebug(`Evicted oldest prompt from cache: ${oldestKey}`);
+        }
+      }
+
       this.promptCache.set(relativePath, prompt);
+
     }
 
     return prompt;
@@ -210,43 +229,13 @@ export class PromptManager {
   }
 
   /**
-   * Pre-carica tutti i prompts per performance migliori
+   * Pre-carica SOLO i prompts essenziali (disabilitato per ridurre token usage)
+   * Carica solo on-demand per agente specifico
    */
   async preloadPrompts(): Promise<void> {
-    CliUI.logInfo('🔄 Pre-loading system prompts...');
 
-    const promptDirs = [
-      'tools/atomic-tools',
-      'tools/analysis-tools',
-      'tools/agent-actions',
-      'tools/cli-commands',
-      'tools/workflow-steps',
-      'tools/safety-prompts',
-      'system'
-    ];
-
-    let loadedCount = 0;
-
-    for (const dir of promptDirs) {
-      try {
-        const dirPath = join(this.promptsDirectory, dir);
-        if (existsSync(dirPath)) {
-          const files = require('fs').readdirSync(dirPath);
-
-          for (const file of files) {
-            if (file.endsWith('.txt')) {
-              const relativePath = join(dir, file);
-              await this.loadPrompt(relativePath);
-              loadedCount++;
-            }
-          }
-        }
-      } catch (error: any) {
-        CliUI.logWarning(`Failed to preload prompts from ${dir}: ${error.message}`);
-      }
-    }
-
-    CliUI.logSuccess(`✅ Pre-loaded ${loadedCount} system prompts`);
+    // Non carichiamo più tutti i prompt automaticamente
+    // Ogni agente caricherà solo il suo prompt quando necessario
   }
 
   /**

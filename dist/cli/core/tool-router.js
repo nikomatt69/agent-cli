@@ -194,7 +194,7 @@ class ToolRouter {
         return this.toolKeywords;
     }
     logRecommendations(message, recommendations) {
-        console.log(chalk_1.default.blue(`🔍 Tool Analysis for: "${message.substring(0, 50)}..."\n`));
+        console.log(chalk_1.default.blue(`Processing message: "${message.substring(0, 50)}..."\n`));
         if (recommendations.length === 0) {
             return;
         }
