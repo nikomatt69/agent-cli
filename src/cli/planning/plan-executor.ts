@@ -8,6 +8,7 @@ import {
     PlanApprovalResponse,
     PlannerConfig
 } from './types';
+import { inputQueue } from '../core/input-queue';
 import { CliUI } from '../utils/cli-ui';
 import { ToolRegistry } from '../tools/tool-registry';
 
@@ -146,39 +147,47 @@ export class PlanExecutor {
         // Display plan details
         this.displayPlanForApproval(plan);
 
-        // Get user approval
-        const answers = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'approved',
-                message: 'Do you approve this execution plan?',
-                default: false
-            },
-            {
-                type: 'checkbox',
-                name: 'modifiedSteps',
-                message: 'Select steps to skip (optional):',
-                choices: plan.steps.map(step => ({
-                    name: `${step.title} - ${step.description}`,
-                    value: step.id,
-                    checked: false
-                })),
-                when: (answers) => answers.approved
-            },
-            {
-                type: 'input',
-                name: 'userComments',
-                message: 'Additional comments (optional):',
-                when: (answers) => answers.approved
-            }
-        ]);
+        // Enable bypass for approval inputs
+        inputQueue.enableBypass();
+        
+        try {
+            // Get user approval
+            const answers = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'approved',
+                    message: 'Do you approve this execution plan?',
+                    default: false
+                },
+                {
+                    type: 'checkbox',
+                    name: 'modifiedSteps',
+                    message: 'Select steps to skip (optional):',
+                    choices: plan.steps.map(step => ({
+                        name: `${step.title} - ${step.description}`,
+                        value: step.id,
+                        checked: false
+                    })),
+                    when: (answers) => answers.approved
+                },
+                {
+                    type: 'input',
+                    name: 'userComments',
+                    message: 'Additional comments (optional):',
+                    when: (answers) => answers.approved
+                }
+            ]);
 
-        return {
-            approved: answers.approved,
-            modifiedSteps: answers.modifiedSteps || [],
-            userComments: answers.userComments,
-            timestamp: new Date()
-        };
+            return {
+                approved: answers.approved,
+                modifiedSteps: answers.modifiedSteps || [],
+                userComments: answers.userComments,
+                timestamp: new Date()
+            };
+        } finally {
+            // Always disable bypass after approval
+            inputQueue.disableBypass();
+        }
     }
 
     /**
@@ -275,16 +284,21 @@ export class PlanExecutor {
     private async executeUserInput(step: ExecutionStep): Promise<any> {
         CliUI.stopSpinner();
 
-        const answers = await inquirer.prompt([
-            {
-                type: 'confirm',
-                name: 'proceed',
-                message: step.description,
-                default: true
-            }
-        ]);
+        inputQueue.enableBypass();
+        try {
+            const answers = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'proceed',
+                    message: step.description,
+                    default: true
+                }
+            ]);
 
-        return answers;
+            return answers;
+        } finally {
+            inputQueue.disableBypass();
+        }
     }
 
     /**
@@ -310,49 +324,54 @@ export class PlanExecutor {
     ): Promise<boolean> {
         CliUI.logError(`Step "${step.title}" failed: ${result.error?.message}`);
 
-        // For non-critical steps, offer to continue
-        if (step.riskLevel === 'low') {
-            const answers = await inquirer.prompt([
-                {
-                    type: 'confirm',
-                    name: 'continue',
-                    message: 'This step failed but is not critical. Continue with remaining steps?',
-                    default: true
-                }
-            ]);
-            return answers.continue;
-        }
-
-        // For critical steps, offer rollback if available
-        if (this.config.enableRollback && step.reversible) {
-            const answers = await inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'action',
-                    message: 'Critical step failed. What would you like to do?',
-                    choices: [
-                        { name: 'Abort execution', value: 'abort' },
-                        { name: 'Skip this step and continue', value: 'skip' },
-                        { name: 'Retry this step', value: 'retry' }
-                    ]
-                }
-            ]);
-
-            switch (answers.action) {
-                case 'abort':
-                    return false;
-                case 'skip':
-                    result.status = 'skipped';
-                    return true;
-                case 'retry':
-                    // Implement retry logic
-                    return true;
-                default:
-                    return false;
+        inputQueue.enableBypass();
+        try {
+            // For non-critical steps, offer to continue
+            if (step.riskLevel === 'low') {
+                const answers = await inquirer.prompt([
+                    {
+                        type: 'confirm',
+                        name: 'continue',
+                        message: 'This step failed but is not critical. Continue with remaining steps?',
+                        default: true
+                    }
+                ]);
+                return answers.continue;
             }
-        }
 
-        return false;
+            // For critical steps, offer rollback if available
+            if (this.config.enableRollback && step.reversible) {
+                const answers = await inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'action',
+                        message: 'Critical step failed. What would you like to do?',
+                        choices: [
+                            { name: 'Abort execution', value: 'abort' },
+                            { name: 'Skip this step and continue', value: 'skip' },
+                            { name: 'Retry this step', value: 'retry' }
+                        ]
+                    }
+                ]);
+
+                switch (answers.action) {
+                    case 'abort':
+                        return false;
+                    case 'skip':
+                        result.status = 'skipped';
+                        return true;
+                    case 'retry':
+                        // Implement retry logic
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            return false;
+        } finally {
+            inputQueue.disableBypass();
+        }
     }
 
     /**

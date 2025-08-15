@@ -80,10 +80,8 @@ Package Info: ${analysis.packageInfo ? JSON.stringify({
     }
     async createFeature(description) {
         console.log(chalk_1.default.blue(`🚀 Creating feature: ${description}`));
-        // First analyze the current project
         console.log(chalk_1.default.cyan('📊 Analyzing current project structure...'));
         const projectInfo = await tools_manager_1.toolsManager.analyzeProject();
-        // Check if dependencies need to be installed
         const requiredDeps = await this.analyzeRequiredDependencies(description, projectInfo);
         if (requiredDeps.length > 0) {
             console.log(chalk_1.default.yellow(`📦 Installing required dependencies: ${requiredDeps.join(', ')}`));
@@ -122,21 +120,17 @@ Follow the project's existing patterns and conventions.`,
                 schemaName: 'FeatureGeneration',
                 schemaDescription: 'Complete feature implementation with all necessary files',
             });
-            // Process the generated plan - cast to any to handle unknown type
             const planResult = result;
-            // Create the files
             for (const file of planResult.files || []) {
                 console.log(chalk_1.default.green(`📝 Creating file: ${file.path}`));
                 await tools_manager_1.toolsManager.writeFile(file.path, file.content);
             }
-            // Install dependencies if needed
             if (planResult.dependencies && planResult.dependencies.length > 0) {
                 console.log(chalk_1.default.blue('📦 Installing dependencies...'));
                 for (const dep of planResult.dependencies) {
                     await tools_manager_1.toolsManager.installPackage(dep);
                 }
             }
-            // Run commands if specified
             if (planResult.commands) {
                 for (const command of planResult.commands) {
                     console.log(chalk_1.default.blue(`⚡ Running: ${command}`));
@@ -144,14 +138,12 @@ Follow the project's existing patterns and conventions.`,
                     await tools_manager_1.toolsManager.runCommand(cmd, args, { stream: true });
                 }
             }
-            // Automatically run build and tests
             console.log(chalk_1.default.blue('🔨 Building project...'));
             const buildResult = await tools_manager_1.toolsManager.build();
             if (!buildResult.success) {
                 console.log(chalk_1.default.yellow('⚠️ Build has errors, attempting to fix...'));
                 await this.debugErrors();
             }
-            // Run tests if they exist
             console.log(chalk_1.default.blue('🧪 Running tests...'));
             const testResult = await tools_manager_1.toolsManager.runTests();
             if (!testResult.success) {
@@ -176,7 +168,6 @@ Follow the project's existing patterns and conventions.`,
     }
     async debugErrors() {
         console.log(chalk_1.default.yellow('🐛 Analyzing and fixing errors...'));
-        // Run build and collect errors
         const buildResult = await tools_manager_1.toolsManager.build();
         const lintResult = await tools_manager_1.toolsManager.lint();
         const typeResult = await tools_manager_1.toolsManager.typeCheck();
@@ -191,7 +182,7 @@ Follow the project's existing patterns and conventions.`,
         }
         console.log(chalk_1.default.red(`Found ${allErrors.length} errors to fix`));
         const fixes = [];
-        for (const error of allErrors.slice(0, 10)) { // Limit to first 10 errors
+        for (const error of allErrors.slice(0, 10)) {
             try {
                 const fix = await this.generateErrorFix(error);
                 if (fix) {
@@ -203,7 +194,6 @@ Follow the project's existing patterns and conventions.`,
                 console.log(chalk_1.default.yellow(`⚠️ Could not fix error: ${error.message}`));
             }
         }
-        // Re-run checks
         console.log(chalk_1.default.blue('🔄 Re-checking after fixes...'));
         const newBuildResult = await tools_manager_1.toolsManager.build();
         return {
@@ -256,7 +246,6 @@ ${error.line ? `Line: ${error.line}` : ''}`,
             return;
         console.log(chalk_1.default.cyan(`🔧 Applying fix to ${fix.file}`));
         try {
-            // Read the file first to understand context
             const fileInfo = await tools_manager_1.toolsManager.readFile(fix.file);
             console.log(chalk_1.default.gray(`📄 File has ${fileInfo.content.split('\n').length} lines`));
             await tools_manager_1.toolsManager.editFile(fix.file, fix.changes);
@@ -295,7 +284,7 @@ Return empty array [] if no new dependencies needed.`,
         console.log(chalk_1.default.blue('⚡ Optimizing code...'));
         const files = filePath ? [filePath] : await tools_manager_1.toolsManager.listFiles('.', /\.(ts|tsx|js|jsx)$/);
         const optimizations = [];
-        for (const file of files.slice(0, 5)) { // Limit to first 5 files
+        for (const file of files.slice(0, 5)) {
             try {
                 const fileInfo = await tools_manager_1.toolsManager.readFile(file);
                 const optimization = await this.generateOptimization(file, fileInfo.content);
@@ -356,7 +345,6 @@ Return JSON with:
         }
         else {
             console.log(chalk_1.default.red('❌ Some tests failed'));
-            // Try to fix failing tests
             if (result.errors) {
                 for (const error of result.errors) {
                     await this.generateErrorFix(error);
@@ -402,7 +390,6 @@ Return JSON with:
                 const pattern = patternMatch ? patternMatch[1] : undefined;
                 return await this.runTests(pattern);
             }
-            // Default: treat as a feature creation request
             return await this.createFeature(taskData);
         }
         catch (error) {

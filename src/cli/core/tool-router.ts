@@ -262,7 +262,7 @@ export class ToolRouter {
 
     // Log tool recommendations for debugging
     logRecommendations(message: string, recommendations: ToolRecommendation[]): void {
-        console.log(chalk.blue(`🔍 Tool Analysis for: "${message.substring(0, 50)}..."\n`));
+        console.log(chalk.blue(`Processing message: "${message.substring(0, 50)}..."\n`));
 
         if (recommendations.length === 0) {
 

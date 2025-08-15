@@ -12,7 +12,6 @@ class MultiEditTool extends base_tool_1.BaseTool {
     }
     async execute(params) {
         try {
-            // Carica prompt specifico per questo tool
             const promptManager = prompt_manager_1.PromptManager.getInstance();
             const systemPrompt = await promptManager.loadPromptForContext({
                 toolName: 'multi-edit-tool',
@@ -31,7 +30,6 @@ class MultiEditTool extends base_tool_1.BaseTool {
                 backupsCreated: [],
                 rollbackPerformed: false
             };
-            // Esegui operazioni in sequenza
             for (let i = 0; i < params.operations.length; i++) {
                 const operation = params.operations[i];
                 cli_ui_1.CliUI.logInfo(`📝 Operation ${i + 1}/${params.operations.length}: ${operation.filePath}`);
@@ -64,7 +62,6 @@ class MultiEditTool extends base_tool_1.BaseTool {
                             success: false,
                             error: editResult.error || 'Unknown error'
                         });
-                        // Rollback se richiesto
                         if (params.rollbackOnError && !params.previewOnly) {
                             cli_ui_1.CliUI.logWarning('🔄 Rolling back due to error...');
                             await this.performRollback(result.backupsCreated);
@@ -118,9 +115,6 @@ class MultiEditTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Esegue rollback ripristinando i backup
-     */
     async performRollback(backupPaths) {
         for (const backupPath of backupPaths) {
             try {
@@ -136,11 +130,7 @@ class MultiEditTool extends base_tool_1.BaseTool {
             }
         }
     }
-    /**
-     * Ottiene il percorso originale dal percorso di backup
-     */
     getOriginalPathFromBackup(backupPath) {
-        // Rimuove .backup.timestamp dal nome
         return backupPath.replace(/\.backup\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/, '');
     }
 }

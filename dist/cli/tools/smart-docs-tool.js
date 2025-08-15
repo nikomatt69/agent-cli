@@ -10,10 +10,6 @@ const chalk_1 = __importDefault(require("chalk"));
 const documentation_library_1 = require("../core/documentation-library");
 const docs_context_manager_1 = require("../context/docs-context-manager");
 const cloud_docs_provider_1 = require("../core/cloud-docs-provider");
-/**
- * Smart Documentation Tool per gli agenti AI
- * Permette agli agenti di cercare e caricare automaticamente documentazione
- */
 exports.smartDocsSearchTool = (0, ai_1.tool)({
     description: 'Search and load documentation automatically when you need information about specific technologies, frameworks, or implementation details',
     parameters: zod_1.z.object({
@@ -34,7 +30,6 @@ exports.smartDocsSearchTool = (0, ai_1.tool)({
                 suggestions: [],
                 summary: ''
             };
-            // 1. Search in local documentation
             try {
                 const localDocs = await documentation_library_1.docLibrary.search(query, category, maxResults);
                 results.localResults = localDocs.map(result => ({
@@ -53,7 +48,6 @@ exports.smartDocsSearchTool = (0, ai_1.tool)({
             catch (error) {
                 console.error('Local docs search failed:', error);
             }
-            // 2. Search in shared/cloud documentation if available
             const cloudProvider = (0, cloud_docs_provider_1.getCloudDocsProvider)();
             if (cloudProvider && results.localResults.length < maxResults) {
                 try {
@@ -76,15 +70,12 @@ exports.smartDocsSearchTool = (0, ai_1.tool)({
                     console.error('Cloud docs search failed:', error);
                 }
             }
-            // 3. Auto-load relevant documents if requested and urgency is medium/high
             if (autoLoad && results.found && (urgency === 'medium' || urgency === 'high')) {
                 try {
                     const docsToLoad = [];
-                    // Load top local results
                     results.localResults.slice(0, 2).forEach(doc => {
                         docsToLoad.push(doc.title);
                     });
-                    // Load top shared results if not enough local results
                     if (docsToLoad.length < 2) {
                         results.sharedResults.slice(0, 2 - docsToLoad.length).forEach(doc => {
                             docsToLoad.push(doc.title);
@@ -105,7 +96,6 @@ exports.smartDocsSearchTool = (0, ai_1.tool)({
                     console.error('Auto-load failed:', error);
                 }
             }
-            // 4. Generate suggestions for additional searches
             if (results.found) {
                 const allTags = [
                     ...results.localResults.flatMap(r => r.tags),
@@ -114,7 +104,6 @@ exports.smartDocsSearchTool = (0, ai_1.tool)({
                 const uniqueTags = [...new Set(allTags)];
                 results.suggestions = uniqueTags.slice(0, 5);
             }
-            // 5. Create summary for agent
             const totalFound = results.localResults.length + results.sharedResults.length;
             const loaded = results.loadedToContext.length;
             if (!results.found) {
@@ -158,10 +147,6 @@ ${[...results.localResults, ...results.sharedResults].map((doc, i) => `${i + 1}.
         }
     }
 });
-/**
- * Smart Documentation Loading Tool
- * Carica documenti specifici nel contesto dell'agente
- */
 exports.smartDocsLoadTool = (0, ai_1.tool)({
     description: 'Load specific documentation into AI context when you need detailed reference material',
     parameters: zod_1.z.object({
@@ -172,12 +157,10 @@ exports.smartDocsLoadTool = (0, ai_1.tool)({
     execute: async ({ docNames, replace, priority }) => {
         try {
             console.log(chalk_1.default.blue(`🤖 Agent loading docs: ${docNames.join(', ')}`));
-            // Clear existing context if replace is true
             if (replace) {
                 await docs_context_manager_1.docsContextManager.unloadDocs();
                 console.log(chalk_1.default.gray('🤖 Cleared existing documentation context'));
             }
-            // Load requested documents
             const loadedDocs = await docs_context_manager_1.docsContextManager.loadDocs(docNames);
             const stats = docs_context_manager_1.docsContextManager.getContextStats();
             const result = {
@@ -219,10 +202,6 @@ ${result.loadedDocs.map((doc, i) => `${i + 1}. ${doc.title} (${doc.category}) - 
         }
     }
 });
-/**
- * Smart Documentation Context Tool
- * Mostra lo stato attuale del contesto documentazione
- */
 exports.smartDocsContextTool = (0, ai_1.tool)({
     description: 'Check what documentation is currently loaded in context and get suggestions',
     parameters: zod_1.z.object({
@@ -256,7 +235,6 @@ exports.smartDocsContextTool = (0, ai_1.tool)({
                 })),
                 suggestions: []
             };
-            // Generate suggestions if query provided
             if (suggestForQuery) {
                 try {
                     const suggestions = await docs_context_manager_1.docsContextManager.suggestDocs(suggestForQuery, 5);
@@ -298,7 +276,6 @@ Sources: Local: ${result.stats.sources.local}, Cloud: ${result.stats.sources.sha
         }
     }
 });
-// Export all smart docs tools
 exports.smartDocsTools = {
     search: exports.smartDocsSearchTool,
     load: exports.smartDocsLoadTool,

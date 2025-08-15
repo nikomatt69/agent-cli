@@ -223,10 +223,8 @@ class CodingAgent extends base_agent_1.BaseAgent {
                 ],
             };
         }
-        // Parse taskData to determine action
         const lowerTask = taskData.toLowerCase();
         if (lowerTask.includes('analyze') || lowerTask.includes('review')) {
-            // Extract code from taskData (assume code is in backticks or after "analyze:")
             const codeMatch = taskData.match(/```[\s\S]*?```|analyze:\s*([\s\S]*)/i);
             if (codeMatch) {
                 const code = codeMatch[0].replace(/```/g, '').trim();
@@ -265,7 +263,6 @@ class CodingAgent extends base_agent_1.BaseAgent {
                 return await this.generateTests(code);
             }
         }
-        // Default: treat as a general coding question
         const messages = [
             {
                 role: 'system',
@@ -293,7 +290,6 @@ Always provide clear explanations with your code solutions.`,
             return { error: error.message, taskData };
         }
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

@@ -43,6 +43,7 @@ const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const chalk_1 = __importDefault(require("chalk"));
 const cloud_docs_provider_1 = require("./cloud-docs-provider");
+const crypto_1 = require("crypto");
 class FeedbackSystem {
     constructor(cacheDir = './.nikcli') {
         this.pendingFeedback = [];
@@ -55,7 +56,7 @@ class FeedbackSystem {
             autoSubmit: true,
             anonymousMode: true,
             batchSize: 10,
-            submitInterval: 60, // 1 hour
+            submitInterval: 60,
             keepLocal: true
         };
         this.ensureFeedbackDir();
@@ -106,9 +107,6 @@ class FeedbackSystem {
             console.error('Failed to save pending feedback:', error);
         }
     }
-    /**
-     * Report documentation gap
-     */
     async reportDocGap(concept, context, impact, frequency, metadata = {}) {
         if (!this.config.enabled)
             return;
@@ -126,16 +124,11 @@ class FeedbackSystem {
         };
         this.pendingFeedback.push(feedback);
         await this.savePendingFeedback();
-        // Feedback interno - solo debug log
         console.debug(`Internal agent feedback: Doc gap for ${concept} (${impact} impact)`);
-        // Auto-submit if conditions are met
         if (this.shouldAutoSubmit()) {
             await this.submitPendingFeedback();
         }
     }
-    /**
-     * Report successful resolution
-     */
     async reportSuccess(concept, context, resolution, metadata = {}) {
         if (!this.config.enabled)
             return;
@@ -157,9 +150,6 @@ class FeedbackSystem {
             await this.submitPendingFeedback();
         }
     }
-    /**
-     * Report usage patterns
-     */
     async reportUsage(action, context, metadata = {}) {
         if (!this.config.enabled)
             return;
@@ -176,14 +166,10 @@ class FeedbackSystem {
             anonymized: this.config.anonymousMode
         };
         this.pendingFeedback.push(feedback);
-        // Usage data is submitted in batches without saving locally
         if (this.shouldAutoSubmit()) {
             await this.submitPendingFeedback();
         }
     }
-    /**
-     * Submit pending feedback to cloud
-     */
     async submitPendingFeedback() {
         if (!this.config.enabled || this.pendingFeedback.length === 0) {
             return { submitted: 0, failed: 0 };
@@ -193,23 +179,19 @@ class FeedbackSystem {
             console.debug('Cloud provider not available, keeping feedback local');
             return { submitted: 0, failed: 0 };
         }
-        // Feedback interno - silent submission
         console.debug(`Submitting ${this.pendingFeedback.length} internal feedback entries`);
         let submitted = 0;
         let failed = 0;
         try {
-            // Submit in batches
             const batches = this.chunkArray(this.pendingFeedback, this.config.batchSize);
             for (const batch of batches) {
                 try {
                     await this.submitFeedbackBatch(batch);
                     submitted += batch.length;
-                    // Remove submitted feedback if not keeping local
                     if (!this.config.keepLocal) {
                         this.pendingFeedback = this.pendingFeedback.filter(f => !batch.find(b => b.id === f.id));
                     }
                     else {
-                        // Mark as submitted
                         batch.forEach(b => {
                             const local = this.pendingFeedback.find(f => f.id === b.id);
                             if (local)
@@ -224,7 +206,6 @@ class FeedbackSystem {
             }
             await this.savePendingFeedback();
             this.lastSubmit = new Date();
-            // Internal logging only
             if (submitted > 0) {
                 console.debug(`Internal: Submitted ${submitted} feedback entries for agent learning`);
             }
@@ -242,12 +223,7 @@ class FeedbackSystem {
         const cloudProvider = (0, cloud_docs_provider_1.getCloudDocsProvider)();
         if (!cloudProvider)
             throw new Error('Cloud provider not available');
-        // For now, store feedback in a special feedback table
-        // TODO: Create feedback table in Supabase schema
         const anonymizedBatch = batch.map(f => this.anonymizeFeedback(f));
-        // This would be implemented as a Supabase function
-        // await cloudProvider.submitFeedback(anonymizedBatch);
-        // For now, just log success
         console.debug(`Would submit ${batch.length} feedback entries to cloud`);
     }
     anonymizeFeedback(feedback) {
@@ -266,16 +242,14 @@ class FeedbackSystem {
     shouldAutoSubmit() {
         if (!this.config.autoSubmit)
             return false;
-        // Submit if we have enough feedback
         if (this.pendingFeedback.length >= this.config.batchSize)
             return true;
-        // Submit if enough time has passed
         const timeSinceLastSubmit = Date.now() - this.lastSubmit.getTime();
         const intervalMs = this.config.submitInterval * 60 * 1000;
         return timeSinceLastSubmit >= intervalMs && this.pendingFeedback.length > 0;
     }
     generateId() {
-        return `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `feedback_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`;
     }
     chunkArray(array, size) {
         const chunks = [];
@@ -284,9 +258,6 @@ class FeedbackSystem {
         }
         return chunks;
     }
-    /**
-     * Get feedback statistics
-     */
     getStats() {
         const now = Date.now();
         const dayAgo = now - (24 * 60 * 60 * 1000);
@@ -303,9 +274,6 @@ class FeedbackSystem {
         });
         return stats;
     }
-    /**
-     * Configure feedback system
-     */
     async configure(newConfig) {
         this.config = { ...this.config, ...newConfig };
         await this.saveConfig();
@@ -314,9 +282,6 @@ class FeedbackSystem {
         console.log(chalk_1.default.gray(`   Auto-submit: ${this.config.autoSubmit}`));
         console.log(chalk_1.default.gray(`   Anonymous: ${this.config.anonymousMode}`));
     }
-    /**
-     * Get most frequent gaps for recommendations
-     */
     getTopGaps(limit = 10) {
         const gaps = this.pendingFeedback.filter(f => f.type === 'doc_gap');
         const grouped = new Map();
@@ -355,5 +320,4 @@ class FeedbackSystem {
     }
 }
 exports.FeedbackSystem = FeedbackSystem;
-// Singleton instance
 exports.feedbackSystem = new FeedbackSystem();

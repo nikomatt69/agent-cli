@@ -7,11 +7,7 @@ exports.ChatOrchestrator = void 0;
 const nanoid_1 = require("nanoid");
 const chalk_1 = __importDefault(require("chalk"));
 const guidance_manager_1 = require("../guidance/guidance-manager");
-/**
- * ChatOrchestrator coordinates user input, planning and execution.
- */
 class ChatOrchestrator {
-    // Simple structured logging
     log(level, message, data) {
         const timestamp = new Date().toISOString();
         const logEntry = {
@@ -34,7 +30,6 @@ class ChatOrchestrator {
     async initialize() {
         try {
             this.log('info', 'Initializing Chat Orchestrator...');
-            // Initialize guidance system
             await this.guidanceManager.initialize((context) => {
                 this.log('info', 'Guidance context updated - applying to future agents', { context });
             });
@@ -48,7 +43,6 @@ class ChatOrchestrator {
     }
     async handleInput(sessionId, input) {
         try {
-            // Input validation
             if (!sessionId || typeof sessionId !== 'string') {
                 throw new Error('Invalid session ID provided');
             }
@@ -70,7 +64,6 @@ class ChatOrchestrator {
             }
             const agentId = (0, nanoid_1.nanoid)();
             const agentName = `agent-${agentId.slice(0, 5)}`;
-            // Get guidance context for this agent
             const guidanceContext = this.guidanceManager.getContextForAgent('general', process.cwd());
             const agent = {
                 id: agentId,
@@ -105,7 +98,6 @@ class ChatOrchestrator {
                         throw error;
                     }
                 },
-                // Missing required methods
                 run: async (task) => {
                     const startTime = new Date();
                     return {
@@ -123,7 +115,6 @@ class ChatOrchestrator {
                     let status = 'completed';
                     let result = '';
                     try {
-                        // Actual task execution logic based on task data/description
                         const taskDescription = task.description || '';
                         if (taskDescription.includes('analyz') || taskDescription.includes('review')) {
                             result = await this.executeAnalysisTask(task);
@@ -146,7 +137,6 @@ class ChatOrchestrator {
                     }
                     const endTime = new Date();
                     const duration = endTime.getTime() - startTime.getTime();
-                    // Log successful task completion
                     if (status === 'completed') {
                         this.log('info', `Task completed successfully`, {
                             taskId: task.id,
@@ -190,7 +180,6 @@ class ChatOrchestrator {
                 }
             };
             this.agentManager.registerAgent(agent);
-            // Create enhanced context for todo planning
             const planningContext = {
                 userInput: input,
                 guidance: guidanceContext,
@@ -207,7 +196,6 @@ class ChatOrchestrator {
                 role: 'assistant', content: `Planned ${todos.length} tasks:\n${summary}`, timestamp: new Date().toISOString()
             });
             await this.sessionManager.saveSession(session);
-            // Execute todos with agent manager
             for (const todo of todos) {
                 const task = {
                     id: todo.id,
@@ -263,7 +251,6 @@ class ChatOrchestrator {
     }
     async handleGuidanceCommand(session, args) {
         if (args.length === 0) {
-            // Show guidance status
             const context = this.guidanceManager.getContext();
             const stats = this.guidanceManager.getStats();
             const statusText = `🧠 Guidance System Status:
@@ -340,11 +327,9 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
     async delay(ms) {
         return new Promise((res) => setTimeout(res, ms));
     }
-    // Task execution methods
     async executeAnalysisTask(task) {
         try {
-            // Simulate analysis work with configurable delay
-            const ANALYSIS_DELAY = 500; // Constant instead of magic number
+            const ANALYSIS_DELAY = 500;
             await this.delay(ANALYSIS_DELAY);
             return `Analysis completed for: ${task.title}. Found ${Math.floor(Math.random() * 10)} items to review.`;
         }
@@ -356,7 +341,6 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
         try {
             const FILE_OP_DELAY = 300;
             await this.delay(FILE_OP_DELAY);
-            // Validate file operations for security
             const allowedOps = ['read', 'write', 'create', 'delete'];
             const operation = task.data?.operation || 'read';
             if (!allowedOps.includes(operation)) {
@@ -368,31 +352,23 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
             throw new Error(`File operation failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    /**
-     * Strict command validation to prevent unsafe execution.
-     * Applies normalization, tokenization, operator rejection, allowlist checks,
-     * and absolute system binary path filtering.
-     */
     validateCommandStrict(originalCommand) {
         const normalize = (cmd) => {
-            // Trim, strip common quotes used for simple obfuscation, and collapse whitespace
             const strippedQuotes = cmd
                 .trim()
                 .replace(/["'\u2018\u2019\u201C\u201D]/g, '');
             return strippedQuotes.replace(/\s+/g, ' ');
         };
         const containsShellOperators = (cmd) => {
-            // Reject pipes, chains, substitutions, and redirections
             if (/(\|\||&&|;|\| |`)/.test(cmd))
-                return true; // ||, &&, ;, |, backticks
+                return true;
             if (/\$\([^)]*\)/.test(cmd))
-                return true; // $(...)
+                return true;
             if (/(^|\s)(?:>>?|<<?)\s?/.test(cmd))
-                return true; // >, >>, <, <<
+                return true;
             return false;
         };
         const tokenize = (cmd) => {
-            // Split on whitespace and common shell metacharacters to isolate tokens
             return cmd.split(/[\s|&;()`<>]+/).filter(Boolean);
         };
         const isAbsoluteSystemBinary = (execPath) => {
@@ -404,7 +380,6 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
             throw new Error('No command provided');
         }
         const normalized = normalize(originalCommand);
-        // Reject use of shell operators and chaining
         if (containsShellOperators(normalized)) {
             throw new Error('Shell operators and command chaining are not allowed');
         }
@@ -414,16 +389,13 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
         }
         const executable = tokens[0].toLowerCase();
         const args = tokens.slice(1);
-        // Block absolute paths to system binaries (e.g., /bin/rm, /usr/bin/sudo)
         if (isAbsoluteSystemBinary(tokens[0])) {
             throw new Error('Absolute paths to system binaries are not allowed');
         }
-        // Explicitly block dangerous executables using word-boundary semantics
         const prohibitedExecutables = /^(rm|sudo|chmod|chown|curl|wget|dd|mkfs|fdisk|mount|umount|kill|killall|systemctl|service|crontab|at|batch|scp|ssh|rsync)$/i;
         if (prohibitedExecutables.test(executable)) {
             throw new Error(`Dangerous command blocked: ${executable}`);
         }
-        // Additional rm safety: block recursive/force deletions even if obfuscated
         if (executable === 'rm') {
             const hasRecursive = args.some(a => /^-.*r/.test(a));
             const hasForce = args.some(a => /^-.*f/.test(a));
@@ -431,7 +403,6 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
                 throw new Error('Dangerous rm flags detected');
             }
         }
-        // Strict allowlist of safe commands
         const allowedExecutables = new Set([
             'ls', 'dir', 'pwd', 'whoami', 'date', 'echo', 'cat', 'head', 'tail',
             'grep', 'find', 'which', 'type', 'node', 'npm', 'yarn', 'pnpm', 'git'
@@ -439,7 +410,6 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
         if (!allowedExecutables.has(executable)) {
             throw new Error(`Command not allowed by allowlist: ${executable}`);
         }
-        // Subcommand allowlist for multi-tool CLIs
         const allowedSubcommands = {
             git: new Set(['status', 'log', 'diff', 'branch', 'remote', 'rev-parse', 'show', 'describe'])
         };
@@ -454,7 +424,6 @@ Last Updated: ${context?.lastUpdated ? new Date(context.lastUpdated).toLocaleStr
         try {
             const COMMAND_DELAY = 800;
             await this.delay(COMMAND_DELAY);
-            // Strict security validation before any execution
             const command = task.data?.command || '';
             this.validateCommandStrict(command);
             return `Command executed safely: ${task.title}`;

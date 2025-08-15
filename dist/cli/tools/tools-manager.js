@@ -50,7 +50,6 @@ class ToolsManager {
         this.commandHistory = [];
         this.workingDirectory = workingDir || process.cwd();
     }
-    // File Operations
     async readFile(filePath) {
         const fullPath = path.resolve(this.workingDirectory, filePath);
         if (!fs.existsSync(fullPath)) {
@@ -71,7 +70,6 @@ class ToolsManager {
     async writeFile(filePath, content) {
         const fullPath = path.resolve(this.workingDirectory, filePath);
         const dir = path.dirname(fullPath);
-        // Create directory if it doesn't exist
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
@@ -83,7 +81,6 @@ class ToolsManager {
         let lines = fileInfo.content.split('\n');
         for (const change of changes) {
             if (change.line !== undefined) {
-                // Line-based edit
                 if (change.insert) {
                     lines.splice(change.line, 0, change.replace);
                 }
@@ -92,7 +89,6 @@ class ToolsManager {
                 }
             }
             else if (change.find) {
-                // Find and replace
                 lines = lines.map(line => line.replace(new RegExp(change.find, 'g'), change.replace));
             }
         }
@@ -125,7 +121,6 @@ class ToolsManager {
         walkDir(fullPath);
         return files;
     }
-    // Search Operations
     async searchInFiles(query, directory = '.', filePattern) {
         const files = await this.listFiles(directory, filePattern);
         const results = [];
@@ -150,13 +145,11 @@ class ToolsManager {
                 });
             }
             catch (error) {
-                // Skip files that can't be read
                 continue;
             }
         }
         return results;
     }
-    // Advanced Command Execution
     async runCommand(command, args = [], options = {}) {
         const fullCommand = options.sudo ? `sudo ${command} ${args.join(' ')}` : `${command} ${args.join(' ')}`;
         const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
@@ -173,7 +166,7 @@ class ToolsManager {
                     cwd,
                     timeout: options.timeout || 60000,
                     env,
-                    maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+                    maxBuffer: 1024 * 1024 * 10,
                 });
                 const duration = Date.now() - startTime;
                 this.addToHistory(fullCommand, true, stdout + stderr);
@@ -312,14 +305,12 @@ class ToolsManager {
             command,
             timestamp: new Date(),
             success,
-            output: output.slice(0, 1000), // Limit output size
+            output: output.slice(0, 1000),
         });
-        // Keep only last 100 commands
         if (this.commandHistory.length > 100) {
             this.commandHistory = this.commandHistory.slice(-100);
         }
     }
-    // Build and Test Operations
     async build(framework) {
         let buildCommand = 'npm run build';
         if (framework === 'next')
@@ -369,12 +360,10 @@ class ToolsManager {
             errors: errors.length > 0 ? errors : undefined,
         };
     }
-    // Error Analysis
     parseErrors(output) {
         const errors = [];
         const lines = output.split('\n');
         for (const line of lines) {
-            // Parse different error formats
             if (line.includes('Error:') || line.includes('error:')) {
                 errors.push(this.parseErrorLine(line, 'error'));
             }
@@ -404,14 +393,12 @@ class ToolsManager {
         return errors;
     }
     parseErrorLine(line, severity) {
-        // Basic error parsing - can be enhanced
         return {
             type: 'compile',
             severity,
             message: line.trim(),
         };
     }
-    // Git Operations
     async gitStatus() {
         const result = await this.runCommand('git', ['status', '--porcelain']);
         const lines = result.stdout.split('\n').filter(Boolean);
@@ -438,14 +425,12 @@ class ToolsManager {
         await this.runCommand('git', ['commit', '-m', message]);
         console.log(chalk_1.default.green(`✅ Committed with message: ${message}`));
     }
-    // System Information and Advanced Operations
     async getSystemInfo() {
         const platform = os.platform();
         const arch = os.arch();
         const nodeVersion = process.version;
         const totalMemory = os.totalmem();
         const freeMemory = os.freemem();
-        // Get versions of common tools
         let npmVersion, gitVersion, dockerVersion;
         try {
             const npmResult = await this.runCommand('npm', ['--version']);
@@ -485,7 +470,6 @@ class ToolsManager {
             const tempDir = os.tmpdir();
             const extension = language === 'bash' ? '.sh' : language === 'python' ? '.py' : '.js';
             tempFile = path.join(tempDir, `script_${Date.now()}${extension}`);
-            // Write script to temp file
             fs.writeFileSync(tempFile, scriptContent);
             if (language === 'bash') {
                 fs.chmodSync(tempFile, '755');
@@ -506,7 +490,6 @@ class ToolsManager {
                 default:
                     throw new Error(`Unsupported script language: ${language}`);
             }
-            // Clean up temp file if we created it
             if (!options.file) {
                 try {
                     fs.unlinkSync(tempFile);
@@ -606,7 +589,6 @@ class ToolsManager {
         });
         return child;
     }
-    // Helper Methods
     getLanguageFromExtension(ext) {
         const languageMap = {
             js: 'javascript',
@@ -637,7 +619,6 @@ class ToolsManager {
         try {
             const pkg = await this.readFile('package.json');
             packageInfo = JSON.parse(pkg.content);
-            // Detect framework
             if (packageInfo.dependencies?.next)
                 framework = 'Next.js';
             else if (packageInfo.dependencies?.react)
@@ -646,7 +627,6 @@ class ToolsManager {
                 framework = 'Express';
             else if (packageInfo.dependencies?.fastify)
                 framework = 'Fastify';
-            // Detect technologies
             Object.keys(packageInfo.dependencies || {}).forEach(dep => {
                 if (dep.includes('typescript'))
                     technologies.push('TypeScript');
@@ -665,7 +645,6 @@ class ToolsManager {
             });
         }
         catch (error) {
-            // No package.json or invalid JSON
         }
         return {
             structure,
@@ -682,13 +661,11 @@ class ToolsManager {
             for (let i = 0; i < parts.length; i++) {
                 const part = parts[i];
                 if (i === parts.length - 1) {
-                    // It's a file
                     if (!current._files)
                         current._files = [];
                     current._files.push(part);
                 }
                 else {
-                    // It's a directory
                     if (!current[part])
                         current[part] = {};
                     current = current[part];

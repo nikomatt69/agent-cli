@@ -43,14 +43,12 @@ class AdvancedTools {
         }
     }
     getEmbeddingModel() {
-        // Use OpenAI for embeddings
         const apiKey = config_manager_1.configManager.getApiKey('gpt-4o-mini') || config_manager_1.configManager.getApiKey('claude-sonnet-4-20250514');
         if (!apiKey)
             throw new Error('No API key found for embeddings');
         const openaiProvider = (0, openai_1.createOpenAI)({ apiKey });
-        return openaiProvider('text-embedding-3-small'); // Type assertion for embedding model
+        return openaiProvider('text-embedding-3-small');
     }
-    // Semantic search tool using embeddings
     getSemanticSearchTool() {
         return (0, ai_1.tool)({
             description: 'Search for semantically similar content in the codebase using embeddings',
@@ -63,20 +61,18 @@ class AdvancedTools {
             execute: async ({ query, searchPath, fileTypes, maxResults }) => {
                 try {
                     console.log(chalk_1.default.blue(`🔍 Semantic search for: "${query}"`));
-                    // Generate embedding for query
                     const queryEmbedding = await (0, ai_1.embed)({
                         model: this.getEmbeddingModel(),
                         value: query
                     });
-                    // Find files and generate embeddings
                     const files = this.findFiles(searchPath, fileTypes);
                     const results = [];
-                    for (const file of files.slice(0, 20)) { // Limit to 20 files for performance
+                    for (const file of files.slice(0, 20)) {
                         try {
                             const content = (0, fs_1.readFileSync)(file, 'utf-8');
                             const fileEmbedding = await (0, ai_1.embed)({
                                 model: this.getEmbeddingModel(),
-                                value: content.substring(0, 1000) // Limit content for embedding
+                                value: content.substring(0, 1000)
                             });
                             const similarity = (0, ai_1.cosineSimilarity)(queryEmbedding.embedding, fileEmbedding.embedding);
                             results.push({
@@ -86,10 +82,8 @@ class AdvancedTools {
                             });
                         }
                         catch (error) {
-                            // Skip files that can't be read
                         }
                     }
-                    // Sort by similarity and return top results
                     const topResults = results
                         .sort((a, b) => b.similarity - a.similarity)
                         .slice(0, maxResults);
@@ -109,7 +103,6 @@ class AdvancedTools {
             }
         });
     }
-    // Code analysis and suggestions tool
     getCodeAnalysisTool() {
         return (0, ai_1.tool)({
             description: 'Analyze code quality, patterns, and provide improvement suggestions',
@@ -125,7 +118,6 @@ class AdvancedTools {
                     }
                     const content = (0, fs_1.readFileSync)(filePath, 'utf-8');
                     const extension = (0, path_1.extname)(filePath);
-                    // Generate analysis using AI
                     const analysis = await (0, ai_1.generateObject)({
                         model: this.getModel(),
                         schema: zod_1.z.object({
@@ -177,7 +169,6 @@ Provide detailed analysis including:
             }
         });
     }
-    // Dependency analysis tool
     getDependencyAnalysisTool() {
         return (0, ai_1.tool)({
             description: 'Analyze project dependencies, security vulnerabilities, and optimization opportunities',
@@ -193,7 +184,6 @@ Provide detailed analysis including:
                         return { error: 'No package.json found in current directory' };
                     }
                     const packageJson = JSON.parse((0, fs_1.readFileSync)('package.json', 'utf-8'));
-                    // Analyze dependencies
                     const analysis = await (0, ai_1.generateObject)({
                         model: this.getModel(),
                         schema: zod_1.z.object({
@@ -248,7 +238,6 @@ Provide:
             }
         });
     }
-    // Git workflow analysis tool
     getGitWorkflowTool() {
         return (0, ai_1.tool)({
             description: 'Analyze Git repository, commit patterns, and suggest workflow improvements',
@@ -260,7 +249,6 @@ Provide:
             execute: async ({ analyzeCommits, checkBranching, suggestWorkflow }) => {
                 try {
                     console.log(chalk_1.default.blue('📊 Analyzing Git workflow...'));
-                    // Get Git information
                     const { stdout: branch } = await execAsync('git branch --show-current');
                     const { stdout: status } = await execAsync('git status --porcelain');
                     const { stdout: recentCommits } = await execAsync('git log --oneline -10');
@@ -319,7 +307,6 @@ Provide:
             }
         });
     }
-    // Helper function to find files
     findFiles(dir, extensions) {
         const files = [];
         try {
@@ -335,7 +322,6 @@ Provide:
             }
         }
         catch (error) {
-            // Skip directories that can't be read
         }
         return files;
     }

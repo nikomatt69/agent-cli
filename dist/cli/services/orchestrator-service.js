@@ -72,7 +72,6 @@ class OrchestratorService extends events_1.EventEmitter {
                 executionHistory: []
             }
         };
-        // Initialize services
         this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
         const moduleContext = {
             ...this.context,
@@ -83,7 +82,6 @@ class OrchestratorService extends events_1.EventEmitter {
         this.setupServiceListeners();
     }
     setupEventHandlers() {
-        // Handle Ctrl+C gracefully
         this.rl.on('SIGINT', () => {
             if (this.context.isProcessing) {
                 console.log(chalk_1.default.yellow('\\n⏸️  Stopping current operation...'));
@@ -95,10 +93,8 @@ class OrchestratorService extends events_1.EventEmitter {
                 process.exit(0);
             }
         });
-        // Enable raw mode for keypress detection
         process.stdin.setRawMode(true);
         require('readline').emitKeypressEvents(process.stdin);
-        // Handle keypress events
         process.stdin.on('keypress', (str, key) => {
             if (key && key.name === 'slash' && !this.context.isProcessing) {
                 setTimeout(() => this.showCommandMenu(), 50);
@@ -110,7 +106,6 @@ class OrchestratorService extends events_1.EventEmitter {
                 this.toggleAutoAccept();
             }
         });
-        // Handle input
         this.rl.on('line', async (input) => {
             const trimmedInput = input.trim();
             if (!trimmedInput) {
@@ -126,7 +121,6 @@ class OrchestratorService extends events_1.EventEmitter {
         });
     }
     setupServiceListeners() {
-        // Listen to agent service events
         agent_service_1.agentService.on('task_start', (task) => {
             this.activeAgentTasks.set(task.id, task);
             console.log(chalk_1.default.blue(`🤖 Agent ${task.agentType} started: ${task.task.slice(0, 50)}...`));
@@ -156,7 +150,6 @@ class OrchestratorService extends events_1.EventEmitter {
             return;
         }
         this.showWelcome();
-        // Start service initialization in background
         this.initializeServices();
         return new Promise((resolve) => {
             this.showPrompt();
@@ -166,11 +159,9 @@ class OrchestratorService extends events_1.EventEmitter {
         });
     }
     async initializeServices() {
-        // Initialize all services in background
         tool_service_1.toolService.setWorkingDirectory(this.context.workingDirectory);
         planning_service_1.planningService.setWorkingDirectory(this.context.workingDirectory);
         lsp_service_1.lspService.setWorkingDirectory(this.context.workingDirectory);
-        // Auto-start LSP servers for detected languages
         await lsp_service_1.lspService.autoStartServers(this.context.workingDirectory);
         this.initialized = true;
         console.log(chalk_1.default.dim('🚀 All services initialized'));
@@ -178,12 +169,10 @@ class OrchestratorService extends events_1.EventEmitter {
     async handleInput(input) {
         this.context.isProcessing = true;
         try {
-            // Handle slash commands
             if (input.startsWith('/')) {
                 await this.handleCommand(input);
                 return;
             }
-            // Handle agent-specific requests
             const agentMatch = input.match(/^@(\\w+[-\\w]*)/);
             if (agentMatch) {
                 const agentName = agentMatch[1];
@@ -191,7 +180,6 @@ class OrchestratorService extends events_1.EventEmitter {
                 await this.executeAgentTask(agentName, task);
                 return;
             }
-            // Handle natural language requests
             await this.handleNaturalLanguageRequest(input);
         }
         finally {
@@ -200,7 +188,6 @@ class OrchestratorService extends events_1.EventEmitter {
     }
     async handleCommand(command) {
         const [cmd, ...args] = command.slice(1).split(' ');
-        // Handle special orchestrator commands
         switch (cmd) {
             case 'status':
                 await this.showStatus();
@@ -212,9 +199,7 @@ class OrchestratorService extends events_1.EventEmitter {
                 await this.showActiveAgents();
                 break;
             default:
-                // Delegate to module manager
                 await this.moduleManager.executeCommand(cmd, args);
-                // Update context after module execution
                 this.updateModuleContext();
         }
     }
@@ -239,7 +224,6 @@ class OrchestratorService extends events_1.EventEmitter {
         }
         console.log(chalk_1.default.blue('🧠 Processing natural language request...'));
         if (this.context.planMode) {
-            // Create execution plan first
             console.log(chalk_1.default.cyan('🎯 Plan Mode: Creating execution plan...'));
             const plan = await planning_service_1.planningService.createPlan(input, {
                 showProgress: true,
@@ -260,7 +244,6 @@ class OrchestratorService extends events_1.EventEmitter {
             });
         }
         else {
-            // Direct autonomous execution using appropriate agent
             const bestAgent = this.selectBestAgent(input);
             console.log(chalk_1.default.blue(`🎯 Selected ${bestAgent} agent for this task`));
             await this.executeAgentTask(bestAgent, input);
@@ -268,7 +251,6 @@ class OrchestratorService extends events_1.EventEmitter {
     }
     selectBestAgent(input) {
         const lowerInput = input.toLowerCase();
-        // Simple keyword-based agent selection
         if (lowerInput.includes('react') || lowerInput.includes('component')) {
             return 'react-expert';
         }
@@ -285,7 +267,7 @@ class OrchestratorService extends events_1.EventEmitter {
             return 'code-review';
         }
         else {
-            return 'autonomous-coder'; // Default fallback
+            return 'autonomous-coder';
         }
     }
     displayAgentResult(task) {
@@ -367,7 +349,6 @@ class OrchestratorService extends events_1.EventEmitter {
         }
     }
     showCommandMenu() {
-        // Delegate to module manager
         console.log('\\n' + chalk_1.default.cyan.bold('📋 Available Commands:'));
         console.log(chalk_1.default.gray('─'.repeat(60)));
         console.log(chalk_1.default.white.bold('\\n🎛️  Orchestrator Commands:'));
@@ -469,7 +450,6 @@ class OrchestratorService extends events_1.EventEmitter {
         });
     }
     stopAllOperations() {
-        // Stop any running agents (simplified)
         this.activeAgentTasks.clear();
         this.context.isProcessing = false;
     }

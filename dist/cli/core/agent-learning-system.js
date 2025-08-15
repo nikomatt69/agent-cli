@@ -45,17 +45,12 @@ class AgentLearningSystem {
         this.learningFile = path.join(os.homedir(), '.nikcli', 'agent-learning.json');
         this.loadLearningData();
     }
-    /**
-     * Analizza il contesto e fornisce raccomandazioni per la scelta del tool
-     */
     async getToolRecommendations(context) {
         const pattern = this.extractPattern(context);
         const learningData = this.learningData.get(pattern);
         if (!learningData) {
-            // Nessun apprendimento precedente - usa euristica di base
             return this.getHeuristicRecommendation(context);
         }
-        // Analizza successi passati per questo pattern
         const toolScores = this.calculateToolScores(learningData, context);
         const topTool = this.getBestTool(toolScores);
         if (!topTool) {
@@ -78,9 +73,6 @@ class AgentLearningSystem {
             preventiveActions: this.generatePreventiveActions(learningData, context)
         };
     }
-    /**
-     * Registra il risultato di una decisione per apprendimento futuro
-     */
     async recordDecision(context, chosenTool, parameters, outcome, executionTime, error) {
         const pattern = this.extractPattern(context);
         let learningData = this.learningData.get(pattern);
@@ -92,7 +84,6 @@ class AgentLearningSystem {
                 lastUpdated: new Date().toISOString()
             };
         }
-        // Registra scelta
         learningData.successfulChoices.push({
             tool: chosenTool,
             parameters,
@@ -100,7 +91,6 @@ class AgentLearningSystem {
             executionTime,
             timestamp: new Date().toISOString()
         });
-        // Registra pattern di fallimento se necessario
         if (outcome === 'failure' && error) {
             let failurePattern = learningData.failurePatterns.find(fp => fp.tool === chosenTool && fp.error === error);
             if (failurePattern) {
@@ -114,28 +104,22 @@ class AgentLearningSystem {
                 });
             }
         }
-        // Mantieni solo gli ultimi N record per evitare crescita eccessiva
         learningData.successfulChoices = learningData.successfulChoices
-            .slice(-100); // Ultimi 100 per pattern
+            .slice(-100);
         learningData.failurePatterns = learningData.failurePatterns
-            .filter(fp => fp.frequency > 1) // Mantieni solo errori ricorrenti
-            .slice(-20); // Massimo 20 pattern di errore
+            .filter(fp => fp.frequency > 1)
+            .slice(-20);
         learningData.lastUpdated = new Date().toISOString();
         this.learningData.set(pattern, learningData);
-        // Salva periodicamente
         if (this.learningData.size % 10 === 0) {
             await this.saveLearningData();
         }
     }
-    /**
-     * Ottieni insight di apprendimento per un agente specifico
-     */
     getAgentInsights(agentType) {
         const allChoices = Array.from(this.learningData.values())
             .flatMap(ld => ld.successfulChoices);
         const allFailures = Array.from(this.learningData.values())
             .flatMap(ld => ld.failurePatterns);
-        // Tool più usato con successo
         const toolUsage = new Map();
         allChoices.forEach(choice => {
             if (!toolUsage.has(choice.tool)) {
@@ -149,11 +133,9 @@ class AgentLearningSystem {
         });
         const bestTool = Array.from(toolUsage.entries())
             .sort((a, b) => (b[1].success / b[1].total) - (a[1].success / a[1].total))[0]?.[0] || 'unknown';
-        // Calcola confidence score complessivo
         const totalSuccesses = allChoices.filter(c => c.outcome === 'success').length;
         const totalAttempts = allChoices.length;
         const confidenceScore = totalAttempts > 0 ? totalSuccesses / totalAttempts : 0.5;
-        // Suggerimenti di miglioramento
         const improvementSuggestions = this.generateImprovementSuggestions(allFailures, toolUsage);
         return {
             totalPatterns: this.learningData.size,
@@ -165,14 +147,10 @@ class AgentLearningSystem {
             confidenceScore: Number(confidenceScore.toFixed(2))
         };
     }
-    /**
-     * Predice la probabilità di successo per una scelta specifica
-     */
     predictSuccessProbability(context, proposedTool, parameters) {
         const pattern = this.extractPattern(context);
         const learningData = this.learningData.get(pattern);
         if (!learningData) {
-            // Nessun dato storico - usa confidenza base
             return this.getBaseConfidence(proposedTool, context);
         }
         const relevantChoices = learningData.successfulChoices
@@ -182,22 +160,17 @@ class AgentLearningSystem {
         }
         const successes = relevantChoices.filter(choice => choice.outcome === 'success').length;
         const probability = successes / relevantChoices.length;
-        // Aggiusta basandoti su failure patterns
         const relevantFailures = learningData.failurePatterns
             .filter(fp => fp.tool === proposedTool);
         let adjustment = 0;
         relevantFailures.forEach(failure => {
-            adjustment -= (failure.frequency * 0.05); // Riduce probabilità per errori frequenti
+            adjustment -= (failure.frequency * 0.05);
         });
         return Math.max(0.1, Math.min(0.95, probability + adjustment));
     }
-    /**
-     * Sistema di raccomandazioni adattive basato su contesto
-     */
     getAdaptiveStrategy(context) {
         const pattern = this.extractPattern(context);
         const learningData = this.learningData.get(pattern);
-        // Analizza storico per determinare strategia
         if (!learningData || learningData.successfulChoices.length < 5) {
             return {
                 strategy: 'exploratory',
@@ -231,7 +204,6 @@ class AgentLearningSystem {
         }
     }
     extractPattern(context) {
-        // Crea pattern identificativo basato su task e contesto
         const taskKey = context.task.toLowerCase()
             .replace(/[^a-z0-9\s]/g, '')
             .split(' ')
@@ -246,26 +218,20 @@ class AgentLearningSystem {
     }
     calculateToolScores(learningData, context) {
         const scores = {};
-        // Analizza scelte passate
         learningData.successfulChoices.forEach(choice => {
             if (!scores[choice.tool])
                 scores[choice.tool] = 0;
-            // Peso basato su outcome
             const outcomeWeight = choice.outcome === 'success' ? 1 : -0.5;
-            // Peso basato su tempo (preferisci esecuzioni più veloci)
             const timeWeight = choice.executionTime < 3000 ? 1.2 : choice.executionTime < 10000 ? 1.0 : 0.8;
-            // Peso basato su recency (preferisci dati più recenti)
             const age = Date.now() - new Date(choice.timestamp).getTime();
-            const recencyWeight = Math.max(0.5, 1 - (age / (30 * 24 * 60 * 60 * 1000))); // Decadimento in 30 giorni
+            const recencyWeight = Math.max(0.5, 1 - (age / (30 * 24 * 60 * 60 * 1000)));
             scores[choice.tool] += outcomeWeight * timeWeight * recencyWeight * 0.1;
         });
-        // Penalizza tools con failure patterns
         learningData.failurePatterns.forEach(failure => {
             if (scores[failure.tool]) {
                 scores[failure.tool] -= failure.frequency * 0.05;
             }
         });
-        // Normalizza scores
         const maxScore = Math.max(...Object.values(scores));
         if (maxScore > 0) {
             Object.keys(scores).forEach(tool => {
@@ -282,7 +248,6 @@ class AgentLearningSystem {
         return { tool, score };
     }
     getHeuristicRecommendation(context) {
-        // Raccomandazioni basate su euristica quando non c'è apprendimento
         const taskLower = context.task.toLowerCase();
         let recommendedTool = 'docs_request';
         let reasoning = 'Default recommendation for documentation tasks';
@@ -319,7 +284,6 @@ class AgentLearningSystem {
     }
     generatePreventiveActions(learningData, context) {
         const actions = [];
-        // Analizza failure patterns comuni
         const commonFailures = learningData.failurePatterns
             .sort((a, b) => b.frequency - a.frequency)
             .slice(0, 3);
@@ -341,7 +305,6 @@ class AgentLearningSystem {
     }
     generateImprovementSuggestions(failures, toolUsage) {
         const suggestions = [];
-        // Analizza pattern di fallimento
         const groupedFailures = new Map();
         failures.forEach(f => {
             groupedFailures.set(f.error, (groupedFailures.get(f.error) || 0) + f.frequency);
@@ -360,7 +323,6 @@ class AgentLearningSystem {
                 suggestions.push('Add existence validation before operations');
             }
         });
-        // Analizza tool performance
         const lowPerformanceTools = Array.from(toolUsage.entries())
             .filter(([tool, usage]) => usage.total > 5 && (usage.success / usage.total) < 0.7)
             .map(([tool]) => tool);
@@ -370,7 +332,6 @@ class AgentLearningSystem {
         return suggestions;
     }
     getBaseConfidence(tool, context) {
-        // Confidence di base senza dati storici
         const toolConfidence = {
             'docs_request': 0.8,
             'smart_docs_search': 0.85,
@@ -431,5 +392,4 @@ class AgentLearningSystem {
     }
 }
 exports.AgentLearningSystem = AgentLearningSystem;
-// Singleton instance
 exports.agentLearningSystem = new AgentLearningSystem();

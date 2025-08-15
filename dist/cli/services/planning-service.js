@@ -18,21 +18,12 @@ class PlanningService {
         this.autonomousPlanner = new autonomous_planner_1.AutonomousPlanner(this.workingDirectory);
         this.initializeTools();
     }
-    /**
-     * Initialize available tools from ToolService
-     */
     initializeTools() {
         this.availableTools = tool_service_1.toolService.getAvailableTools();
     }
-    /**
-     * Refresh available tools from ToolService
-     */
     refreshAvailableTools() {
         this.initializeTools();
     }
-    /**
-     * Convert ToolCapability to PlanningToolCapability for planning context
-     */
     convertToPlanningTools(tools) {
         return tools.map(tool => ({
             name: tool.name,
@@ -44,9 +35,6 @@ class PlanningService {
             optionalArgs: this.extractOptionalArgs(tool)
         }));
     }
-    /**
-     * Assess risk level for a tool based on its category and name
-     */
     assessToolRisk(tool) {
         if (tool.category === 'command' || tool.name.includes('delete') || tool.name.includes('remove')) {
             return 'high';
@@ -56,32 +44,21 @@ class PlanningService {
         }
         return 'low';
     }
-    /**
-     * Determine if a tool operation is reversible
-     */
     isToolReversible(tool) {
         const irreversibleOperations = ['delete', 'remove', 'execute', 'install'];
         return !irreversibleOperations.some(op => tool.name.toLowerCase().includes(op));
     }
-    /**
-     * Estimate duration for tool execution
-     */
     estimateToolDuration(tool) {
         switch (tool.category) {
-            case 'command': return 10000; // 10 seconds
-            case 'package': return 30000; // 30 seconds
-            case 'analysis': return 5000; // 5 seconds
-            case 'git': return 3000; // 3 seconds
-            case 'file': return 1000; // 1 second
+            case 'command': return 10000;
+            case 'package': return 30000;
+            case 'analysis': return 5000;
+            case 'git': return 3000;
+            case 'file': return 1000;
             default: return 5000;
         }
     }
-    /**
-     * Extract required arguments (simplified - in production would use reflection)
-     */
     extractRequiredArgs(tool) {
-        // This is a simplified implementation
-        // In production, this would introspect the tool handler function
         if (tool.name.includes('file'))
             return ['filePath'];
         if (tool.name.includes('command'))
@@ -90,12 +67,7 @@ class PlanningService {
             return [];
         return [];
     }
-    /**
-     * Extract optional arguments (simplified - in production would use reflection)
-     */
     extractOptionalArgs(tool) {
-        // This is a simplified implementation
-        // In production, this would introspect the tool handler function
         if (tool.name.includes('file'))
             return ['encoding', 'backup'];
         if (tool.name.includes('command'))
@@ -105,9 +77,6 @@ class PlanningService {
     setWorkingDirectory(dir) {
         this.workingDirectory = dir;
     }
-    /**
-     * Create a new execution plan
-     */
     async createPlan(userRequest, options = {
         showProgress: true,
         autoExecute: false,
@@ -126,9 +95,6 @@ class PlanningService {
         }
         return plan;
     }
-    /**
-     * Execute a plan autonomously
-     */
     async executePlan(planId, options) {
         const plan = this.activePlans.get(planId);
         if (!plan) {
@@ -137,7 +103,6 @@ class PlanningService {
         }
         console.log(chalk_1.default.green(`🚀 Executing plan: ${plan.title}`));
         try {
-            // Use autonomous planner for execution with streaming
             for await (const event of this.autonomousPlanner.executePlan(plan)) {
                 switch (event.type) {
                     case 'plan_start':
@@ -166,9 +131,6 @@ class PlanningService {
             plan.status = 'failed';
         }
     }
-    /**
-     * Display plan details
-     */
     displayPlan(plan) {
         console.log(chalk_1.default.cyan.bold(`\\n📋 Execution Plan: ${plan.title}`));
         console.log(chalk_1.default.gray(`Description: ${plan.description}`));
@@ -192,24 +154,15 @@ class PlanningService {
             console.log(chalk_1.default.yellow(`📝 Will modify ${plan.riskAssessment.fileModifications} files`));
         }
     }
-    /**
-     * Get all active plans
-     */
     getActivePlans() {
         return Array.from(this.activePlans.values());
     }
-    /**
-     * Update plan status
-     */
     updatePlanStatus(planId, status) {
         const plan = this.activePlans.get(planId);
         if (plan) {
             plan.status = status;
         }
     }
-    /**
-     * Add todo to plan
-     */
     addTodoToPlan(planId, todo) {
         const plan = this.activePlans.get(planId);
         if (plan) {
@@ -220,9 +173,6 @@ class PlanningService {
             plan.todos.push(newTodo);
         }
     }
-    /**
-     * Update todo status
-     */
     updateTodoStatus(planId, todoId, status) {
         const plan = this.activePlans.get(planId);
         if (plan) {
@@ -232,9 +182,6 @@ class PlanningService {
             }
         }
     }
-    /**
-     * Clear completed plans
-     */
     clearCompletedPlans() {
         const completedCount = Array.from(this.activePlans.values())
             .filter(p => p.status === 'completed').length;
@@ -246,9 +193,6 @@ class PlanningService {
         console.log(chalk_1.default.green(`🧹 Cleared ${completedCount} completed plans`));
         return completedCount;
     }
-    /**
-     * Get plan statistics
-     */
     getStatistics() {
         const plans = Array.from(this.activePlans.values());
         return {

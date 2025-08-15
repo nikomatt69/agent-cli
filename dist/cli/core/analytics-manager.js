@@ -10,32 +10,27 @@ class AnalyticsManager {
         this.analyticsFile = (0, path_1.join)(workingDirectory, '.nikcli-analytics.json');
         this.loadAnalytics();
     }
-    // Track an analytics event
     trackEvent(event) {
         const fullEvent = {
             ...event,
             timestamp: new Date()
         };
         this.events.push(fullEvent);
-        // Keep only recent events
         if (this.events.length > this.maxEvents) {
             this.events = this.events.slice(-this.maxEvents);
         }
-        // Save periodically
         if (this.events.length % 100 === 0) {
             this.saveAnalytics();
         }
     }
-    // Track a query
     trackQuery(sessionId, query, metadata) {
         this.trackEvent({
             eventType: 'query',
             sessionId,
-            data: { query: query.substring(0, 200) }, // Truncate for privacy
+            data: { query: query.substring(0, 200) },
             metadata
         });
     }
-    // Track a response
     trackResponse(sessionId, response, processingTime, metadata) {
         this.trackEvent({
             eventType: 'response',
@@ -49,7 +44,6 @@ class AnalyticsManager {
             metadata
         });
     }
-    // Track tool calls
     trackToolCall(sessionId, toolName, success, duration) {
         this.trackEvent({
             eventType: 'tool_call',
@@ -57,7 +51,6 @@ class AnalyticsManager {
             data: { toolName, success, duration }
         });
     }
-    // Track cache hits
     trackCacheHit(sessionId, cacheType, tokensSaved) {
         this.trackEvent({
             eventType: 'cache_hit',
@@ -65,7 +58,6 @@ class AnalyticsManager {
             data: { cacheType, tokensSaved }
         });
     }
-    // Track performance metrics
     trackPerformance(sessionId, metrics) {
         this.trackEvent({
             eventType: 'performance',
@@ -73,22 +65,18 @@ class AnalyticsManager {
             data: metrics
         });
     }
-    // Get analytics summary
     getSummary() {
-        const recentEvents = this.events.filter(e => e.timestamp > new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
-        );
+        const recentEvents = this.events.filter(e => e.timestamp > new Date(Date.now() - 24 * 60 * 60 * 1000));
         const queries = recentEvents.filter(e => e.eventType === 'query');
         const responses = recentEvents.filter(e => e.eventType === 'response');
         const toolCalls = recentEvents.filter(e => e.eventType === 'tool_call');
         const cacheHits = recentEvents.filter(e => e.eventType === 'cache_hit');
         const errors = recentEvents.filter(e => e.eventType === 'error');
-        // Calculate tool usage
         const toolUsage = {};
         toolCalls.forEach(event => {
             const toolName = event.data.toolName;
             toolUsage[toolName] = (toolUsage[toolName] || 0) + 1;
         });
-        // Get popular queries
         const queryTexts = queries.map(e => e.data.query);
         const queryFrequency = {};
         queryTexts.forEach(query => {
@@ -110,7 +98,6 @@ class AnalyticsManager {
             performanceTrends: this.getPerformanceTrends()
         };
     }
-    // Get performance trends
     getPerformanceTrends() {
         const performanceEvents = this.events.filter(e => e.eventType === 'performance');
         return performanceEvents.slice(-10).map(e => ({
@@ -118,7 +105,6 @@ class AnalyticsManager {
             ...e.data
         }));
     }
-    // Generate insights
     generateInsights() {
         const summary = this.getSummary();
         const insights = [];
@@ -138,7 +124,6 @@ class AnalyticsManager {
         }
         return insights;
     }
-    // Save analytics to file
     saveAnalytics() {
         try {
             const data = {
@@ -151,7 +136,6 @@ class AnalyticsManager {
             console.warn('Failed to save analytics:', error);
         }
     }
-    // Load analytics from file
     loadAnalytics() {
         try {
             if ((0, fs_1.existsSync)(this.analyticsFile)) {
@@ -166,7 +150,6 @@ class AnalyticsManager {
             console.warn('Failed to load analytics:', error);
         }
     }
-    // Export analytics report
     exportReport() {
         const summary = this.getSummary();
         const insights = this.generateInsights();

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.agentStream = exports.AgentStreamManager = void 0;
 const events_1 = require("events");
 const chalk_1 = __importDefault(require("chalk"));
+const crypto_1 = require("crypto");
 class AgentStreamManager extends events_1.EventEmitter {
     constructor() {
         super(...arguments);
@@ -13,19 +14,16 @@ class AgentStreamManager extends events_1.EventEmitter {
         this.actions = new Map();
         this.activeAgents = new Set();
     }
-    // Start streaming for an agent
     startAgentStream(agentId) {
         this.activeAgents.add(agentId);
         this.streams.set(agentId, []);
         this.actions.set(agentId, []);
         this.emitEvent(agentId, 'info', `🚀 Agent ${agentId} stream started`);
     }
-    // Stop streaming for an agent
     stopAgentStream(agentId) {
         this.activeAgents.delete(agentId);
         this.emitEvent(agentId, 'info', `✅ Agent ${agentId} stream completed`);
     }
-    // Emit a stream event
     emitEvent(agentId, type, message, data, progress) {
         const event = {
             type,
@@ -35,13 +33,10 @@ class AgentStreamManager extends events_1.EventEmitter {
             timestamp: new Date(),
             progress,
         };
-        // Add to agent's stream
         const agentStream = this.streams.get(agentId) || [];
         agentStream.push(event);
         this.streams.set(agentId, agentStream);
-        // Display in real-time
         this.displayEvent(event);
-        // Emit to listeners
         this.emit('stream', event);
     }
     displayEvent(event) {
@@ -90,10 +85,9 @@ class AgentStreamManager extends events_1.EventEmitter {
             console.log(chalk_1.default.gray(`    ${JSON.stringify(event.data, null, 2)}`));
         }
     }
-    // Track agent actions
     trackAction(agentId, actionType, description, input) {
         const action = {
-            id: `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `${agentId}-${Date.now()}-${(0, crypto_1.randomBytes)(6).toString('base64url')}`,
             agentId,
             type: actionType,
             description,
@@ -107,9 +101,7 @@ class AgentStreamManager extends events_1.EventEmitter {
         this.emitEvent(agentId, 'executing', `Starting: ${description}`);
         return action.id;
     }
-    // Update action status
     updateAction(actionId, status, output, error) {
-        // Find the action across all agents
         for (const [agentId, actions] of Array.from(this.actions.entries())) {
             const action = actions.find(a => a.id === actionId);
             if (action) {
@@ -128,15 +120,13 @@ class AgentStreamManager extends events_1.EventEmitter {
             }
         }
     }
-    // Stream thinking process
     async streamThinking(agentId, thoughts) {
         this.emitEvent(agentId, 'thinking', 'Analyzing requirements...');
         for (const thought of thoughts) {
-            await new Promise(resolve => setTimeout(resolve, 200)); // Simulate thinking time
+            await new Promise(resolve => setTimeout(resolve, 200));
             this.emitEvent(agentId, 'thinking', thought);
         }
     }
-    // Stream planning process
     async streamPlanning(agentId, planSteps) {
         this.emitEvent(agentId, 'planning', 'Creating execution plan...');
         for (let i = 0; i < planSteps.length; i++) {
@@ -145,26 +135,21 @@ class AgentStreamManager extends events_1.EventEmitter {
         }
         this.emitEvent(agentId, 'planning', `Plan created with ${planSteps.length} steps`);
     }
-    // Stream progress updates
     streamProgress(agentId, current, total, message) {
         const progress = Math.round((current / total) * 100);
         const progressMessage = message || `Progress: ${current}/${total}`;
         this.emitEvent(agentId, 'progress', progressMessage, { current, total }, progress);
     }
-    // Get agent stream history
     getAgentStream(agentId, limit) {
         const stream = this.streams.get(agentId) || [];
         return limit ? stream.slice(-limit) : stream;
     }
-    // Get agent actions
     getAgentActions(agentId) {
         return this.actions.get(agentId) || [];
     }
-    // Get all active agents
     getActiveAgents() {
         return Array.from(this.activeAgents);
     }
-    // Display live dashboard for all active agents
     showLiveDashboard() {
         const activeAgents = this.getActiveAgents();
         if (activeAgents.length === 0) {
@@ -191,18 +176,15 @@ class AgentStreamManager extends events_1.EventEmitter {
             });
         });
     }
-    // Stream agent collaboration
     streamCollaboration(fromAgent, toAgent, message, data) {
         this.emitEvent(fromAgent, 'info', `📤 Sent to ${toAgent}: ${message}`, data);
         this.emitEvent(toAgent, 'info', `📥 Received from ${fromAgent}: ${message}`, data);
     }
-    // Clear stream history for an agent
     clearAgentStream(agentId) {
         this.streams.delete(agentId);
         this.actions.delete(agentId);
         this.emitEvent(agentId, 'info', 'Stream history cleared');
     }
-    // Export stream to file
     exportStream(agentId, filename) {
         const stream = this.getAgentStream(agentId);
         const actions = this.getAgentActions(agentId);
@@ -223,19 +205,16 @@ class AgentStreamManager extends events_1.EventEmitter {
         console.log(chalk_1.default.green(`📄 Stream exported to ${fileName}`));
         return fileName;
     }
-    // Real-time metrics
     getMetrics() {
         const activeAgents = this.activeAgents.size;
         const totalEvents = Array.from(this.streams.values())
             .reduce((sum, events) => sum + events.length, 0);
         const totalActions = Array.from(this.actions.values())
             .reduce((sum, actions) => sum + actions.length, 0);
-        // Calculate events per minute (last 60 seconds)
         const oneMinuteAgo = new Date(Date.now() - 60000);
         const recentEvents = Array.from(this.streams.values())
             .flat()
             .filter(e => e.timestamp > oneMinuteAgo);
-        // Calculate average action duration
         const completedActions = Array.from(this.actions.values())
             .flat()
             .filter(a => a.status === 'completed' && a.endTime);

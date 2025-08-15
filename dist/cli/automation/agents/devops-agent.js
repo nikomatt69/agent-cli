@@ -69,7 +69,6 @@ class DevOpsAgent extends base_agent_1.BaseAgent {
             return { error: error.message, taskData, agent: 'DevOps Expert' };
         }
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

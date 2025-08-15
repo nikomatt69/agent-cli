@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import chalk from 'chalk';
+import { randomBytes } from 'crypto';
 
 export interface StreamEvent {
   type: 'thinking' | 'planning' | 'executing' | 'progress' | 'result' | 'error' | 'info';
@@ -122,7 +123,7 @@ export class AgentStreamManager extends EventEmitter {
   // Track agent actions
   trackAction(agentId: string, actionType: AgentAction['type'], description: string, input?: any): string {
     const action: AgentAction = {
-      id: `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `${agentId}-${Date.now()}-${randomBytes(6).toString('base64url')}`,
       agentId,
       type: actionType,
       description,

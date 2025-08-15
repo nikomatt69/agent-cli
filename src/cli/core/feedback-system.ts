@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import { getCloudDocsProvider } from './cloud-docs-provider';
+import { randomBytes } from 'crypto';
 
 export interface FeedbackEntry {
   id: string;
@@ -347,7 +348,7 @@ export class FeedbackSystem {
   }
 
   private generateId(): string {
-    return `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `feedback_${Date.now()}_${randomBytes(6).toString('base64url')}`;
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {

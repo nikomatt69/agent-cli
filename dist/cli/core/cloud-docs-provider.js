@@ -58,7 +58,6 @@ class CloudDocsProvider {
             smartSuggestions: true,
             ...config
         };
-        // Carica automaticamente le API keys dal config manager se non fornite
         if (!this.config.apiUrl || !this.config.apiKey) {
             const cloudKeys = config_manager_1.simpleConfigManager.getCloudDocsApiKeys();
             if (!this.config.apiUrl && cloudKeys.apiUrl) {
@@ -70,11 +69,7 @@ class CloudDocsProvider {
         }
         this.cacheDir = cacheDir;
         this.sharedIndexFile = path.join(cacheDir, 'shared-docs-index.json');
-        // Non chiamare async nel costruttore - inizializzazione lazy
     }
-    /**
-     * Inizializza il provider se non già fatto
-     */
     async ensureInitialized() {
         if (this.isInitialized)
             return;
@@ -97,9 +92,6 @@ class CloudDocsProvider {
             console.error(chalk_1.default.red(`❌ Failed to initialize Supabase: ${error.message}`));
         }
     }
-    /**
-     * Sincronizza libreria locale con cloud
-     */
     async sync() {
         await this.ensureInitialized();
         if (!this.isInitialized || !this.supabase) {
@@ -107,7 +99,6 @@ class CloudDocsProvider {
         }
         console.log(chalk_1.default.blue('🔄 Synchronizing with cloud library...'));
         try {
-            // Download nuovi docs dal cloud
             const { data: cloudDocs, error: fetchError } = await this.supabase
                 .from('shared_docs')
                 .select('*')
@@ -117,15 +108,12 @@ class CloudDocsProvider {
                 throw fetchError;
             let downloaded = 0;
             let uploaded = 0;
-            // Salva indice dei docs condivisi
             if (cloudDocs && cloudDocs.length > 0) {
                 await this.saveSharedIndex(cloudDocs);
                 downloaded = cloudDocs.length;
                 console.log(chalk_1.default.green(`📥 Downloaded ${downloaded} shared documents`));
             }
-            // TODO: Upload docs locali se contributionMode è abilitato
             if (this.config.contributionMode) {
-                // Implementazione per upload docs locali
                 console.log(chalk_1.default.gray('📤 Contribution mode enabled (upload not yet implemented)'));
             }
             console.log(chalk_1.default.green(`✅ Sync completed: ${downloaded} downloaded, ${uploaded} uploaded`));
@@ -136,9 +124,6 @@ class CloudDocsProvider {
             throw error;
         }
     }
-    /**
-     * Pubblica un documento nella libreria condivisa
-     */
     async publishDoc(doc) {
         await this.ensureInitialized();
         if (!this.isInitialized || !this.supabase) {
@@ -149,7 +134,7 @@ class CloudDocsProvider {
             const sharedDoc = {
                 title: doc.title,
                 url: doc.url,
-                content: doc.content.substring(0, 50000), // Limit content size
+                content: doc.content.substring(0, 50000),
                 category: doc.category,
                 tags: doc.tags,
                 language: doc.metadata.language,
@@ -172,9 +157,6 @@ class CloudDocsProvider {
             throw error;
         }
     }
-    /**
-     * Cerca nella libreria condivisa
-     */
     async searchShared(query, category, limit = 10) {
         await this.ensureInitialized();
         if (!this.isInitialized || !this.supabase) {
@@ -184,11 +166,9 @@ class CloudDocsProvider {
             let queryBuilder = this.supabase
                 .from('shared_docs')
                 .select('*');
-            // Filtro per categoria
             if (category) {
                 queryBuilder = queryBuilder.eq('category', category);
             }
-            // Search in title and content (basic text search)
             queryBuilder = queryBuilder.or(`title.ilike.%${query}%, content.ilike.%${query}%`);
             const { data, error } = await queryBuilder
                 .order('popularity_score', { ascending: false })
@@ -202,9 +182,6 @@ class CloudDocsProvider {
             throw error;
         }
     }
-    /**
-     * Ottieni librerie popolari
-     */
     async getPopularLibraries(limit = 20) {
         await this.ensureInitialized();
         if (!this.isInitialized || !this.supabase) {
@@ -225,9 +202,6 @@ class CloudDocsProvider {
             return [];
         }
     }
-    /**
-     * Installa una libreria di documenti
-     */
     async installLibrary(libraryName) {
         await this.ensureInitialized();
         if (!this.isInitialized || !this.supabase) {
@@ -235,7 +209,6 @@ class CloudDocsProvider {
         }
         console.log(chalk_1.default.blue(`📦 Installing library: ${libraryName}`));
         try {
-            // Cerca la libreria per nome
             const { data: library, error: libError } = await this.supabase
                 .from('docs_libraries')
                 .select('*')
@@ -245,14 +218,12 @@ class CloudDocsProvider {
                 throw libError;
             if (!library)
                 throw new Error(`Library '${libraryName}' not found`);
-            // Ottieni i documenti della libreria
             const { data: docs, error: docsError } = await this.supabase
                 .from('shared_docs')
                 .select('*')
                 .in('id', library.doc_ids);
             if (docsError)
                 throw docsError;
-            // Incrementa il contatore di installazioni
             await this.supabase
                 .from('docs_libraries')
                 .update({ installs_count: library.installs_count + 1 })
@@ -265,9 +236,6 @@ class CloudDocsProvider {
             throw error;
         }
     }
-    /**
-     * Salva indice docs condivisi in cache locale
-     */
     async saveSharedIndex(docs) {
         try {
             const index = {
@@ -291,9 +259,6 @@ class CloudDocsProvider {
             console.error('Failed to save shared docs index:', error);
         }
     }
-    /**
-     * Carica indice docs condivisi dalla cache
-     */
     async loadSharedIndex() {
         try {
             const data = await fs.readFile(this.sharedIndexFile, 'utf-8');
@@ -303,26 +268,19 @@ class CloudDocsProvider {
             return { lastSync: null, totalDocs: 0, docs: [] };
         }
     }
-    /**
-     * Verifica se è inizializzato
-     */
     isReady() {
         return this.isInitialized && this.supabase !== null;
     }
-    /**
-     * Ottieni statistiche cloud
-     */
     async getCloudStats() {
         const index = await this.loadSharedIndex();
         return {
             totalSharedDocs: index.totalDocs,
-            totalLibraries: 0, // TODO: implement
+            totalLibraries: 0,
             lastSync: index.lastSync
         };
     }
 }
 exports.CloudDocsProvider = CloudDocsProvider;
-// Singleton instance
 let cloudDocsProvider = null;
 function createCloudDocsProvider(config) {
     if (!cloudDocsProvider) {

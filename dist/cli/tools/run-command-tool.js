@@ -39,25 +39,19 @@ const util_1 = require("util");
 const base_tool_1 = require("./base-tool");
 const cli_ui_1 = require("../utils/cli-ui");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
-/**
- * Production-ready Run Command Tool
- * Safely executes commands with whitelist, sandboxing, and monitoring
- */
 class RunCommandTool extends base_tool_1.BaseTool {
     constructor(workingDirectory, config = {}) {
         super('run-command-tool', workingDirectory);
         this.allowedCommands = new Set(config.allowedCommands || DEFAULT_ALLOWED_COMMANDS);
         this.allowedPaths = new Set(config.allowedPaths || [workingDirectory]);
-        this.maxExecutionTime = config.maxExecutionTime || 30000; // 30 seconds
-        this.maxOutputSize = config.maxOutputSize || 1024 * 1024; // 1MB
+        this.maxExecutionTime = config.maxExecutionTime || 30000;
+        this.maxOutputSize = config.maxOutputSize || 1024 * 1024;
     }
     async execute(command, options = {}) {
         const startTime = Date.now();
         try {
-            // Parse and validate command
             const parsedCommand = this.parseCommand(command);
             await this.validateCommand(parsedCommand, options);
-            // Execute command with monitoring
             const result = await this.executeWithMonitoring(parsedCommand, options);
             const duration = Date.now() - startTime;
             const commandResult = {
@@ -120,9 +114,6 @@ class RunCommandTool extends base_tool_1.BaseTool {
             };
         }
     }
-    /**
-     * Execute multiple commands in sequence
-     */
     async executeSequence(commands, options = {}) {
         const results = [];
         let successCount = 0;
@@ -169,13 +160,9 @@ class RunCommandTool extends base_tool_1.BaseTool {
             summary: this.generateSequenceSummary(results)
         };
     }
-    /**
-     * Execute command with real-time output streaming
-     */
     async executeWithStreaming(command, options = {}) {
         return new Promise((resolve, reject) => {
             const parsedCommand = this.parseCommand(command);
-            // Validate command first
             this.validateCommand(parsedCommand, options).then(() => {
                 const startTime = Date.now();
                 let stdout = '';
@@ -188,18 +175,15 @@ class RunCommandTool extends base_tool_1.BaseTool {
                     env: { ...process.env, ...options.env },
                     stdio: ['pipe', 'pipe', 'pipe']
                 });
-                // Set up timeout
                 const timeout = setTimeout(() => {
                     timedOut = true;
                     child.kill('SIGTERM');
-                    // Force kill after 5 seconds
                     setTimeout(() => {
                         if (!child.killed) {
                             child.kill('SIGKILL');
                         }
                     }, 5000);
                 }, this.maxExecutionTime);
-                // Handle stdout
                 child.stdout?.on('data', (data) => {
                     const chunk = data.toString();
                     outputSize += chunk.length;
@@ -213,7 +197,6 @@ class RunCommandTool extends base_tool_1.BaseTool {
                         options.onStdout(chunk);
                     }
                 });
-                // Handle stderr
                 child.stderr?.on('data', (data) => {
                     const chunk = data.toString();
                     outputSize += chunk.length;
@@ -227,7 +210,6 @@ class RunCommandTool extends base_tool_1.BaseTool {
                         options.onStderr(chunk);
                     }
                 });
-                // Handle process completion
                 child.on('close', (exitCode, signal) => {
                     clearTimeout(timeout);
                     const result = {
@@ -254,11 +236,7 @@ class RunCommandTool extends base_tool_1.BaseTool {
             }).catch(reject);
         });
     }
-    /**
-     * Parse command string into executable and arguments
-     */
     parseCommand(command) {
-        // Simple command parsing - in production, consider using a proper shell parser
         const parts = command.trim().split(/\s+/);
         const executable = parts[0];
         const args = parts.slice(1);
@@ -266,18 +244,13 @@ class RunCommandTool extends base_tool_1.BaseTool {
             original: command,
             executable,
             args,
-            fullPath: executable // Will be resolved during validation
+            fullPath: executable
         };
     }
-    /**
-     * Validate command against security policies
-     */
     async validateCommand(parsedCommand, options) {
-        // Check if command is in whitelist
         if (!this.allowedCommands.has(parsedCommand.executable)) {
             throw new Error(`Command not allowed: ${parsedCommand.executable}`);
         }
-        // Validate working directory
         const workingDir = options.cwd || this.workingDirectory;
         if (!this.allowedPaths.has(workingDir)) {
             const isSubPath = Array.from(this.allowedPaths).some(allowedPath => workingDir.startsWith(allowedPath));
@@ -285,16 +258,15 @@ class RunCommandTool extends base_tool_1.BaseTool {
                 throw new Error(`Working directory not allowed: ${workingDir}`);
             }
         }
-        // Check for dangerous arguments
         const dangerousPatterns = [
             /rm\s+-rf/,
             /sudo/,
             /chmod\s+777/,
-            />/, // Output redirection
-            /\|/, // Pipes
-            /;/, // Command chaining
-            /&&/, // Command chaining
-            /\|\|/, // Command chaining
+            />/,
+            /\|/,
+            /;/,
+            /&&/,
+            /\|\|/,
         ];
         const fullCommand = `${parsedCommand.executable} ${parsedCommand.args.join(' ')}`;
         for (const pattern of dangerousPatterns) {
@@ -302,30 +274,22 @@ class RunCommandTool extends base_tool_1.BaseTool {
                 throw new Error(`Dangerous command pattern detected: ${pattern.source}`);
             }
         }
-        // Validate file paths in arguments
         for (const arg of parsedCommand.args) {
             if (arg.startsWith('/') || arg.includes('..')) {
-                // This looks like a file path, validate it
                 try {
                     const fs = await Promise.resolve().then(() => __importStar(require('fs/promises')));
                     const resolvedPath = require('path').resolve(workingDir, arg);
-                    // Check if path is within allowed directories
                     const isAllowed = Array.from(this.allowedPaths).some(allowedPath => resolvedPath.startsWith(allowedPath));
                     if (!isAllowed) {
                         throw new Error(`File path not allowed: ${arg}`);
                     }
                 }
                 catch {
-                    // If path validation fails, it might not be a file path
-                    // Continue with execution but log warning
                     cli_ui_1.CliUI.logWarning(`Could not validate path argument: ${arg}`);
                 }
             }
         }
     }
-    /**
-     * Execute command with monitoring and limits
-     */
     async executeWithMonitoring(parsedCommand, options) {
         return new Promise((resolve, reject) => {
             let stdout = '';
@@ -385,9 +349,6 @@ class RunCommandTool extends base_tool_1.BaseTool {
             });
         });
     }
-    /**
-     * Generate summary for command sequence
-     */
     generateSequenceSummary(results) {
         const successful = results.filter(r => r.success);
         const failed = results.filter(r => !r.success);
@@ -401,36 +362,23 @@ class RunCommandTool extends base_tool_1.BaseTool {
             longestCommand: results.reduce((max, r) => r.duration > max.duration ? r : max, results[0])?.command || ''
         };
     }
-    /**
-     * Add command to whitelist
-     */
     addAllowedCommand(command) {
         this.allowedCommands.add(command);
         cli_ui_1.CliUI.logInfo(`Added command to whitelist: ${command}`);
     }
-    /**
-     * Remove command from whitelist
-     */
     removeAllowedCommand(command) {
         this.allowedCommands.delete(command);
         cli_ui_1.CliUI.logInfo(`Removed command from whitelist: ${command}`);
     }
-    /**
-     * Get current whitelist
-     */
     getAllowedCommands() {
         return Array.from(this.allowedCommands);
     }
-    /**
-     * Add allowed path
-     */
     addAllowedPath(path) {
         this.allowedPaths.add(path);
         cli_ui_1.CliUI.logInfo(`Added path to whitelist: ${path}`);
     }
 }
 exports.RunCommandTool = RunCommandTool;
-// Default allowed commands (safe, common development commands)
 const DEFAULT_ALLOWED_COMMANDS = [
     'ls', 'dir', 'pwd', 'echo', 'cat', 'head', 'tail', 'grep', 'find', 'wc',
     'git', 'npm', 'yarn', 'node', 'python', 'python3', 'pip', 'pip3',

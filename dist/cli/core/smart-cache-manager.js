@@ -5,83 +5,75 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.smartCache = exports.SmartCacheManager = void 0;
 const chalk_1 = __importDefault(require("chalk"));
+const crypto_1 = require("crypto");
 class SmartCacheManager {
     constructor() {
         this.cache = new Map();
         this.strategies = new Map();
-        this.accessPatterns = new Map(); // Track access frequency
+        this.accessPatterns = new Map();
         this.initializeDefaultStrategies();
     }
     initializeDefaultStrategies() {
-        // STRATEGIA 1: Cache per comandi semplici (alta priorità)
         this.strategies.set('simple_commands', {
             name: 'Simple Commands',
             enabled: true,
-            maxAge: 12 * 60 * 60 * 1000, // 12 ore (ridotto)
-            maxSize: 50, // Ridotto
-            similarityThreshold: 0.98, // Quasi identico
+            maxAge: 12 * 60 * 60 * 1000,
+            maxSize: 50,
+            similarityThreshold: 0.98,
             tags: ['command', 'simple', 'frequent'],
             conditions: [
-                { type: 'content_length', value: 100, operator: 'less_than' }, // Più permissivo
+                { type: 'content_length', value: 100, operator: 'less_than' },
                 { type: 'request_type', value: ['help', 'status', 'list', 'info'], operator: 'contains' }
             ]
         });
-        // STRATEGIA 2: Cache per analisi di codice (media priorità)
         this.strategies.set('code_analysis', {
             name: 'Code Analysis',
             enabled: true,
-            maxAge: 60 * 60 * 1000, // 1 ora (ridotto)
-            maxSize: 30, // Ridotto
-            similarityThreshold: 0.98, // Quasi identico
+            maxAge: 60 * 60 * 1000,
+            maxSize: 30,
+            similarityThreshold: 0.98,
             tags: ['analysis', 'code', 'review'],
             conditions: [
                 { type: 'request_type', value: ['analyze', 'review', 'check'], operator: 'contains' },
-                { type: 'content_length', value: 150, operator: 'greater_than' } // Più permissivo
+                { type: 'content_length', value: 150, operator: 'greater_than' }
             ]
         });
-        // STRATEGIA 3: Cache per generazione codice (bassa priorità)
         this.strategies.set('code_generation', {
             name: 'Code Generation',
-            enabled: false, // Disabilitata di default - troppo specifica
-            maxAge: 30 * 60 * 1000, // 30 minuti (ridotto)
-            maxSize: 10, // Ridotto
-            similarityThreshold: 0.98, // Quasi identico
+            enabled: false,
+            maxAge: 30 * 60 * 1000,
+            maxSize: 10,
+            similarityThreshold: 0.98,
             tags: ['generation', 'code', 'create'],
             conditions: [
                 { type: 'request_type', value: ['create', 'generate', 'build'], operator: 'contains' }
             ]
         });
-        // STRATEGIA 4: Cache per domande frequenti (alta priorità)
         this.strategies.set('frequent_questions', {
             name: 'Frequent Questions',
             enabled: true,
-            maxAge: 3 * 24 * 60 * 60 * 1000, // 3 giorni (ridotto)
-            maxSize: 100, // Ridotto
-            similarityThreshold: 0.98, // Quasi identico
+            maxAge: 3 * 24 * 60 * 60 * 1000,
+            maxSize: 100,
+            similarityThreshold: 0.98,
             tags: ['faq', 'help', 'common'],
             conditions: [
-                { type: 'frequency', value: 2, operator: 'greater_than' } // Più permissivo (2 accessi)
+                { type: 'frequency', value: 2, operator: 'greater_than' }
             ]
         });
-        // STRATEGIA 5: Cache per tool calls (media priorità)
         this.strategies.set('tool_calls', {
             name: 'Tool Calls',
             enabled: true,
-            maxAge: 15 * 60 * 1000, // 15 minuti (ridotto)
-            maxSize: 50, // Ridotto
-            similarityThreshold: 0.98, // Quasi identico
+            maxAge: 15 * 60 * 1000,
+            maxSize: 50,
+            similarityThreshold: 0.98,
             tags: ['tool', 'execution', 'command'],
             conditions: [
                 { type: 'request_type', value: ['run', 'execute', 'tool'], operator: 'contains' }
             ]
         });
     }
-    /**
-     * Determina se una richiesta dovrebbe essere cachata
-     */
     shouldCache(content, context = '') {
         const normalizedContent = this.normalizeContent(content);
-        // Controlla ogni strategia
         for (const [strategyId, strategy] of this.strategies) {
             if (!strategy.enabled)
                 continue;
@@ -98,9 +90,6 @@ class SmartCacheManager {
             reason: 'No matching cache strategy'
         };
     }
-    /**
-     * Verifica se il contenuto corrisponde a una strategia
-     */
     matchesStrategy(content, context, strategy) {
         for (const condition of strategy.conditions) {
             if (!this.evaluateCondition(content, context, condition)) {
@@ -109,9 +98,6 @@ class SmartCacheManager {
         }
         return true;
     }
-    /**
-     * Valuta una singola condizione
-     */
     evaluateCondition(content, context, condition) {
         switch (condition.type) {
             case 'content_length':
@@ -129,13 +115,9 @@ class SmartCacheManager {
                 return false;
         }
     }
-    /**
-     * Rileva il tipo di richiesta
-     */
     detectRequestType(content) {
         const types = [];
         const lower = content.toLowerCase();
-        // Comandi semplici
         if (lower.includes('help') || lower.includes('aiuto'))
             types.push('help');
         if (lower.includes('status') || lower.includes('stato'))
@@ -144,21 +126,18 @@ class SmartCacheManager {
             types.push('list');
         if (lower.includes('info') || lower.includes('informazioni'))
             types.push('info');
-        // Analisi
         if (lower.includes('analyze') || lower.includes('analizza'))
             types.push('analyze');
         if (lower.includes('review') || lower.includes('revisiona'))
             types.push('review');
         if (lower.includes('check') || lower.includes('controlla'))
             types.push('check');
-        // Generazione
         if (lower.includes('create') || lower.includes('crea'))
             types.push('create');
         if (lower.includes('generate') || lower.includes('genera'))
             types.push('generate');
         if (lower.includes('build') || lower.includes('costruisci'))
             types.push('build');
-        // Tool calls
         if (lower.includes('run') || lower.includes('esegui'))
             types.push('run');
         if (lower.includes('execute') || lower.includes('esegui'))
@@ -167,9 +146,6 @@ class SmartCacheManager {
             types.push('tool');
         return types;
     }
-    /**
-     * Confronta valori con operatori
-     */
     compare(actual, expected, operator) {
         switch (operator) {
             case 'equals':
@@ -189,18 +165,12 @@ class SmartCacheManager {
                 return false;
         }
     }
-    /**
-     * Normalizza il contenuto per il confronto
-     */
     normalizeContent(content) {
         return content
             .toLowerCase()
             .replace(/\s+/g, ' ')
             .trim();
     }
-    /**
-     * Cerca una risposta nella cache
-     */
     async getCachedResponse(content, context = '') {
         const cacheDecision = this.shouldCache(content, context);
         if (!cacheDecision.should) {
@@ -209,27 +179,21 @@ class SmartCacheManager {
         const strategy = this.strategies.get(cacheDecision.strategy);
         if (!strategy)
             return null;
-        // Cerca match nella cache
         const normalizedContent = this.normalizeContent(content);
         const normalizedContext = this.normalizeContent(context);
         for (const [id, entry] of this.cache) {
-            // Verifica età
             const age = Date.now() - entry.timestamp.getTime();
             if (age > strategy.maxAge)
                 continue;
-            // Verifica strategia
             if (entry.strategy !== cacheDecision.strategy)
                 continue;
-            // Calcola similarità
             const contentSimilarity = this.calculateSimilarity(normalizedContent, this.normalizeContent(entry.content));
             const contextSimilarity = this.calculateSimilarity(normalizedContext, this.normalizeContent(entry.context));
             const overallSimilarity = (contentSimilarity * 0.7 + contextSimilarity * 0.3);
             if (overallSimilarity >= strategy.similarityThreshold) {
-                // Aggiorna statistiche
                 entry.lastAccessed = new Date();
                 entry.accessCount++;
                 this.accessPatterns.set(content, (this.accessPatterns.get(content) || 0) + 1);
-                // Determina se è un match esatto
                 entry.exactMatch = overallSimilarity >= 0.99;
                 console.log(chalk_1.default.blue(`🎯 `));
                 return entry;
@@ -237,18 +201,14 @@ class SmartCacheManager {
         }
         return null;
     }
-    /**
-     * Salva una risposta nella cache
-     */
     async setCachedResponse(content, response, context = '', metadata = {}) {
         const cacheDecision = this.shouldCache(content, context);
         if (!cacheDecision.should) {
-            return; // Non cachare se non dovrebbe essere cachato
+            return;
         }
         const strategy = this.strategies.get(cacheDecision.strategy);
         if (!strategy)
             return;
-        // Verifica dimensione cache
         if (this.cache.size >= strategy.maxSize) {
             this.evictOldEntries(strategy);
         }
@@ -272,22 +232,15 @@ class SmartCacheManager {
         this.accessPatterns.set(content, (this.accessPatterns.get(content) || 0) + 1);
         console.log(chalk_1.default.green(`💾 Cached (${strategy.name}): ${content.substring(0, 50)}...`));
     }
-    /**
-     * Rimuove entry vecchie dalla cache
-     */
     evictOldEntries(strategy) {
         const entries = Array.from(this.cache.entries())
             .filter(([_, entry]) => entry.strategy === strategy.name)
             .sort((a, b) => a[1].lastAccessed.getTime() - b[1].lastAccessed.getTime());
-        // Rimuovi il 20% più vecchio
         const toRemove = Math.ceil(entries.length * 0.2);
         for (let i = 0; i < toRemove; i++) {
             this.cache.delete(entries[i][0]);
         }
     }
-    /**
-     * Calcola similarità tra due testi
-     */
     calculateSimilarity(text1, text2) {
         const words1 = new Set(text1.split(/\s+/));
         const words2 = new Set(text2.split(/\s+/));
@@ -295,15 +248,9 @@ class SmartCacheManager {
         const union = new Set([...words1, ...words2]);
         return intersection.size / union.size;
     }
-    /**
-     * Genera ID unico
-     */
     generateId() {
-        return `cache_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `cache_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`;
     }
-    /**
-     * Ottieni statistiche della cache
-     */
     getCacheStats() {
         const stats = {};
         for (const [strategyId, strategy] of this.strategies) {
@@ -318,9 +265,6 @@ class SmartCacheManager {
         }
         return stats;
     }
-    /**
-     * Pulisce cache vecchia
-     */
     cleanup() {
         const now = Date.now();
         let removed = 0;
@@ -338,9 +282,6 @@ class SmartCacheManager {
             console.log(chalk_1.default.yellow(`🧹 Cleaned up ${removed} old cache entries`));
         }
     }
-    /**
-     * Abilita/disabilita strategie
-     */
     setStrategyEnabled(strategyId, enabled) {
         const strategy = this.strategies.get(strategyId);
         if (strategy) {
@@ -348,9 +289,6 @@ class SmartCacheManager {
             console.log(chalk_1.default.blue(`${enabled ? '✅' : '❌'} ${strategy.name} cache ${enabled ? 'enabled' : 'disabled'}`));
         }
     }
-    /**
-     * Mostra stato cache
-     */
     showStatus() {
         console.log(chalk_1.default.blue('\n📊 Smart Cache Status:'));
         const stats = this.getCacheStats();
@@ -362,5 +300,4 @@ class SmartCacheManager {
     }
 }
 exports.SmartCacheManager = SmartCacheManager;
-// Singleton instance
 exports.smartCache = new SmartCacheManager();

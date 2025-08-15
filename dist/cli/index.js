@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 "use strict";
-/**
- * NikCLI - Unified Autonomous AI Development Assistant
- * Consolidated Entry Point with Modular Architecture
- */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -43,7 +39,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StreamingModule = exports.ServiceModule = exports.SystemModule = exports.IntroductionModule = exports.MainOrchestrator = void 0;
 exports.main = main;
-// Load environment variables first
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const chalk_1 = __importDefault(require("chalk"));
@@ -51,7 +46,6 @@ const boxen_1 = __importDefault(require("boxen"));
 const readline = __importStar(require("readline"));
 const events_1 = require("events");
 const child_process_1 = require("child_process");
-// Core imports
 const nik_cli_1 = require("./nik-cli");
 const agent_service_1 = require("./services/agent-service");
 const tool_service_1 = require("./services/tool-service");
@@ -62,7 +56,6 @@ const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
 const register_agents_1 = require("./register-agents");
 const agent_manager_1 = require("./core/agent-manager");
-// ASCII Art Banner
 const banner = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
 ████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
@@ -71,13 +64,9 @@ const banner = `
 ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
 ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝
 `;
-/**
- * Introduction Display Module
- */
 class IntroductionModule {
     static displayBanner() {
         console.clear();
-        // Use realistic solid colors instead of rainbow gradient
         console.log(chalk_1.default.cyanBright(banner));
     }
     static displayApiKeySetup() {
@@ -116,12 +105,8 @@ class IntroductionModule {
     }
 }
 exports.IntroductionModule = IntroductionModule;
-/**
- * System Requirements Module
- */
 class SystemModule {
     static async checkApiKeys() {
-        // Allow running without API keys when using an Ollama model
         try {
             const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
             const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
@@ -130,7 +115,6 @@ class SystemModule {
             }
         }
         catch (_) {
-            // ignore config read errors, fall back to env checks
         }
         const anthropicKey = process.env.ANTHROPIC_API_KEY;
         const openaiKey = process.env.OPENAI_API_KEY;
@@ -148,18 +132,16 @@ class SystemModule {
         return true;
     }
     static async checkOllamaAvailability() {
-        // Only enforce when current provider is Ollama
         try {
             const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
             const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
             if (!modelCfg || modelCfg.provider !== 'ollama') {
-                // Not applicable – clear status indicator
                 SystemModule.lastOllamaStatus = undefined;
                 return true;
             }
         }
         catch (_) {
-            return true; // don't block if config is unreadable
+            return true;
         }
         try {
             const host = process.env.OLLAMA_HOST || '127.0.0.1:11434';
@@ -181,7 +163,6 @@ class SystemModule {
                 const present = data.models.some((m) => m?.name === name || m?.model === name);
                 if (!present && name) {
                     console.log(chalk_1.default.yellow(`⚠️ Ollama is running but model "${name}" is not present.`));
-                    // Offer to pull the model now
                     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
                     const answer = await new Promise(resolve => rl.question(`Pull model now with "ollama pull ${name}"? (Y/n): `, resolve));
                     rl.close();
@@ -239,13 +220,9 @@ class SystemModule {
     }
 }
 exports.SystemModule = SystemModule;
-/**
- * Service Initialization Module
- */
 class ServiceModule {
     static async initializeServices() {
         const workingDir = process.cwd();
-        // Set working directory for all services
         tool_service_1.toolService.setWorkingDirectory(workingDir);
         planning_service_1.planningService.setWorkingDirectory(workingDir);
         lsp_service_1.lspService.setWorkingDirectory(workingDir);
@@ -253,19 +230,15 @@ class ServiceModule {
         console.log(chalk_1.default.dim('   Services configured'));
     }
     static async initializeAgents() {
-        // Create and initialize the core AgentManager
         if (!this.agentManager) {
             this.agentManager = new agent_manager_1.AgentManager(config_manager_1.simpleConfigManager);
             await this.agentManager.initialize();
         }
-        // Register agent classes (e.g., UniversalAgent)
         (0, register_agents_1.registerAgents)(this.agentManager);
-        // Ensure at least one agent instance is created (universal-agent)
         try {
             await this.agentManager.createAgent('universal-agent');
         }
         catch (_) {
-            // If already created or creation failed silently, proceed
         }
         const agents = this.agentManager.listAgents();
         console.log(chalk_1.default.dim(`   Loaded ${agents.length} agents`));
@@ -313,9 +286,6 @@ class ServiceModule {
 exports.ServiceModule = ServiceModule;
 ServiceModule.initialized = false;
 ServiceModule.agentManager = null;
-/**
- * Streaming Orchestrator Module
- */
 class StreamingModule extends events_1.EventEmitter {
     constructor() {
         super();
@@ -341,10 +311,8 @@ class StreamingModule extends events_1.EventEmitter {
         this.startMessageProcessor();
     }
     setupInterface() {
-        // Raw mode for better control
         process.stdin.setRawMode(true);
         require('readline').emitKeypressEvents(process.stdin);
-        // Keypress handlers
         process.stdin.on('keypress', (str, key) => {
             if (key && key.name === 'slash' && !this.processingMessage) {
                 setTimeout(() => this.showCommandMenu(), 50);
@@ -361,7 +329,6 @@ class StreamingModule extends events_1.EventEmitter {
                 }
             }
         });
-        // Input handler
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
             if (!trimmed) {
@@ -377,7 +344,6 @@ class StreamingModule extends events_1.EventEmitter {
         this.setupServiceListeners();
     }
     setupServiceListeners() {
-        // Agent events
         agent_service_1.agentService.on('task_start', (task) => {
             this.activeAgents.set(task.id, task);
             this.queueMessage({
@@ -422,14 +388,12 @@ class StreamingModule extends events_1.EventEmitter {
             modes.push(chalk_1.default.green('auto-accept'));
         const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
         const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
-        // Model/provider badge with Ollama status dot
         let modelBadge = '';
         try {
             const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
             const models = config_manager_1.simpleConfigManager.get('models') || {};
             const modelCfg = models[currentModel] || {};
             const provider = modelCfg.provider || 'unknown';
-            // Status dot only meaningful for Ollama
             let dot = chalk_1.default.dim('●');
             if (provider === 'ollama') {
                 if (SystemModule.lastOllamaStatus === true)
@@ -446,10 +410,8 @@ class StreamingModule extends events_1.EventEmitter {
         catch (_) {
             modelBadge = chalk_1.default.gray('model:unknown');
         }
-        // Assistant status dot: green when active (with …), red when waiting for input
         const statusDot = this.processingMessage ? chalk_1.default.green('●') + chalk_1.default.dim('…') : chalk_1.default.red('●');
         const statusBadge = `asst:${statusDot}`;
-        // Realistic prompt styling (no rainbow)
         const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]─[${statusBadge}]─[${modelBadge}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
@@ -502,13 +464,10 @@ class StreamingModule extends events_1.EventEmitter {
             return;
         this.processingMessage = true;
         message.status = 'processing';
-        // Update prompt to reflect active status
         this.showPrompt();
-        // Process message based on type
         setTimeout(() => {
             message.status = 'completed';
             this.processingMessage = false;
-            // Update prompt to reflect idle status
             this.showPrompt();
         }, 100);
     }
@@ -528,16 +487,12 @@ class StreamingModule extends events_1.EventEmitter {
     }
 }
 exports.StreamingModule = StreamingModule;
-/**
- * Main Orchestrator - Unified Entry Point
- */
 class MainOrchestrator {
     constructor() {
         this.initialized = false;
         this.setupGlobalHandlers();
     }
     setupGlobalHandlers() {
-        // Global error handler
         process.on('unhandledRejection', (reason, promise) => {
             console.error(chalk_1.default.red('❌ Unhandled Rejection:'), reason);
         });
@@ -545,18 +500,13 @@ class MainOrchestrator {
             console.error(chalk_1.default.red('❌ Uncaught Exception:'), error);
             this.gracefulShutdown();
         });
-        // Graceful shutdown handlers
         process.on('SIGTERM', this.gracefulShutdown.bind(this));
         process.on('SIGINT', this.gracefulShutdown.bind(this));
     }
     async gracefulShutdown() {
         console.log(chalk_1.default.yellow('\n🛑 Shutting down orchestrator...'));
         try {
-            // Stop autonomous interface if running (not used in unified NikCLI entrypoint)
-            // No specific stop required here
-            // Stop streaming module if running
             if (this.streamingModule) {
-                // Streaming module handles its own cleanup
             }
             console.log(chalk_1.default.green('✅ Orchestrator shut down cleanly'));
         }
@@ -583,16 +533,12 @@ class MainOrchestrator {
     }
     async start() {
         try {
-            // Display introduction
             IntroductionModule.displayBanner();
-            // Wait a moment for visual effect
             await new Promise(resolve => setTimeout(resolve, 1500));
-            // Check system requirements
             let requirementsMet = await SystemModule.checkSystemRequirements();
             if (!requirementsMet) {
                 const hasKeysOrOllama = await SystemModule.checkApiKeys();
                 if (!hasKeysOrOllama) {
-                    // Interactive fallback to switch to an Ollama model
                     try {
                         const models = config_manager_1.simpleConfigManager.get('models');
                         let ollamaEntries = Object.entries(models).filter(([, cfg]) => cfg.provider === 'ollama');
@@ -601,7 +547,6 @@ class MainOrchestrator {
                             const answer = await new Promise(resolve => rl.question('No API keys found. Use a local Ollama model instead? (Y/n): ', resolve));
                             rl.close();
                             if (!answer || answer.toLowerCase().startsWith('y')) {
-                                // Choose Ollama model
                                 let chosenName = ollamaEntries[0][0];
                                 if (ollamaEntries.length > 1) {
                                     console.log(chalk_1.default.cyan('\nAvailable Ollama models:'));
@@ -624,7 +569,6 @@ class MainOrchestrator {
                             }
                         }
                         else {
-                            // Offer to add a default Ollama model if none configured
                             const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
                             const answer = await new Promise(resolve => rl.question('No API keys and no Ollama models configured. Add default Ollama model (llama3.1:8b)? (Y/n): ', resolve));
                             rl.close();
@@ -632,7 +576,6 @@ class MainOrchestrator {
                                 const defaultName = 'llama3.1:8b';
                                 config_manager_1.simpleConfigManager.addModel(defaultName, { provider: 'ollama', model: 'llama3.1:8b' });
                                 config_manager_1.simpleConfigManager.setCurrentModel(defaultName);
-                                // refresh entries so re-check passes
                                 const refreshed = config_manager_1.simpleConfigManager.get('models');
                                 ollamaEntries = Object.entries(refreshed).filter(([, cfg]) => cfg.provider === 'ollama');
                                 console.log(chalk_1.default.green(`\n✅ Added and switched to Ollama model: ${defaultName}`));
@@ -646,29 +589,22 @@ class MainOrchestrator {
                         IntroductionModule.displayApiKeySetup();
                     }
                 }
-                // Re-check after potential switch; do not exit if still not met
                 requirementsMet = await SystemModule.checkSystemRequirements();
                 if (!requirementsMet) {
                     console.log(chalk_1.default.yellow('\n⚠️ Continuing without API keys. You can set them later with /set-key or switch models.'));
                 }
             }
-            // Display startup info
             IntroductionModule.displayStartupInfo();
-            // Wait a moment before starting
             await new Promise(resolve => setTimeout(resolve, 1000));
-            // Initialize all systems
             const initialized = await ServiceModule.initializeSystem();
             if (!initialized) {
                 console.log(chalk_1.default.red('\n❌ Cannot start - system initialization failed'));
                 process.exit(1);
             }
-            // Show quick start guide
             this.showQuickStart();
-            // Start unified NikCLI interface with structured UI
             console.log(chalk_1.default.blue.bold('🤖 Starting NikCLI with Structured UI...\n'));
             const cli = new nik_cli_1.NikCLI();
             await cli.startChat({
-                // Enable structured UI mode from the start
                 structuredUI: true
             });
         }
@@ -679,14 +615,10 @@ class MainOrchestrator {
     }
 }
 exports.MainOrchestrator = MainOrchestrator;
-/**
- * Main entry point function
- */
 async function main() {
     const orchestrator = new MainOrchestrator();
     await orchestrator.start();
 }
-// Start the application
 if (require.main === module) {
     main().catch(error => {
         console.error(chalk_1.default.red('❌ Startup failed:'), error);

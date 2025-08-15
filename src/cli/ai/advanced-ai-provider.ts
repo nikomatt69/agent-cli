@@ -38,6 +38,7 @@ import { smartDocsTools } from '../tools/smart-docs-tool';
 import { aiDocsTools } from '../tools/docs-request-tool';
 import { intelligentFeedbackWrapper } from '../core/intelligent-feedback-wrapper';
 import FeedbackAwareTools from '../core/feedback-aware-tools';
+import { validatorManager, ValidationContext, ExtendedValidationResult } from '../core/validator-manager';
 
 const execAsync = promisify(exec);
 
@@ -405,16 +406,18 @@ Respond in a helpful, professional manner with clear explanations and actionable
         },
       }),
 
-      // Smart file writing with backups
+      // Smart file writing with automatic LSP validation
       write_file: tool({
-        description: 'Write content to file with automatic backup and validation',
+        description: 'Write content to file with automatic LSP validation, backup, and auto-fix capabilities',
         parameters: z.object({
           path: z.string().describe('File path to write'),
           content: z.string().describe('Content to write'),
           backup: z.boolean().default(true).describe('Create backup if file exists'),
-          validate: z.boolean().default(true).describe('Validate syntax if applicable'),
+          validate: z.boolean().default(true).describe('Use LSP validation before writing'),
+          agentId: z.string().optional().describe('ID of the agent making this request'),
+          reasoning: z.string().optional().describe('Reasoning behind this file creation/modification'),
         }),
-        execute: async ({ path, content, backup, validate }) => {
+        execute: async ({ path, content, backup, validate, agentId, reasoning }) => {
           try {
             // Load tool-specific prompt for context
             const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...', backup, validate });
@@ -427,23 +430,66 @@ Respond in a helpful, professional manner with clear explanations and actionable
               mkdirSync(dir, { recursive: true });
             }
 
+            // 🧠 VALIDATION WITH LSP - Before writing anything
+            let validationResult = null;
+            let finalContent = content;
+            
+            if (validate) {
+              console.log(chalk.cyan(`🔍 Validating ${path} with LSP before writing...`));
+              
+              const validationContext: ValidationContext = {
+                filePath: fullPath,
+                content,
+                operation: existsSync(fullPath) ? 'update' : 'create',
+                agentId,
+                projectType: this.detectProjectType(this.workingDirectory)
+              };
+              
+              validationResult = await validatorManager.validateContent(validationContext);
+              
+              if (!validationResult.isValid) {
+                // Auto-fix was attempted in ValidatorManager
+                if (validationResult.fixedContent) {
+                  finalContent = validationResult.fixedContent;
+                  console.log(chalk.green(`🔧 Auto-fix and formatting applied successfully`));
+                } else {
+                  // If validation fails and no auto-fix available, return error
+                  return {
+                    success: false,
+                    error: `File processing failed: ${validationResult.errors?.join(', ')}`,
+                    path,
+                    validationErrors: validationResult.errors,
+                    reasoning: reasoning || 'Agent attempted to write file but processing failed'
+                  };
+                }
+              } else {
+                // Use formatted content even if validation passed
+                if (validationResult.fixedContent) {
+                  finalContent = validationResult.fixedContent;
+                }
+                
+                if (validationResult.formatted) {
+                  console.log(chalk.green(`✅ File formatted and validated successfully`));
+                } else {
+                  console.log(chalk.green(`✅ Validation passed for ${path}`));
+                }
+              }
+            }
+
             // Create backup if file exists
             let backedUp = false;
             if (backup && existsSync(fullPath)) {
               const backupPath = `${fullPath}.backup.${Date.now()}`;
               writeFileSync(backupPath, readFileSync(fullPath, 'utf-8'));
               backedUp = true;
+              console.log(chalk.blue(`📁 Backup created: ${backupPath}`));
             }
 
-            // Validate syntax if applicable
-            let validation = null;
-            if (validate) {
-              validation = this.validateFileContent(content, extname(fullPath));
-            }
-
-            // Write file
-            writeFileSync(fullPath, content, 'utf-8');
+            // Write the validated file
+            writeFileSync(fullPath, finalContent, 'utf-8');
             const stats = statSync(fullPath);
+            
+            console.log(chalk.green(`✅ File written successfully: ${path} (${stats.size} bytes)`));
 
             // Update context
             this.executionContext.set(`file:${path}`, {
@@ -462,7 +508,14 @@ Respond in a helpful, professional manner with clear explanations and actionable
               created: !backedUp,
               updated: backedUp,
               backedUp,
-              validation
+              formatted: validationResult?.formatted || false,
+              formatter: validationResult?.formatter,
+              validation: validationResult ? {
+                isValid: validationResult.isValid,
+                errors: validationResult.errors,
+                warnings: validationResult.warnings
+              } : null,
+              reasoning: reasoning || `File ${backedUp ? 'updated' : 'created'} by agent`
             };
           } catch (error: any) {
             return { error: `Failed to write file: ${error.message}` };
@@ -1781,6 +1834,54 @@ Requirements:
     }
 
     return safeMessages;
+  }
+
+  /**
+   * Detect project type based on working directory
+   */
+  private detectProjectType(workingDirectory: string): string {
+    try {
+      const packageJsonPath = join(workingDirectory, 'package.json');
+      const cargoTomlPath = join(workingDirectory, 'Cargo.toml');
+      const requirementsPath = join(workingDirectory, 'requirements.txt');
+      const goModPath = join(workingDirectory, 'go.mod');
+
+      if (existsSync(packageJsonPath)) {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+        
+        // Check for React/Next.js
+        if (packageJson.dependencies?.['next'] || packageJson.devDependencies?.['next']) {
+          return 'next.js';
+        }
+        if (packageJson.dependencies?.['react'] || packageJson.devDependencies?.['react']) {
+          return 'react';
+        }
+        if (packageJson.dependencies?.['express'] || packageJson.devDependencies?.['express']) {
+          return 'express';
+        }
+        if (packageJson.dependencies?.['typescript'] || packageJson.devDependencies?.['typescript']) {
+          return 'typescript';
+        }
+        
+        return 'node';
+      }
+
+      if (existsSync(cargoTomlPath)) {
+        return 'rust';
+      }
+
+      if (existsSync(requirementsPath)) {
+        return 'python';
+      }
+
+      if (existsSync(goModPath)) {
+        return 'go';
+      }
+
+      return 'generic';
+    } catch {
+      return 'generic';
+    }
   }
 
   // Configuration methods

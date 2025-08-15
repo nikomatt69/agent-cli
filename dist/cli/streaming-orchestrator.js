@@ -41,6 +41,7 @@ exports.StreamingOrchestrator = void 0;
 const chalk_1 = __importDefault(require("chalk"));
 const readline = __importStar(require("readline"));
 const events_1 = require("events");
+const crypto_1 = require("crypto");
 const agent_service_1 = require("./services/agent-service");
 const tool_service_1 = require("./services/tool-service");
 const planning_service_1 = require("./services/planning-service");
@@ -48,15 +49,16 @@ const lsp_service_1 = require("./services/lsp-service");
 const diff_manager_1 = require("./ui/diff-manager");
 const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
+const input_queue_1 = require("./core/input-queue");
 class StreamingOrchestratorImpl extends events_1.EventEmitter {
     constructor() {
         super();
-        // Message streaming system
         this.messageQueue = [];
         this.processingMessage = false;
         this.activeAgents = new Map();
         this.streamBuffer = '';
         this.lastUpdate = Date.now();
+        this.inputQueueEnabled = true;
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -67,8 +69,8 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             workingDirectory: process.cwd(),
             autonomous: true,
             planMode: false,
-            autoAcceptEdits: true, // Default from image
-            contextLeft: 20, // Show percentage like in image
+            autoAcceptEdits: true,
+            contextLeft: 20,
             maxContext: 100
         };
         this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
@@ -76,10 +78,8 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         this.startMessageProcessor();
     }
     setupInterface() {
-        // Raw mode for better control
         process.stdin.setRawMode(true);
         require('readline').emitKeypressEvents(process.stdin);
-        // Keypress handlers
         process.stdin.on('keypress', (str, key) => {
             if (key && key.name === 'slash' && !this.processingMessage) {
                 setTimeout(() => this.showCommandMenu(), 50);
@@ -96,10 +96,28 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
                 }
             }
         });
-        // Input handler
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
             if (!trimmed) {
+                this.showPrompt();
+                return;
+            }
+            if (this.inputQueueEnabled && (this.processingMessage || this.activeAgents.size > 0) && input_queue_1.inputQueue.shouldQueue(trimmed)) {
+                let priority = 'normal';
+                if (trimmed.startsWith('/') || trimmed.startsWith('@')) {
+                    priority = 'high';
+                }
+                else if (trimmed.toLowerCase().includes('urgent') || trimmed.toLowerCase().includes('stop')) {
+                    priority = 'high';
+                }
+                else if (trimmed.toLowerCase().includes('later') || trimmed.toLowerCase().includes('low priority')) {
+                    priority = 'low';
+                }
+                const queueId = input_queue_1.inputQueue.enqueue(trimmed, priority, 'user');
+                this.queueMessage({
+                    type: 'system',
+                    content: `📥 Input queued (${priority} priority, ID: ${queueId.slice(-6)}): ${trimmed.substring(0, 40)}${trimmed.length > 40 ? '...' : ''}`
+                });
                 this.showPrompt();
                 return;
             }
@@ -109,11 +127,9 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         this.rl.on('close', () => {
             this.gracefulExit();
         });
-        // Setup service listeners
         this.setupServiceListeners();
     }
     setupServiceListeners() {
-        // Agent events
         agent_service_1.agentService.on('task_start', (task) => {
             this.activeAgents.set(task.id, task);
             this.queueMessage({
@@ -146,7 +162,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
                     content: `✅ Agent ${task.agentType} completed successfully`,
                     metadata: { agentId: task.id, result: task.result }
                 });
-                // Auto-absorb completed messages after 2 seconds
                 setTimeout(() => this.absorbCompletedMessages(), 2000);
             }
             else {
@@ -167,14 +182,13 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             status: 'queued'
         };
         this.messageQueue.push(message);
-        // Process immediately if not busy
         if (!this.processingMessage && this.messageQueue.length === 1) {
             this.processNextMessage();
         }
     }
     queueMessage(partial) {
         const message = {
-            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: `msg_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`,
             timestamp: new Date(),
             status: 'queued',
             ...partial
@@ -204,18 +218,16 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         finally {
             message.status = 'completed';
             this.processingMessage = false;
-            // Process next message
             setTimeout(() => this.processNextMessage(), 100);
+            this.processQueuedInputs();
         }
     }
     async handleUserMessage(message) {
         const input = message.content;
-        // Handle commands
         if (input.startsWith('/')) {
             await this.handleCommand(input);
             return;
         }
-        // Handle agent requests
         if (input.startsWith('@')) {
             const match = input.match(/^@(\\w+[-\\w]*)/);
             if (match) {
@@ -225,7 +237,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
                 return;
             }
         }
-        // Natural language - autonomous processing
         await this.processNaturalLanguage(input);
     }
     async handleCommand(command) {
@@ -259,6 +270,9 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             case 'help':
                 this.showHelp();
                 break;
+            case 'queue':
+                this.handleQueueCommand(args);
+                break;
             default:
                 this.queueMessage({
                     type: 'error',
@@ -275,7 +289,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             return;
         }
         try {
-            // Check if we have capacity (max 3 agents)
             if (this.activeAgents.size >= 3) {
                 this.queueMessage({
                     type: 'system',
@@ -300,7 +313,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             type: 'system',
             content: `🧠 Processing: "${input}"`
         });
-        // Select best agent for the task
         const selectedAgent = this.selectBestAgent(input);
         if (this.context.planMode) {
             this.queueMessage({
@@ -317,7 +329,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
                     type: 'system',
                     content: `📋 Generated plan with ${plan.steps.length} steps`
                 });
-                // Execute plan
                 setTimeout(async () => {
                     await planning_service_1.planningService.executePlan(plan.id, {
                         showProgress: true,
@@ -334,7 +345,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             }
         }
         else {
-            // Direct agent execution
             await this.launchAgent(selectedAgent, input);
         }
     }
@@ -392,7 +402,6 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             message.status === 'processing' ? chalk_1.default.yellow('⏳') :
                 message.status === 'absorbed' ? chalk_1.default.dim('📤') : '';
         console.log(`${chalk_1.default.dim(timestamp)} ${prefix} ${color(content)} ${statusIndicator}`);
-        // Show progress bar for agent messages
         if (message.progress && message.progress > 0) {
             const progressBar = this.createProgressBar(message.progress);
             console.log(`${' '.repeat(timestamp.length + 2)}${progressBar}`);
@@ -432,6 +441,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         const active = this.activeAgents.size;
         const queued = agent_service_1.agentService.getQueuedTasks().length;
         const pending = diff_manager_1.diffManager.getPendingCount();
+        const queueStatus = input_queue_1.inputQueue.getStatus();
         console.log(chalk_1.default.cyan.bold('\\n🎛️ Orchestrator Status'));
         console.log(chalk_1.default.gray('─'.repeat(40)));
         console.log(`${chalk_1.default.blue('Working Dir:')} ${this.context.workingDirectory}`);
@@ -440,6 +450,11 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log(`${chalk_1.default.blue('Messages:')} ${this.messageQueue.length}`);
         console.log(`${chalk_1.default.blue('Pending Diffs:')} ${pending}`);
         console.log(`${chalk_1.default.blue('Context Left:')} ${this.context.contextLeft}%`);
+        console.log(`${chalk_1.default.blue('Input Queue:')} ${this.inputQueueEnabled ? 'Enabled' : 'Disabled'}`);
+        if (this.inputQueueEnabled) {
+            console.log(`${chalk_1.default.blue('  Queued Inputs:')} ${queueStatus.queueLength}`);
+            console.log(`${chalk_1.default.blue('  Processing:')} ${queueStatus.isProcessing ? 'Yes' : 'No'}`);
+        }
     }
     showActiveAgents() {
         if (this.activeAgents.size === 0) {
@@ -478,6 +493,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log(`${chalk_1.default.green('/diff')} [file]   Show file changes`);
         console.log(`${chalk_1.default.green('/accept')} [all]  Accept file changes`);
         console.log(`${chalk_1.default.green('/clear')}         Clear message queue`);
+        console.log(`${chalk_1.default.green('/queue')} [cmd]   Manage input queue`);
         console.log(`${chalk_1.default.green('/help')}          Show detailed help`);
         console.log(chalk_1.default.cyan.bold('\\n🤖 Agent Usage:'));
         console.log(`${chalk_1.default.blue('@agent-name')} task description`);
@@ -503,23 +519,87 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log('• Manual - Ask for confirmation');
         console.log('• Plan - Create execution plans first');
         console.log('• Auto-accept - Apply all changes automatically');
+        console.log(chalk_1.default.white.bold('\\nQueue Commands:'));
+        console.log('• /queue status - Show queue status');
+        console.log('• /queue clear - Clear all queued inputs');
+        console.log('• /queue enable/disable - Toggle input queue');
+        console.log('• /queue process - Process next queued input');
+    }
+    handleQueueCommand(args) {
+        const [subCmd] = args;
+        switch (subCmd) {
+            case 'status':
+                input_queue_1.inputQueue.showStats();
+                break;
+            case 'clear':
+                const cleared = input_queue_1.inputQueue.clear();
+                this.queueMessage({
+                    type: 'system',
+                    content: `🗑️ Cleared ${cleared} inputs from queue`
+                });
+                break;
+            case 'enable':
+                this.inputQueueEnabled = true;
+                this.queueMessage({
+                    type: 'system',
+                    content: '✅ Input queue enabled'
+                });
+                break;
+            case 'disable':
+                this.inputQueueEnabled = false;
+                this.queueMessage({
+                    type: 'system',
+                    content: '⚠️ Input queue disabled'
+                });
+                break;
+            case 'process':
+                this.processQueuedInputs();
+                break;
+            default:
+                console.log(chalk_1.default.cyan.bold('\\n📥 Input Queue Commands:'));
+                console.log(chalk_1.default.gray('─'.repeat(40)));
+                console.log(`${chalk_1.default.green('/queue status')}   - Show queue statistics`);
+                console.log(`${chalk_1.default.green('/queue clear')}    - Clear all queued inputs`);
+                console.log(`${chalk_1.default.green('/queue enable')}   - Enable input queue`);
+                console.log(`${chalk_1.default.green('/queue disable')}  - Disable input queue`);
+                console.log(`${chalk_1.default.green('/queue process')}  - Process next queued input`);
+        }
     }
     stopAllAgents() {
         this.activeAgents.clear();
         console.log(chalk_1.default.yellow('\\n⏹️ Stopped all active agents'));
     }
     startMessageProcessor() {
-        // Process messages every 100ms
         setInterval(() => {
             if (!this.processingMessage) {
                 this.processNextMessage();
             }
             this.updateContextCounter();
         }, 100);
-        // Auto-absorb messages every 5 seconds
         setInterval(() => {
             this.absorbCompletedMessages();
         }, 5000);
+        setInterval(() => {
+            this.processQueuedInputs();
+        }, 2000);
+    }
+    async processQueuedInputs() {
+        if (!this.inputQueueEnabled || this.processingMessage || this.activeAgents.size > 0) {
+            return;
+        }
+        const status = input_queue_1.inputQueue.getStatus();
+        if (status.queueLength === 0) {
+            return;
+        }
+        const result = await input_queue_1.inputQueue.processNext(async (input) => {
+            await this.queueUserInput(input);
+        });
+        if (result) {
+            this.queueMessage({
+                type: 'system',
+                content: `🔄 Processing queued input: ${result.input.substring(0, 40)}${result.input.length > 40 ? '...' : ''}`
+            });
+        }
     }
     showPrompt() {
         const dir = require('path').basename(this.context.workingDirectory);
@@ -532,7 +612,10 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             modes.push(chalk_1.default.green('auto-accept'));
         const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
         const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
-        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}]\n└─❯ `;
+        const queueStatus = this.inputQueueEnabled ? input_queue_1.inputQueue.getStatus() : null;
+        const queueStr = queueStatus && queueStatus.queueLength > 0 ?
+            chalk_1.default.yellow(` | 📥${queueStatus.queueLength}`) : '';
+        const prompt = `\n┌─[${agentIndicator}:${chalk_1.default.green(dir)}${modeStr}]─[${contextStr}${queueStr}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
@@ -552,20 +635,17 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log(chalk_1.default.blue('\n👋 Shutting down orchestrator...'));
         if (this.activeAgents.size > 0) {
             console.log(chalk_1.default.yellow(`⏳ Waiting for ${this.activeAgents.size} agents to finish...`));
-            // In production, you'd wait for agents to complete
         }
         console.log(chalk_1.default.green('✅ Goodbye!'));
         process.exit(0);
     }
     async start() {
         console.clear();
-        // Check API keys
         const hasKeys = this.checkAPIKeys();
         if (!hasKeys)
             return;
         this.showWelcome();
         this.initializeServices();
-        // Start the interface
         this.showPrompt();
         return new Promise((resolve) => {
             this.rl.on('close', resolve);
@@ -590,20 +670,16 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         console.log(chalk_1.default.dim('\nPress / for commands, @ for agents, or describe what you want to do\n'));
     }
     async initializeServices() {
-        // Initialize all services
         tool_service_1.toolService.setWorkingDirectory(this.context.workingDirectory);
         planning_service_1.planningService.setWorkingDirectory(this.context.workingDirectory);
         lsp_service_1.lspService.setWorkingDirectory(this.context.workingDirectory);
-        // Auto-start relevant services
         await lsp_service_1.lspService.autoStartServers(this.context.workingDirectory);
         console.log(chalk_1.default.dim('🚀 Services initialized'));
     }
 }
-// Export the class
 class StreamingOrchestrator extends StreamingOrchestratorImpl {
 }
 exports.StreamingOrchestrator = StreamingOrchestrator;
-// Start the orchestrator if this file is run directly
 if (require.main === module) {
     const orchestrator = new StreamingOrchestrator();
     orchestrator.start().catch(console.error);

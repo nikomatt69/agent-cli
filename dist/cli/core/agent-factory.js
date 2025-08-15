@@ -6,26 +6,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.agentFactory = exports.AgentFactory = exports.DynamicAgent = void 0;
 const base_agent_1 = require("../automation/agents/base-agent");
 const model_provider_1 = require("../ai/model-provider");
-const migration_to_secure_tools_1 = require("../tools/migration-to-secure-tools"); // deprecated, for backward compatibility
+const migration_to_secure_tools_1 = require("../tools/migration-to-secure-tools");
 const agent_todo_manager_1 = require("./agent-todo-manager");
 const agent_stream_1 = require("./agent-stream");
 const workspace_context_1 = require("../context/workspace-context");
 const chalk_1 = __importDefault(require("chalk"));
 const nanoid_1 = require("nanoid");
 const config_manager_1 = require("./config-manager");
-// Helper function to extract JSON from markdown code blocks
 function extractJsonFromMarkdown(text) {
-    // Try to find JSON wrapped in code blocks
     const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonBlockMatch) {
         return jsonBlockMatch[1].trim();
     }
-    // Try to find JSON object directly
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         return jsonMatch[0].trim();
     }
-    // Return original text if no patterns found
     return text.trim();
 }
 class DynamicAgent extends base_agent_1.BaseAgent {
@@ -53,7 +49,6 @@ class DynamicAgent extends base_agent_1.BaseAgent {
         return this.executeTask(taskData);
     }
     async executeTask(task) {
-        // Handle both string tasks and AgentTask objects
         const taskData = typeof task === 'string' ? task : (task?.description || task?.data);
         if (!taskData) {
             return {
@@ -63,7 +58,6 @@ class DynamicAgent extends base_agent_1.BaseAgent {
                 autonomyLevel: this.blueprint.autonomyLevel,
             };
         }
-        // Get workspace context based on scope
         if (this.blueprint.contextScope !== 'file') {
             const context = workspace_context_1.workspaceContext.getContextForAgent(this.id);
             agent_stream_1.agentStream.emitEvent(this.id, 'info', `Context loaded: ${context.relevantFiles.length} files`);
@@ -83,13 +77,9 @@ class DynamicAgent extends base_agent_1.BaseAgent {
         }
         this.isRunning = true;
         try {
-            // Start autonomous workflow
             agent_stream_1.agentStream.emitEvent(this.id, 'thinking', 'Starting autonomous workflow...');
-            // 1. Create todos autonomously
             await this.createAutonomousTodos(task);
-            // 2. Execute todos with streaming
             const result = await this.executeAutonomousWorkflow();
-            // 3. Report results
             agent_stream_1.agentStream.emitEvent(this.id, 'result', 'Autonomous workflow completed successfully');
             return result;
         }
@@ -103,9 +93,7 @@ class DynamicAgent extends base_agent_1.BaseAgent {
     }
     async createAutonomousTodos(task) {
         agent_stream_1.agentStream.emitEvent(this.id, 'planning', 'Analyzing task and creating autonomous plan...');
-        // Get workspace context
         const context = workspace_context_1.workspaceContext.getContextForAgent(this.id);
-        // Stream thinking process
         const thoughts = [
             'Understanding the requirements...',
             'Analyzing current workspace state...',
@@ -114,14 +102,12 @@ class DynamicAgent extends base_agent_1.BaseAgent {
             'Creating detailed todo breakdown...'
         ];
         await agent_stream_1.agentStream.streamThinking(this.id, thoughts);
-        // Generate AI-powered todos based on agent specialization
         const todos = await agent_todo_manager_1.agentTodoManager.planTodos(this.id, task, {
             blueprint: this.blueprint,
             workspaceContext: context,
             specialization: this.blueprint.specialization,
         });
         this.currentTodos = todos.map(t => t.id);
-        // Stream the plan
         const planSteps = todos.map(todo => todo.title);
         await agent_stream_1.agentStream.streamPlanning(this.id, planSteps);
         agent_stream_1.agentStream.emitEvent(this.id, 'planning', `Created ${todos.length} autonomous todos`);
@@ -132,16 +118,13 @@ class DynamicAgent extends base_agent_1.BaseAgent {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', `Starting execution of ${todos.length} todos`);
         for (let i = 0; i < todos.length; i++) {
             const todo = todos[i];
-            // Stream progress
             agent_stream_1.agentStream.streamProgress(this.id, i + 1, todos.length, `Executing: ${todo.title}`);
-            // Execute todo with full autonomy
             const result = await this.executeAutonomousTodo(todo);
             results.push(result);
-            // Mark todo as completed
             agent_todo_manager_1.agentTodoManager.updateTodo(todo.id, {
                 status: 'completed',
                 progress: 100,
-                actualDuration: Math.random() * 5 + 1 // Simulate realistic timing
+                actualDuration: Math.random() * 5 + 1
             });
         }
         return {
@@ -157,7 +140,6 @@ class DynamicAgent extends base_agent_1.BaseAgent {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', `Working on: ${todo.title}`);
         try {
             let result;
-            // Execute based on todo tags and agent capabilities
             if (todo.tags.includes('filesystem')) {
                 result = await this.executeFileSystemTodo(todo);
             }
@@ -183,7 +165,6 @@ class DynamicAgent extends base_agent_1.BaseAgent {
     }
     async executeFileSystemTodo(todo) {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', 'Analyzing file system...');
-        // Autonomously decide what files to read/analyze
         const context = workspace_context_1.workspaceContext.getContextForAgent(this.id, 10);
         const analysis = {
             filesAnalyzed: context.relevantFiles.length,
@@ -194,9 +175,7 @@ class DynamicAgent extends base_agent_1.BaseAgent {
     }
     async executeAnalysisTodo(todo) {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', 'Performing deep analysis...');
-        // Get workspace context for analysis
         const context = workspace_context_1.workspaceContext.getContextForAgent(this.id);
-        // Generate AI analysis based on agent specialization
         const messages = [
             {
                 role: 'system',
@@ -225,11 +204,8 @@ Analyze the current state and provide insights based on your specialization.`,
     }
     async executeImplementationTodo(todo) {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', 'Implementing solution...');
-        // For fully autonomous agents, actually implement solutions
         if (this.blueprint.autonomyLevel === 'fully-autonomous') {
-            // Get workspace context
             const context = workspace_context_1.workspaceContext.getContextForAgent(this.id);
-            // Generate implementation
             const messages = [
                 {
                     role: 'system',
@@ -250,7 +226,6 @@ Generate the necessary files and code to complete this implementation.`,
                 },
             ];
             const implementation = await model_provider_1.modelProvider.generateResponse({ messages });
-            // Try to extract and create files from the implementation
             const fileCreated = await this.tryCreateFilesFromResponse(implementation);
             return {
                 implementation,
@@ -259,7 +234,6 @@ Generate the necessary files and code to complete this implementation.`,
             };
         }
         else {
-            // For supervised agents, just plan the implementation
             return {
                 implementationPlan: `Implementation plan for: ${todo.description}`,
                 requiresApproval: true,
@@ -268,7 +242,6 @@ Generate the necessary files and code to complete this implementation.`,
     }
     async executeTestingTodo(todo) {
         agent_stream_1.agentStream.emitEvent(this.id, 'executing', 'Running tests and validation...');
-        // Run actual tests if fully autonomous
         if (this.blueprint.autonomyLevel === 'fully-autonomous') {
             const buildResult = await migration_to_secure_tools_1.toolsManager.build();
             const testResult = await migration_to_secure_tools_1.toolsManager.runTests();
@@ -311,16 +284,13 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
     }
     async tryCreateFilesFromResponse(response) {
         const createdFiles = [];
-        // Look for code blocks that might be files
         const codeBlocks = response.match(/```[\w]*\n([\s\S]*?)\n```/g);
         if (codeBlocks) {
             for (let i = 0; i < codeBlocks.length; i++) {
                 const block = codeBlocks[i];
                 const code = block.replace(/```[\w]*\n/, '').replace(/\n```$/, '');
-                // Try to determine filename from context
                 let filename = this.extractFilenameFromContext(response, block);
                 if (!filename) {
-                    // Generate filename based on specialization
                     const extension = this.getExtensionForSpecialization();
                     filename = `generated-${this.id}-${i + 1}${extension}`;
                 }
@@ -339,7 +309,6 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
     extractFilenameFromContext(response, codeBlock) {
         const lines = response.split('\n');
         const blockIndex = lines.findIndex(line => line.includes(codeBlock.split('\n')[0]));
-        // Look for filename mentions in nearby lines
         for (let i = Math.max(0, blockIndex - 3); i < Math.min(lines.length, blockIndex + 3); i++) {
             const line = lines[i];
             const match = line.match(/([a-zA-Z][a-zA-Z0-9-_]*\.[a-zA-Z]+)/);
@@ -373,15 +342,12 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
     async cleanup() {
         await super.cleanup?.();
         agent_stream_1.agentStream.stopAgentStream(this.id);
-        // Show final stats
         const stats = agent_todo_manager_1.agentTodoManager.getAgentStats(this.id);
         agent_stream_1.agentStream.emitEvent(this.id, 'info', `Final stats: ${stats.completed} completed, efficiency: ${Math.round(stats.efficiency)}%`);
     }
-    // Check if agent is currently running
     isActive() {
         return this.isRunning;
     }
-    // Get agent blueprint
     getBlueprint() {
         return { ...this.blueprint };
     }
@@ -392,10 +358,8 @@ class AgentFactory {
         this.blueprints = new Map();
         this.instances = new Map();
     }
-    // Create fallback blueprint when AI generation fails
     createFallbackBlueprint(specialization) {
         const lowerSpec = specialization.toLowerCase();
-        // Determine capabilities based on specialization keywords
         const capabilities = [];
         const requiredTools = ['Read', 'Write'];
         if (lowerSpec.includes('react') || lowerSpec.includes('frontend') || lowerSpec.includes('ui') || lowerSpec.includes('component')) {
@@ -418,7 +382,6 @@ class AgentFactory {
             capabilities.push('nextjs', 'react', 'ssr', 'routing', 'frontend');
             requiredTools.push('Bash', 'InstallPackage');
         }
-        // Default capabilities if none matched
         if (capabilities.length === 0) {
             capabilities.push('code-analysis', 'code-generation', 'planning', 'execution');
             requiredTools.push('Bash');
@@ -439,10 +402,8 @@ class AgentFactory {
             }
         };
     }
-    // Create a new agent blueprint
     async createAgentBlueprint(requirements) {
         console.log(chalk_1.default.blue(`🧬 Creating agent blueprint for: ${requirements.specialization}`));
-        // Verify model configuration and API key before proceeding
         try {
             const modelInfo = model_provider_1.modelProvider.getCurrentModelInfo();
             const hasApiKey = model_provider_1.modelProvider.validateApiKey();
@@ -456,7 +417,6 @@ class AgentFactory {
             console.log(chalk_1.default.red(`❌ Model configuration error: ${error.message}`));
             throw error;
         }
-        // Use AI to generate comprehensive blueprint
         const messages = [
             {
                 role: 'system',
@@ -497,7 +457,6 @@ Context Scope: ${requirements.contextScope || 'project'}`,
             }
             catch (parseError) {
                 console.log(chalk_1.default.yellow('⚠️ Failed to parse AI response, using fallback blueprint'));
-                // Create fallback blueprint when AI response is not valid JSON
                 aiBlueprint = this.createFallbackBlueprint(requirements.specialization);
             }
             const blueprint = {
@@ -528,7 +487,6 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Failed to create agent blueprint: ${error.message}`));
-            // Try to create a fallback blueprint if the main process fails
             console.log(chalk_1.default.yellow('🔄 Creating fallback blueprint...'));
             try {
                 const fallbackBlueprint = this.createFallbackBlueprint(requirements.specialization);
@@ -558,11 +516,10 @@ Context Scope: ${requirements.contextScope || 'project'}`,
             }
             catch (fallbackError) {
                 console.log(chalk_1.default.red(`❌ Fallback blueprint creation also failed: ${fallbackError}`));
-                throw error; // Throw the original error
+                throw error;
             }
         }
     }
-    // Launch an agent from a blueprint
     async launchAgent(blueprintId) {
         const blueprint = this.blueprints.get(blueprintId);
         if (!blueprint) {
@@ -575,29 +532,23 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         console.log(chalk_1.default.green(`✅ Agent ${blueprint.name} launched successfully`));
         return agent;
     }
-    // Create and launch agent in one step
     async createAndLaunchAgent(requirements) {
         const blueprint = await this.createAgentBlueprint(requirements);
         const agent = await this.launchAgent(blueprint.id);
         return agent;
     }
-    // Get all blueprints
     getAllBlueprints() {
         return Array.from(this.blueprints.values());
     }
-    // Get all active agents
     getActiveAgents() {
         return Array.from(this.instances.values()).filter(agent => agent.isActive());
     }
-    // Get agent by name
     getAgent(name) {
         return this.instances.get(name);
     }
-    // Remove blueprint
     removeBlueprint(id) {
         return this.blueprints.delete(id);
     }
-    // Show factory dashboard
     showFactoryDashboard() {
         const blueprints = this.getAllBlueprints();
         const activeAgents = this.getActiveAgents();

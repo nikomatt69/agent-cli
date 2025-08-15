@@ -50,7 +50,6 @@ class ModernAIProvider {
         this.currentModel = config_manager_1.simpleConfigManager.get('currentModel');
         this.promptManager = prompt_manager_1.PromptManager.getInstance(process.cwd());
     }
-    // Load tool-specific prompts for enhanced execution
     async getToolPrompt(toolName, parameters = {}) {
         try {
             return await this.promptManager.loadPromptForContext({
@@ -62,11 +61,9 @@ class ModernAIProvider {
             });
         }
         catch (error) {
-            // Return fallback prompt if file prompt fails
             return `Execute ${toolName} with the provided parameters. Follow best practices and provide clear, helpful output.`;
         }
     }
-    // Core file operations tools - Claude Code style
     getFileOperationsTools() {
         return {
             read_file: (0, ai_1.tool)({
@@ -76,7 +73,6 @@ class ModernAIProvider {
                 }),
                 execute: async ({ path }) => {
                     try {
-                        // Load tool-specific prompt for context
                         const toolPrompt = await this.getToolPrompt('read_file', { path });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         if (!(0, fs_1.existsSync)(fullPath)) {
@@ -104,16 +100,13 @@ class ModernAIProvider {
                 }),
                 execute: async ({ path, content }) => {
                     try {
-                        // Load tool-specific prompt for context
                         const toolPrompt = await this.getToolPrompt('write_file', { path, content: content.substring(0, 100) + '...' });
                         const fullPath = (0, path_1.resolve)(this.workingDirectory, path);
                         const dir = (0, path_1.dirname)(fullPath);
-                        // Create directory if it doesn't exist
                         const { mkdirSync } = await Promise.resolve().then(() => __importStar(require('fs')));
                         mkdirSync(dir, { recursive: true });
                         (0, fs_1.writeFileSync)(fullPath, content, 'utf-8');
                         const stats = (0, fs_1.statSync)(fullPath);
-                        // File operation completed
                         return {
                             path: (0, path_1.relative)(this.workingDirectory, fullPath),
                             size: stats.size,
@@ -179,11 +172,10 @@ class ModernAIProvider {
                 execute: async ({ command, args = [] }) => {
                     try {
                         const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-                        // Executing command
                         const output = (0, child_process_1.execSync)(fullCommand, {
                             cwd: this.workingDirectory,
                             encoding: 'utf-8',
-                            maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+                            maxBuffer: 1024 * 1024 * 10,
                         });
                         return {
                             command: fullCommand,
@@ -192,7 +184,6 @@ class ModernAIProvider {
                         };
                     }
                     catch (error) {
-                        // Command failed
                         return {
                             command: `${command} ${args.join(' ')}`,
                             error: error.message,
@@ -226,7 +217,6 @@ class ModernAIProvider {
                 packageInfo = JSON.parse((0, fs_1.readFileSync)(packageJsonPath, 'utf-8'));
             }
             catch (e) {
-                // Invalid package.json
             }
         }
         const structure = this.buildDirectoryTree(rootPath, maxDepth);
@@ -324,7 +314,6 @@ class ModernAIProvider {
                     technologies.add('Vitest');
             });
         }
-        // Detect from file extensions
         this.extractFileExtensions(structure).forEach(ext => {
             switch (ext) {
                 case 'ts':
@@ -385,7 +374,6 @@ class ModernAIProvider {
         }
         switch (config.provider) {
             case 'openai':
-                // OpenAI provider is already response-API compatible via model options; no chainable helper here.
                 return (0, openai_1.openai)(config.model);
             case 'anthropic':
                 return (0, anthropic_1.anthropic)(config.model);
@@ -395,7 +383,6 @@ class ModernAIProvider {
                 throw new Error(`Unsupported provider: ${config.provider}`);
         }
     }
-    // Claude Code style streaming with tool support
     async *streamChatWithTools(messages) {
         const model = this.getModel();
         const tools = this.getFileOperationsTools();
@@ -423,7 +410,6 @@ class ModernAIProvider {
             throw new Error(`Stream generation failed: ${error.message}`);
         }
     }
-    // Generate complete response with tools
     async generateWithTools(messages) {
         const model = this.getModel();
         const tools = this.getFileOperationsTools();
@@ -446,19 +432,15 @@ class ModernAIProvider {
             throw new Error(`Generation failed: ${error.message}`);
         }
     }
-    // Set working directory for file operations
     setWorkingDirectory(directory) {
         this.workingDirectory = (0, path_1.resolve)(directory);
     }
-    // Get current working directory
     getWorkingDirectory() {
         return this.workingDirectory;
     }
-    // Set current model
     setModel(modelName) {
         this.currentModel = modelName;
     }
-    // Get current model info
     getCurrentModelInfo() {
         const config = config_manager_1.simpleConfigManager.get('models');
         return {
@@ -466,7 +448,6 @@ class ModernAIProvider {
             config: config || { provider: 'unknown', model: 'unknown' },
         };
     }
-    // Validate API key for current model
     validateApiKey() {
         try {
             const apiKey = config_manager_1.simpleConfigManager.getApiKey(this.currentModel);

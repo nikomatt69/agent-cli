@@ -107,13 +107,11 @@ function detectLanguageFromExtension(filePath) {
     return exports.LANGUAGE_EXTENSIONS[ext] || 'plaintext';
 }
 function detectLanguageFromContent(content, filePath) {
-    // First try extension-based detection
     if (filePath) {
         const langFromExt = detectLanguageFromExtension(filePath);
         if (langFromExt !== 'plaintext')
             return langFromExt;
     }
-    // Content-based detection patterns
     const patterns = [
         { pattern: /^#!.*\/bin\/(bash|sh|zsh)/m, language: 'shellscript' },
         { pattern: /^#!.*\/usr\/bin\/env\s+(python|python3)/m, language: 'python' },

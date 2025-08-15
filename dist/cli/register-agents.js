@@ -3,15 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAgents = registerAgents;
 const universal_agent_1 = require("./automation/agents/universal-agent");
 function registerAgents(agentManager) {
-    // Register the unified UniversalAgent for enterprise production use
     agentManager.registerAgentClass(universal_agent_1.UniversalAgent, {
         id: 'universal-agent',
         name: 'Universal Agent',
         description: 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities',
         specialization: 'universal',
-        version: '0.1.9-beta',
+        version: '0.1.15-beta',
         capabilities: [
-            // Core capabilities
             'code-generation',
             'code-analysis',
             'code-review',
@@ -19,7 +17,6 @@ function registerAgents(agentManager) {
             'debugging',
             'refactoring',
             'testing',
-            // Frontend capabilities
             'react',
             'nextjs',
             'typescript',
@@ -31,7 +28,6 @@ function registerAgents(agentManager) {
             'hooks',
             'jsx',
             'tsx',
-            // Backend capabilities
             'backend',
             'nodejs',
             'api-development',
@@ -40,7 +36,6 @@ function registerAgents(agentManager) {
             'rest-api',
             'graphql',
             'microservices',
-            // DevOps capabilities
             'devops',
             'ci-cd',
             'docker',
@@ -49,13 +44,11 @@ function registerAgents(agentManager) {
             'infrastructure',
             'monitoring',
             'security',
-            // Autonomous capabilities
             'file-operations',
             'project-creation',
             'autonomous-coding',
             'system-administration',
             'full-stack-development',
-            // Analysis capabilities
             'performance-analysis',
             'security-analysis',
             'quality-assessment',

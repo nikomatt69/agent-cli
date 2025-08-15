@@ -1,5 +1,6 @@
 import { CoreMessage } from 'ai';
 import chalk from 'chalk';
+import { randomBytes } from 'crypto';
 
 export interface CacheStrategy {
     name: string;
@@ -365,7 +366,7 @@ export class SmartCacheManager {
      * Genera ID unico
      */
     private generateId(): string {
-        return `cache_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `cache_${Date.now()}_${randomBytes(6).toString('base64url')}`;
     }
 
     /**

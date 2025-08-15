@@ -13,24 +13,21 @@ const fs_1 = require("fs");
 const chalk_1 = __importDefault(require("chalk"));
 class LSPClient {
     constructor(server, serverInfo, workspaceRoot) {
-        this.openFiles = new Map(); // file -> version
+        this.openFiles = new Map();
         this.diagnostics = new Map();
         this.isInitialized = false;
         this.server = server;
         this.serverInfo = serverInfo;
         this.workspaceRoot = workspaceRoot;
-        // Create JSON-RPC connection
         this.connection = (0, node_1.createMessageConnection)(new node_1.StreamMessageReader(server.process.stdout), new node_1.StreamMessageWriter(server.process.stdin));
         this.setupEventHandlers();
     }
     setupEventHandlers() {
-        // Handle diagnostics
         this.connection.onNotification('textDocument/publishDiagnostics', (params) => {
             const uri = params.uri;
             const filePath = this.uriToPath(uri);
             console.log(chalk_1.default.blue(`📊 Diagnostics for: ${(0, path_1.relative)(this.workspaceRoot, filePath)}`));
             this.diagnostics.set(filePath, params.diagnostics);
-            // Log diagnostics for immediate feedback
             if (params.diagnostics.length > 0) {
                 params.diagnostics.forEach((diag) => {
                     const severity = diag.severity === 1 ? chalk_1.default.red('ERROR') :
@@ -40,24 +37,21 @@ class LSPClient {
                 });
             }
         });
-        // Handle server requests
         this.connection.onRequest('window/showMessage', (params) => {
             console.log(`${this.serverInfo.name}: ${params.message}`);
         });
         this.connection.onRequest('window/showMessageRequest', (params) => {
             console.log(`${this.serverInfo.name}: ${params.message}`);
-            return null; // Auto-dismiss
+            return null;
         });
         this.connection.onRequest('workspace/configuration', () => {
-            return [{}]; // Return empty configuration
+            return [{}];
         });
-        // Handle progress notifications
         this.connection.onNotification('$/progress', (params) => {
             if (params.value?.kind === 'begin') {
                 console.log(chalk_1.default.blue(`🔄 ${this.serverInfo.name}: ${params.value.title || params.value.message || 'Working...'}`));
             }
         });
-        // Start listening
         this.connection.listen();
     }
     async initialize() {
@@ -82,7 +76,7 @@ class LSPClient {
                         publishDiagnostics: {
                             relatedInformation: true,
                             versionSupport: false,
-                            tagSupport: { valueSet: [1, 2] } // 1: Unnecessary, 2: Deprecated
+                            tagSupport: { valueSet: [1, 2] }
                         },
                         synchronization: {
                             dynamicRegistration: true,
@@ -145,13 +139,11 @@ class LSPClient {
         try {
             const content = (0, fs_1.readFileSync)(absolutePath, 'utf-8');
             const languageId = (0, language_detection_1.detectLanguageFromExtension)(absolutePath);
-            // Close if already open
             if (this.openFiles.has(absolutePath)) {
                 await this.connection.sendNotification('textDocument/didClose', {
                     textDocument: { uri }
                 });
             }
-            // Open file
             await this.connection.sendNotification('textDocument/didOpen', {
                 textDocument: {
                     uri,
@@ -187,7 +179,7 @@ class LSPClient {
             const result = await this.connection.sendRequest('textDocument/completion', {
                 textDocument: { uri },
                 position: { line, character },
-                context: { triggerKind: 1 } // Invoked
+                context: { triggerKind: 1 }
             });
             return result?.items || result || [];
         }
@@ -295,11 +287,9 @@ class LSPClient {
                 await this.connection.sendRequest('shutdown', null);
                 await this.connection.sendNotification('exit', null);
             }
-            // Close all files
             for (const filePath of this.openFiles.keys()) {
                 await this.closeFile(filePath);
             }
-            // Terminate server process
             this.server.process.kill();
             this.connection.end();
             console.log(chalk_1.default.green(`🛑 ${this.serverInfo.name} shutdown`));
@@ -314,7 +304,6 @@ class LSPClient {
     uriToPath(uri) {
         return uri.replace('file://', '');
     }
-    // Static method to create and initialize LSP client
     static async create(server, serverInfo, workspaceRoot) {
         const client = new LSPClient(server, serverInfo, workspaceRoot);
         await client.initialize();
@@ -322,7 +311,6 @@ class LSPClient {
     }
 }
 exports.LSPClient = LSPClient;
-// Helper to pretty-print diagnostics
 function formatDiagnostic(diagnostic) {
     const severityMap = {
         1: chalk_1.default.red('ERROR'),
@@ -335,7 +323,6 @@ function formatDiagnostic(diagnostic) {
     const col = diagnostic.range.start.character + 1;
     return `${severity} [${line}:${col}] ${diagnostic.message}`;
 }
-// Helper to get symbol kind name
 function getSymbolKindName(kind) {
     const symbolKindMap = {
         1: 'File',

@@ -86,24 +86,20 @@ class SlashCommandHandler {
         this.commands.set('launch-agent', this.launchAgentCommand.bind(this));
         this.commands.set('context', this.contextCommand.bind(this));
         this.commands.set('stream', this.streamCommand.bind(this));
-        // Planning and Todo Commands
         this.commands.set('plan', this.planCommand.bind(this));
         this.commands.set('todo', this.todoCommand.bind(this));
         this.commands.set('todos', this.todosCommand.bind(this));
         this.commands.set('approval', this.approvalCommand.bind(this));
-        // Security Commands
         this.commands.set('security', this.securityCommand.bind(this));
         this.commands.set('dev-mode', this.devModeCommand.bind(this));
         this.commands.set('safe-mode', this.safeModeCommand.bind(this));
         this.commands.set('clear-approvals', this.clearApprovalsCommand.bind(this));
-        // File operations
         this.commands.set('read', this.readFileCommand.bind(this));
         this.commands.set('write', this.writeFileCommand.bind(this));
         this.commands.set('edit', this.editFileCommand.bind(this));
         this.commands.set('ls', this.listFilesCommand.bind(this));
         this.commands.set('search', this.searchCommand.bind(this));
         this.commands.set('grep', this.searchCommand.bind(this));
-        // Terminal operations
         this.commands.set('run', this.runCommandCommand.bind(this));
         this.commands.set('sh', this.runCommandCommand.bind(this));
         this.commands.set('bash', this.runCommandCommand.bind(this));
@@ -114,7 +110,6 @@ class SlashCommandHandler {
         this.commands.set('docker', this.dockerCommand.bind(this));
         this.commands.set('ps', this.processCommand.bind(this));
         this.commands.set('kill', this.killCommand.bind(this));
-        // Project operations
         this.commands.set('build', this.buildCommand.bind(this));
         this.commands.set('test', this.testCommand.bind(this));
         this.commands.set('lint', this.lintCommand.bind(this));
@@ -222,7 +217,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         const modelName = args[0];
         try {
             config_manager_1.configManager.setCurrentModel(modelName);
-            // Validate the new model
             if (model_provider_1.modelProvider.validateApiKey()) {
                 console.log(chalk_1.default.green(`✅ Switched to model: ${modelName}`));
                 return { shouldExit: false, shouldUpdatePrompt: true };
@@ -322,7 +316,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         const session = chat_manager_1.chatManager.getCurrentSession();
         if (session) {
             session.systemPrompt = prompt;
-            // Update the system message
             const systemMsgIndex = session.messages.findIndex(m => m.role === 'system');
             if (systemMsgIndex >= 0) {
                 session.messages[systemMsgIndex].content = prompt;
@@ -382,7 +375,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         console.log(chalk_1.default.blue.bold('\n🔍 Debug Information:'));
         console.log(chalk_1.default.gray('═'.repeat(40)));
         try {
-            // Test model configuration
             const currentModel = config_manager_1.configManager.getCurrentModel();
             console.log(chalk_1.default.green(`Current Model: ${currentModel}`));
             const models = config_manager_1.configManager.get('models');
@@ -393,7 +385,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             }
             console.log(chalk_1.default.green(`Provider: ${currentModelConfig.provider}`));
             console.log(chalk_1.default.green(`Model: ${currentModelConfig.model}`));
-            // Test API key
             const apiKey = config_manager_1.configManager.getApiKey(currentModel);
             if (apiKey) {
                 console.log(chalk_1.default.green(`✅ API Key: ${apiKey.slice(0, 10)}...${apiKey.slice(-4)} (${apiKey.length} chars)`));
@@ -402,7 +393,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                 console.log(chalk_1.default.red(`❌ API Key: Not configured`));
                 console.log(chalk_1.default.yellow(`   Set with: /set-key ${currentModel} <your-api-key>`));
             }
-            // Test model provider validation
             try {
                 const isValid = model_provider_1.modelProvider.validateApiKey();
                 console.log(chalk_1.default.green(`✅ Model Provider Validation: ${isValid ? 'Valid' : 'Invalid'}`));
@@ -410,7 +400,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             catch (error) {
                 console.log(chalk_1.default.red(`❌ Model Provider Validation Failed: ${error.message}`));
             }
-            // Test a simple generation
             try {
                 console.log(chalk_1.default.blue('\n🧪 Testing AI Generation...'));
                 const testResponse = await model_provider_1.modelProvider.generateResponse({
@@ -422,7 +411,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             catch (error) {
                 console.log(chalk_1.default.red(`❌ Test Generation Failed: ${error.message}`));
             }
-            // Environment variables
             console.log(chalk_1.default.blue('\n🌍 Environment Variables:'));
             const envVars = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'];
             envVars.forEach(envVar => {
@@ -509,7 +497,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         const description = args.join(' ');
         try {
             console.log(chalk_1.default.blue('🧠 Creating autonomous agent for task...'));
-            // Create specialized agent for this task
             const agent = await agent_factory_1.agentFactory.createAndLaunchAgent({
                 specialization: `Autonomous Developer for: ${description}`,
                 autonomyLevel: 'fully-autonomous',
@@ -580,7 +567,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // File Operations
     async readFileCommand(args) {
         if (args.length === 0) {
             console.log(chalk_1.default.red('Usage: /read <filepath>'));
@@ -607,16 +593,13 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         try {
             const filePath = args[0];
             const content = args.slice(1).join(' ');
-            // Create FileDiff for approval
             const fileDiff = await diff_viewer_1.DiffViewer.createFileDiff(filePath);
             fileDiff.newContent = content;
-            // Request approval before writing
             const approved = await approval_system_1.approvalSystem.requestFileApproval(`Write file: ${filePath}`, [fileDiff], 'medium');
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ File write operation cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
-            // Create progress indicator
             const writeId = advanced_cli_ui_1.advancedUI.createIndicator('file-write', `Writing ${filePath}`).id;
             advanced_cli_ui_1.advancedUI.startSpinner(writeId, 'Writing file...');
             await tools_manager_1.toolsManager.writeFile(filePath, content);
@@ -637,7 +620,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         try {
             const filePath = args[0];
             console.log(chalk_1.default.blue(`📝 Use your system editor to edit: ${filePath}`));
-            // Use system editor
             await tools_manager_1.toolsManager.runCommand('code', [filePath]);
         }
         catch (error) {
@@ -698,7 +680,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // Terminal Operations
     async runCommandCommand(args) {
         if (args.length === 0) {
             console.log(chalk_1.default.red('Usage: /run <command> [args...]'));
@@ -707,14 +688,12 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         try {
             const [command, ...commandArgs] = args;
             const fullCommand = `${command} ${commandArgs.join(' ')}`;
-            // Request approval for command execution
             const approved = await approval_system_1.approvalSystem.requestCommandApproval(command, commandArgs, process.cwd());
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ Command execution cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
             console.log(chalk_1.default.blue(`⚡ Running: ${fullCommand}`));
-            // Create progress indicator
             const cmdId = advanced_cli_ui_1.advancedUI.createIndicator('command', `Executing: ${command}`).id;
             advanced_cli_ui_1.advancedUI.startSpinner(cmdId, `Running: ${fullCommand}`);
             const result = await tools_manager_1.toolsManager.runCommand(command, commandArgs, { stream: true });
@@ -745,14 +724,12 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             const isDev = args.includes('--dev') || args.includes('-D');
             const manager = args.includes('--yarn') ? 'yarn' :
                 args.includes('--pnpm') ? 'pnpm' : 'npm';
-            // Request approval for package installation
             const approved = await approval_system_1.approvalSystem.requestPackageApproval(packages, manager, isGlobal);
             if (!approved) {
                 console.log(chalk_1.default.yellow('❌ Package installation cancelled'));
                 return { shouldExit: false, shouldUpdatePrompt: false };
             }
             console.log(chalk_1.default.blue(`📦 Installing ${packages.join(', ')} with ${manager}...`));
-            // Create progress indicator
             const installId = advanced_cli_ui_1.advancedUI.createIndicator('install', `Installing packages`).id;
             advanced_cli_ui_1.advancedUI.createProgressBar(installId, 'Installing packages', packages.length);
             for (let i = 0; i < packages.length; i++) {
@@ -840,7 +817,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // Project Operations
     async buildCommand() {
         try {
             console.log(chalk_1.default.blue('🔨 Building project...'));
@@ -931,7 +907,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // Agent Factory Commands
     async factoryCommand() {
         agent_factory_1.agentFactory.showFactoryDashboard();
         return { shouldExit: false, shouldUpdatePrompt: false };
@@ -1001,10 +976,8 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // Planning and Todo Commands
     async planCommand(args) {
         if (args.length === 0) {
-            // Show plan status
             enhanced_planning_1.enhancedPlanning.showPlanStatus();
             return { shouldExit: false, shouldUpdatePrompt: false };
         }
@@ -1036,7 +1009,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                 case 'run': {
                     const planId = restArgs[0];
                     if (!planId) {
-                        // Get the most recent plan
                         const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
                         const latestPlan = plans[plans.length - 1];
                         if (!latestPlan) {
@@ -1136,7 +1108,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
                         const plans = enhanced_planning_1.enhancedPlanning.getActivePlans();
                         const latestPlan = plans[plans.length - 1];
                         if (latestPlan) {
-                            // Render structured panel with real todos
                             try {
                                 const { advancedUI } = await Promise.resolve().then(() => __importStar(require('../ui/advanced-cli-ui')));
                                 const todoItems = latestPlan.todos.map((t) => ({ content: t.title || t.description, status: t.status }));
@@ -1192,7 +1163,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
     async todosCommand(args) {
-        // Alias for /todo list
         return await this.todoCommand(['list', ...args]);
     }
     async approvalCommand(args) {
@@ -1265,7 +1235,6 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
-    // Security Commands Implementation
     async securityCommand(args) {
         const subcommand = args[0] || 'status';
         try {
@@ -1367,7 +1336,7 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         try {
             switch (action) {
                 case 'enable': {
-                    const timeoutMs = args[1] ? parseInt(args[1]) * 60000 : undefined; // Convert minutes to ms
+                    const timeoutMs = args[1] ? parseInt(args[1]) * 60000 : undefined;
                     tool_service_1.toolService.enableDevMode(timeoutMs);
                     const timeout = timeoutMs ? ` for ${args[1]} minutes` : ' for 1 hour (default)';
                     console.log(chalk_1.default.yellow(`🛠️ Developer mode enabled${timeout}`));

@@ -14,11 +14,7 @@ class ModuleManager {
         this.context = context;
         this.registerModules();
     }
-    /**
-     * Register all available modules
-     */
     registerModules() {
-        // System Commands
         this.register({
             name: 'help',
             description: 'Show detailed help and command reference',
@@ -43,7 +39,6 @@ class ModuleManager {
             category: 'system',
             handler: this.handleClear.bind(this)
         });
-        // File Operations
         this.register({
             name: 'cd',
             description: 'Change current working directory',
@@ -63,7 +58,6 @@ class ModuleManager {
             category: 'file',
             handler: this.handleListFiles.bind(this)
         });
-        // Analysis Commands
         this.register({
             name: 'analyze',
             description: 'Quick project analysis',
@@ -89,7 +83,6 @@ class ModuleManager {
             category: 'analysis',
             handler: this.handleHistory.bind(this)
         });
-        // Diff Management
         this.register({
             name: 'diff',
             description: 'Show file changes (all diffs if no file specified)',
@@ -110,7 +103,6 @@ class ModuleManager {
             requiresArgs: true,
             handler: this.handleReject.bind(this)
         });
-        // Security Commands
         this.register({
             name: 'security',
             description: 'Show current security status',
@@ -123,7 +115,6 @@ class ModuleManager {
             category: 'security',
             handler: this.handlePolicy.bind(this)
         });
-        // Mode Toggles
         this.register({
             name: 'plan',
             description: 'Toggle plan mode (shift+tab to cycle)',
@@ -143,15 +134,9 @@ class ModuleManager {
             handler: this.handleAutonomous.bind(this)
         });
     }
-    /**
-     * Register a new module
-     */
     register(module) {
         this.modules.set(module.name, module);
     }
-    /**
-     * Execute a command
-     */
     async executeCommand(command, args) {
         const module = this.modules.get(command);
         if (!module) {
@@ -173,25 +158,15 @@ class ModuleManager {
             return false;
         }
     }
-    /**
-     * Get all available commands
-     */
     getCommands() {
         return Array.from(this.modules.values());
     }
-    /**
-     * Get commands for autocompletion
-     */
     getCommandNames() {
         return Array.from(this.modules.keys()).map(name => `/${name}`);
     }
-    /**
-     * Update context
-     */
     updateContext(context) {
         this.context = { ...this.context, ...context };
     }
-    // Command Handlers
     async handleHelp(args, context) {
         console.log(chalk_1.default.cyan.bold('\\n🤖 Autonomous Claude Assistant - Command Reference'));
         console.log(chalk_1.default.gray('═'.repeat(60)));
@@ -232,7 +207,6 @@ class ModuleManager {
     async handleAgents(args, context) {
         console.log(chalk_1.default.cyan.bold('\\n🤖 Available Specialized Agents'));
         console.log(chalk_1.default.gray('─'.repeat(50)));
-        // This would be dynamically populated from agent registry
         const agents = [
             { name: 'ai-analysis', desc: 'AI code analysis and review' },
             { name: 'code-review', desc: 'Code review and suggestions' },
@@ -314,14 +288,12 @@ class ModuleManager {
     }
     async handleAnalyze(args, context) {
         console.log(chalk_1.default.blue('🔍 Quick project analysis...'));
-        // Implementation for project analysis
         console.log(chalk_1.default.green('Analysis complete!'));
     }
     async handleAutoExecution(args, context) {
         const task = args.join(' ');
         console.log(chalk_1.default.blue(`\\n🎯 Autonomous Mode: Analyzing and executing task...`));
         console.log(chalk_1.default.gray(`Task: ${task}\\n`));
-        // Implementation for autonomous execution
     }
     async handleContext(args, context) {
         const execContext = advanced_ai_provider_1.advancedAIProvider.getExecutionContext();
@@ -394,7 +366,6 @@ class ModuleManager {
                 switch (setting) {
                     case 'approval':
                         if (['never', 'untrusted', 'always'].includes(value)) {
-                            // Policy update - would need to extend config manager
                             console.log(chalk_1.default.green(`✅ Approval policy set to: ${value}`));
                             console.log(chalk_1.default.green(`✅ Approval policy set to: ${value}`));
                         }
@@ -404,7 +375,6 @@ class ModuleManager {
                         break;
                     case 'sandbox':
                         if (['read-only', 'workspace-write', 'system-write'].includes(value)) {
-                            // Sandbox update - would need to extend config manager
                             console.log(chalk_1.default.green(`✅ Sandbox mode set to: ${value}`));
                             console.log(chalk_1.default.green(`✅ Sandbox mode set to: ${value}`));
                         }

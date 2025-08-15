@@ -19,7 +19,6 @@ class AutonomousPlanner extends events_1.EventEmitter {
         this.initializeToolchains();
     }
     initializeToolchains() {
-        // Register common toolchains
         this.toolchainRegistry.set('create-react-component', {
             name: 'Create React Component',
             description: 'Create a React component with TypeScript and styling',
@@ -51,7 +50,6 @@ class AutonomousPlanner extends events_1.EventEmitter {
             pattern: 'iterative'
         });
     }
-    // Main planning method - like Claude's internal planning
     async *createAndExecutePlan(userGoal, context) {
         const planId = (0, nanoid_1.nanoid)();
         yield {
@@ -60,9 +58,7 @@ class AutonomousPlanner extends events_1.EventEmitter {
             content: `🎯 Creating autonomous plan for: ${userGoal}`
         };
         try {
-            // 1. Analyze the goal and workspace context
             const workspaceContext = this.workspaceRAG.getContextForTask(userGoal);
-            // 2. Generate execution plan using AI
             const plan = await this.generateExecutionPlan(planId, userGoal, workspaceContext);
             this.activePlans.set(planId, plan);
             yield {
@@ -71,7 +67,6 @@ class AutonomousPlanner extends events_1.EventEmitter {
                 content: `📋 Plan created with ${plan.todos.length} steps`,
                 metadata: { todos: plan.todos.length, estimatedDuration: plan.estimatedTotalDuration }
             };
-            // 3. Execute the plan autonomously
             yield* this.executePlan(plan);
         }
         catch (error) {
@@ -85,7 +80,6 @@ class AutonomousPlanner extends events_1.EventEmitter {
     }
     async generateExecutionPlan(planId, goal, workspaceContext) {
         console.log(chalk_1.default.blue('🧠 AI Planning: Analyzing goal and creating execution plan...'));
-        // Use AI to break down the goal into actionable todos
         const planningMessages = [
             {
                 role: 'system',
@@ -144,17 +138,14 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
                 content: goal
             }
         ];
-        // Execute planning task and collect response (pass messages to avoid huge prompt)
         let fullResponse = '';
         for await (const event of advanced_ai_provider_1.advancedAIProvider.executeAutonomousTask('Planning', { messages: planningMessages })) {
             if (event.type === 'text_delta' && event.content) {
                 fullResponse += event.content;
             }
         }
-        // Parse AI response into execution plan
         let planData;
         try {
-            // Extract JSON from AI response
             const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
             if (!jsonMatch) {
                 throw new Error('AI did not return valid JSON plan');
@@ -164,7 +155,6 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
         catch (error) {
             throw new Error(`Failed to parse AI plan: ${error}`);
         }
-        // Convert to ExecutionPlan format
         const todos = planData.todos.map((todo) => ({
             id: todo.id || (0, nanoid_1.nanoid)(),
             title: todo.title,
@@ -203,21 +193,17 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
         plan.status = 'running';
         let completedTodos = 0;
         try {
-            // Execute todos based on dependencies
             const todoQueue = [...plan.todos];
             const completed = new Set();
             while (todoQueue.length > 0) {
-                // Find todos ready to execute (dependencies satisfied)
                 const readyTodos = todoQueue.filter(todo => todo?.dependencies?.every(dep => completed.has(dep)));
                 if (readyTodos.length === 0) {
-                    // Check if we're stuck due to failed dependencies
                     const remainingTodos = todoQueue.filter(todo => todo.status !== 'completed');
                     if (remainingTodos.length > 0) {
                         throw new Error('Circular dependencies or failed dependencies detected');
                     }
                     break;
                 }
-                // Execute ready todos (can be parallel if no inter-dependencies)
                 for (const todo of readyTodos) {
                     yield {
                         type: 'todo_start',
@@ -226,7 +212,6 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
                         content: `🔧 Executing: ${todo.title}`
                     };
                     try {
-                        // Execute the todo using toolchain
                         const result = await this.executeTodo(todo, plan.context);
                         todo.status = 'completed';
                         todo.completedAt = new Date();
@@ -240,7 +225,6 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
                             result,
                             progress: completedTodos / plan.todos.length * 100
                         };
-                        // Remove from queue
                         const index = todoQueue.findIndex(t => t.id === todo.id);
                         if (index > -1)
                             todoQueue.splice(index, 1);
@@ -254,14 +238,12 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
                             content: `❌ Failed: ${todo.title} - ${error.message}`,
                             error: error.message
                         };
-                        // Decide whether to continue or fail the entire plan
                         if (todo.priority === 'high') {
                             throw new Error(`Critical todo failed: ${todo.title}`);
                         }
                     }
                 }
             }
-            // Plan completed
             plan.status = 'completed';
             plan.actualDuration = Date.now() - plan.createdAt.getTime();
             yield {
@@ -287,7 +269,6 @@ IMPORTANT: Only use tools that are actually available. Be specific about file pa
     }
     async executeTodo(todo, planContext) {
         console.log(chalk_1.default.cyan(`🔧 Executing todo: ${todo.title}`));
-        // Create execution context for the todo
         const executionMessages = [
             {
                 role: 'system',
@@ -316,7 +297,6 @@ Execute the task now using the available tools.`
                 content: `Execute task: ${todo.title}\n\nDescription: ${todo.description}`
             }
         ];
-        // Execute using the advanced AI provider with full tool access (pass messages to avoid huge prompt)
         let responseText = '';
         const toolCalls = [];
         const toolResults = [];
@@ -338,9 +318,7 @@ Execute the task now using the available tools.`
             executedAt: new Date()
         };
     }
-    // Quick plan generation for simple tasks
     async *quickPlan(goal) {
-        // For simple goals, create a minimal plan and execute immediately
         const planId = (0, nanoid_1.nanoid)();
         const simplePlan = {
             id: planId,
@@ -383,7 +361,6 @@ Execute the task now using the available tools.`
     suggestToolsForGoal(goal) {
         const goalLower = goal.toLowerCase();
         const tools = [];
-        // Smart tool suggestion based on goal
         if (goalLower.includes('read') || goalLower.includes('analyze')) {
             tools.push('read_file', 'analyze_project');
         }
@@ -399,18 +376,15 @@ Execute the task now using the available tools.`
         if (goalLower.includes('fix') || goalLower.includes('error')) {
             tools.push('read_file', 'execute_command', 'write_file');
         }
-        // Default tools if no specific match
         if (tools.length === 0) {
             tools.push('analyze_project', 'read_file', 'generate_code', 'write_file');
         }
         return [...new Set(tools)];
     }
-    // Get planning insights for the chat
     getPlanningInsights(goal) {
         const goalLower = goal.toLowerCase();
         const suggestedToolchains = [];
         let complexity = 'simple';
-        // Analyze goal complexity
         const complexityIndicators = [
             'full-stack', 'complete', 'comprehensive', 'entire', 'whole', 'all'
         ];
@@ -423,7 +397,6 @@ Execute the task now using the available tools.`
         else if (mediumComplexityIndicators.some(indicator => goalLower.includes(indicator))) {
             complexity = 'medium';
         }
-        // Suggest toolchains
         if (goalLower.includes('component') || goalLower.includes('react')) {
             suggestedToolchains.push('create-react-component');
         }
@@ -454,7 +427,6 @@ Execute the task now using the available tools.`
                 return 'Autonomous execution with adaptive planning';
         }
     }
-    // Utility methods
     getActivePlans() {
         return Array.from(this.activePlans.values());
     }
@@ -464,7 +436,6 @@ Execute the task now using the available tools.`
     getExecutionHistory() {
         return [...this.executionHistory];
     }
-    // Update workspace context
     updateWorkspace() {
         this.workspaceRAG.analyzeWorkspace();
     }

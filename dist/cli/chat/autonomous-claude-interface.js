@@ -50,7 +50,6 @@ const diff_manager_1 = require("../ui/diff-manager");
 const execution_policy_1 = require("../policies/execution-policy");
 const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 const context_manager_1 = require("../core/context-manager");
-// Configure marked for terminal rendering
 marked_1.marked.setOptions({
     renderer: new marked_terminal_1.default(),
 });
@@ -78,12 +77,9 @@ class AutonomousClaudeInterface {
             planMode: false,
             autoAcceptEdits: false,
         };
-        // Set working directory in AI provider
         advanced_ai_provider_1.advancedAIProvider.setWorkingDirectory(this.session.workingDirectory);
         modern_agent_system_1.modernAgentOrchestrator.setWorkingDirectory(this.session.workingDirectory);
-        // Initialize security policy manager
         this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
-        // Initialize structured UI
         advanced_cli_ui_1.advancedUI.startInteractiveMode();
         this.initializeStructuredPanels();
         this.setupEventHandlers();
@@ -91,7 +87,6 @@ class AutonomousClaudeInterface {
         this.setupTokenOptimization();
     }
     setupEventHandlers() {
-        // Handle Ctrl+C gracefully
         this.rl.on('SIGINT', () => {
             if (this.isProcessing) {
                 console.log(chalk_1.default.yellow('\\n⏸️  Stopping current operation...'));
@@ -103,29 +98,22 @@ class AutonomousClaudeInterface {
                 process.exit(0);
             }
         });
-        // Enable raw mode for keypress detection
         process.stdin.setRawMode(true);
         require('readline').emitKeypressEvents(process.stdin);
-        // Handle keypress events for interactive features
         process.stdin.on('keypress', (str, key) => {
             if (key && key.name === 'slash' && !this.isProcessing) {
-                // Show command suggestions when / is pressed
                 setTimeout(() => this.showCommandSuggestions(), 50);
             }
-            // Handle Shift+Tab for plan mode cycling
             if (key && key.name === 'tab' && key.shift && !this.isProcessing) {
                 this.togglePlanMode();
             }
-            // Handle auto-accept toggle
             if (key && key.name === 'a' && key.ctrl && !this.isProcessing) {
                 this.toggleAutoAcceptEdits();
             }
-            // Handle ESC to interrupt processing
             if (key && key.name === 'escape' && this.isProcessing) {
                 this.interruptProcessing();
             }
         });
-        // Handle line input
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
             if (!trimmed) {
@@ -135,85 +123,63 @@ class AutonomousClaudeInterface {
             await this.handleInput(trimmed);
             this.showPrompt();
         });
-        // Handle close
         this.rl.on('close', () => {
             this.showGoodbye();
             process.exit(0);
         });
     }
     setupStreamOptimization() {
-        // Buffer stream output for smoother rendering
         setInterval(() => {
             if (this.streamBuffer && Date.now() - this.lastStreamTime > 50) {
                 process.stdout.write(this.streamBuffer);
                 this.streamBuffer = '';
             }
-        }, 16); // ~60fps
+        }, 16);
     }
     setupTokenOptimization() {
-        // Check token usage periodically and suggest cleanup
         setInterval(() => {
             const metrics = context_manager_1.contextManager.getContextMetrics(this.session.messages);
-            // Warn if approaching limit
             if (metrics.estimatedTokens > metrics.tokenLimit * 0.85) {
                 console.log(chalk_1.default.yellow('\n⚠️  Token usage high - consider using /clear or auto-optimization will apply'));
             }
-            // Auto-optimize if way over limit (shouldn't happen but safety net)
             if (metrics.estimatedTokens > metrics.tokenLimit * 1.1) {
                 console.log(chalk_1.default.red('\n🚨 Emergency token optimization - auto-compressing context...'));
                 const { optimizedMessages } = context_manager_1.contextManager.optimizeContext(this.session.messages);
                 this.session.messages = optimizedMessages;
             }
-        }, 30000); // Check every 30 seconds
+        }, 30000);
     }
-    /**
-     * Interrupt current processing and stop all streams
-     */
     interruptProcessing() {
         if (!this.isProcessing)
             return;
         console.log(chalk_1.default.red('\n\n🛑 ESC pressed - Interrupting operation...'));
-        // Set interrupt flag
         this.shouldInterrupt = true;
-        // Abort current stream if exists
         if (this.currentStreamController) {
             this.currentStreamController.abort();
             this.currentStreamController = undefined;
         }
-        // Stop all active spinners
         this.stopAllActiveOperations();
-        // Interrupt any active agent executions
         const interruptedAgents = modern_agent_system_1.modernAgentOrchestrator.interruptActiveExecutions();
         if (interruptedAgents > 0) {
             console.log(chalk_1.default.yellow(`🤖 Stopped ${interruptedAgents} running agents`));
         }
-        // Clean up processing state
         this.isProcessing = false;
         console.log(chalk_1.default.yellow('⏹️  Operation interrupted by user'));
         console.log(chalk_1.default.cyan('✨ Ready for new commands\n'));
-        // Show prompt again
         this.showPrompt();
     }
-    /**
-     * Initialize structured UI panels
-     */
     initializeStructuredPanels() {
-        // Initialize structured UI mode
-        // Show welcome message
         console.log(chalk_1.default.cyan('\n🤖 Autonomous Claude Assistant Ready - Structured UI Mode'));
         console.log(chalk_1.default.gray('Type your request and panels will appear automatically as I work!'));
     }
     async start() {
         console.clear();
-        // Check for API keys first
         if (!this.checkAPIKeys()) {
             return;
         }
         this.showWelcome();
-        // Start continuous input loop and wait for it to close
         return new Promise((resolve) => {
             this.startInputLoop();
-            // Resolve when readline interface closes
             this.rl.on('close', () => {
                 this.showGoodbye();
                 resolve();
@@ -222,8 +188,6 @@ class AutonomousClaudeInterface {
     }
     startInputLoop() {
         this.showPrompt();
-        // Note: Input handling is done in setupEventHandlers() to avoid duplicate listeners
-        // Note: close event is handled in start() method
     }
     checkAPIKeys() {
         const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
@@ -246,7 +210,6 @@ class AutonomousClaudeInterface {
             }));
             return false;
         }
-        // Show which keys are available
         const availableKeys = [];
         if (hasAnthropicKey)
             availableKeys.push(chalk_1.default.green('✓ Claude'));
@@ -280,7 +243,6 @@ class AutonomousClaudeInterface {
             borderColor: 'cyan',
             textAlignment: 'center',
         }));
-        // Show initial command suggestions like Claude Code
         console.log(chalk_1.default.cyan('\n🚀 Quick Start - Try these commands:'));
         console.log(`${chalk_1.default.green('/')}\t\t\tShow all available commands`);
         console.log(`${chalk_1.default.green('/help')}\t\t\tDetailed help and examples`);
@@ -294,9 +256,7 @@ class AutonomousClaudeInterface {
     async initializeAutonomousAssistant() {
         const spinner = (0, ora_1.default)('🚀 Initializing autonomous assistant...').start();
         try {
-            // Automatically analyze the workspace
             spinner.text = '🔍 Analyzing workspace...';
-            // Set up the autonomous system prompt
             this.session.messages.push({
                 role: 'system',
                 content: `You are Claude - a fully autonomous AI development assistant with terminal velocity.
@@ -335,7 +295,6 @@ COMMUNICATION STYLE:
 You are NOT a cautious assistant - you are a proactive, autonomous developer who gets things done efficiently.`
             });
             spinner.succeed('🤖 Autonomous assistant ready');
-            // Brief pause to show readiness
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         catch (error) {
@@ -344,12 +303,10 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         }
     }
     async handleInput(input) {
-        // Handle slash commands
         if (input.startsWith('/')) {
             await this.handleSlashCommand(input);
             return;
         }
-        // Check for agent-specific requests
         const agentMatch = input.match(/^@(\\w+[-\\w]*)/);
         if (agentMatch) {
             const agentName = agentMatch[1];
@@ -357,7 +314,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             await this.executeAgentTask(agentName, task);
             return;
         }
-        // Regular autonomous chat
         await this.handleAutonomousChat(input);
     }
     async handleSlashCommand(command) {
@@ -467,9 +423,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 console.log(chalk_1.default.gray('Type /help for available commands'));
         }
     }
-    /**
-     * Show token usage metrics
-     */
     showTokenMetrics() {
         const metrics = context_manager_1.contextManager.getContextMetrics(this.session.messages);
         console.log((0, boxen_1.default)(`${chalk_1.default.blue.bold('📊 Token Usage Metrics')}\n\n` +
@@ -491,15 +444,12 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         }));
     }
     async handleAutonomousChat(input) {
-        // Initialize agent on first input
         if (!this.initialized) {
             await this.initializeAutonomousAssistant();
             this.initialized = true;
         }
-        // Check if plan mode is active
         if (this.session.planMode) {
             console.log(chalk_1.default.cyan('🎯 Plan Mode: Creating execution plan...'));
-            // Add plan mode prefix to inform AI to create a plan
             this.session.messages.push({
                 role: 'user',
                 content: `[PLAN MODE] Create a detailed execution plan for: ${input}`,
@@ -507,14 +457,11 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             await this.processAutonomousMessage();
             return;
         }
-        // Add user message for regular autonomous execution
         this.session.messages.push({
             role: 'user',
             content: input,
         });
-        // Update chat panel with user message
         this.updateChatPanel();
-        // Add auto-accept context if enabled
         if (this.session.autoAcceptEdits) {
             this.session.messages.push({
                 role: 'system',
@@ -528,26 +475,22 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         this.shouldInterrupt = false;
         this.currentStreamController = new AbortController();
         try {
-            console.log(); // Add spacing
+            console.log();
             console.log(chalk_1.default.blue('🤖 ') + chalk_1.default.dim('Autonomous assistant thinking...'));
             console.log(chalk_1.default.dim('💡 Press ESC to interrupt operation'));
             let assistantMessage = '';
             let toolsExecuted = 0;
             const startTime = Date.now();
-            // Check for early interruption
             if (this.shouldInterrupt) {
                 throw new Error('Operation interrupted by user');
             }
-            // Optimize context to prevent token limit issues
             const { optimizedMessages, metrics } = context_manager_1.contextManager.optimizeContext(this.session.messages);
             if (metrics.compressionRatio > 0) {
                 console.log(chalk_1.default.yellow(`📊 Context optimized: ${metrics.compressionRatio * 100}% reduction`));
                 console.log(chalk_1.default.dim(`\n   ${metrics.totalMessages} messages, ~${metrics.estimatedTokens} tokens`));
-                console.log(); // Add spacing after token info
+                console.log();
             }
-            // Stream the autonomous response with optimized context
             for await (const event of advanced_ai_provider_1.advancedAIProvider.streamChatWithFullAutonomy(optimizedMessages, this.currentStreamController.signal)) {
-                // Check for interruption before processing each event
                 if (this.shouldInterrupt) {
                     console.log(chalk_1.default.yellow('\n⏹️  Stream interrupted'));
                     break;
@@ -562,7 +505,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                         break;
                     case 'text_delta':
                         if (event.content) {
-                            // Buffer for smooth streaming
                             this.streamBuffer += event.content;
                             this.lastStreamTime = Date.now();
                             assistantMessage += event.content;
@@ -576,14 +518,13 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                         this.handleToolResult(event);
                         break;
                     case 'complete':
-                        // Flush any remaining buffer
                         if (this.streamBuffer) {
                             process.stdout.write(this.streamBuffer);
                             this.streamBuffer = '';
                         }
                         const duration = Date.now() - startTime;
                         console.log();
-                        console.log(); // Add extra spacing before completion message
+                        console.log();
                         console.log(chalk_1.default.green(`✨ Completed in ${duration}ms • ${toolsExecuted} tools used`));
                         break;
                     case 'error':
@@ -591,13 +532,11 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                         break;
                 }
             }
-            // Add assistant message to session
             if (assistantMessage.trim()) {
                 this.session.messages.push({
                     role: 'assistant',
                     content: assistantMessage.trim(),
                 });
-                // Update chat panel with the conversation
                 this.updateChatPanel();
             }
         }
@@ -614,8 +553,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             this.isProcessing = false;
             this.shouldInterrupt = false;
             this.currentStreamController = undefined;
-            console.log(); // Add spacing
-            // Only show prompt if not already interrupted (interrupt handler shows it)
+            console.log();
             if (!this.shouldInterrupt) {
                 this.showPrompt();
             }
@@ -625,11 +563,9 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         const { toolName, toolArgs, metadata } = event;
         if (!toolName)
             return;
-        // Create visual indicator for tool execution
         const toolEmoji = this.getToolEmoji(toolName);
         const toolLabel = this.getToolLabel(toolName);
         console.log(`\\n${toolEmoji} ${chalk_1.default.cyan(toolLabel)}`, chalk_1.default.dim(this.formatToolArgs(toolArgs)));
-        // Create spinner for long-running operations
         const tracker = {
             name: toolName,
             startTime: new Date(),
@@ -647,7 +583,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         const { toolName, toolResult, metadata } = event;
         if (!toolName)
             return;
-        // Stop spinner if exists
         if (metadata?.toolCallId) {
             const tracker = this.activeTools.get(metadata.toolCallId);
             if (tracker?.spinner) {
@@ -662,7 +597,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 this.activeTools.delete(metadata.toolCallId);
             }
         }
-        // Show tool result summary and update structured panels
         if (toolResult && !toolResult.error) {
             this.showToolResultSummary(toolName, toolResult);
             this.updateStructuredPanelsFromTool(toolName, toolResult);
@@ -695,7 +629,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     formatToolArgs(args) {
         if (!args)
             return '';
-        // Format key arguments for display
         const keyArgs = [];
         if (args.path)
             keyArgs.push(chalk_1.default.blue(args.path));
@@ -729,9 +662,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 break;
         }
     }
-    /**
-     * Update structured panels based on tool results
-     */
     updateStructuredPanelsFromTool(toolName, toolResult) {
         switch (toolName) {
             case 'read_file':
@@ -741,7 +671,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 break;
             case 'write_file':
                 if (toolResult.path && toolResult.content) {
-                    // Show diff if we have original content
                     if (toolResult.originalContent) {
                         advanced_cli_ui_1.advancedUI.showFileDiff(toolResult.path, toolResult.originalContent, toolResult.content);
                     }
@@ -766,19 +695,12 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                 break;
             case 'execute_command':
                 if (toolResult.stdout) {
-                    // Show command output as status update
                     advanced_cli_ui_1.advancedUI.logInfo(`Command: ${toolResult.command || 'unknown'}`, toolResult.stdout.slice(0, 200));
                 }
                 break;
         }
     }
-    /**
-     * Update chat panel with conversation history
-     */
     updateChatPanel() {
-        // Since we're in structured UI mode, the chat flows naturally in the terminal
-        // The panels will show file content, diffs, and results automatically
-        // This keeps the conversation in the main terminal for better readability
     }
     async executeAgentTask(agentName, task) {
         if (!task) {
@@ -827,7 +749,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     }
     async handleAutoMode(task) {
         console.log(chalk_1.default.blue('\\n🎯 Autonomous Mode: Analyzing and executing task...\\n'));
-        // Use advanced AI provider for autonomous execution
         this.session.messages.push({
             role: 'user',
             content: `/auto ${task}`
@@ -871,7 +792,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             this.showPrompt();
         }
     }
-    // Utility methods
     stopAllActiveOperations() {
         this.activeTools.forEach(tracker => {
             if (tracker.spinner) {
@@ -904,7 +824,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
     }
     async clearSession() {
         console.clear();
-        // Show metrics before clearing
         const metricsBefore = context_manager_1.contextManager.getContextMetrics(this.session.messages);
         this.session.messages = this.session.messages.filter(m => m.role === 'system');
         this.session.executionHistory = [];
@@ -914,7 +833,7 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(chalk_1.default.green(`✅ Session cleared - freed ${tokensFreed.toLocaleString()} tokens`));
     }
     showExecutionHistory() {
-        const history = this.session.executionHistory.slice(-20); // Show last 20 events
+        const history = this.session.executionHistory.slice(-20);
         if (history.length === 0) {
             console.log(chalk_1.default.yellow('No execution history'));
             return;
@@ -953,7 +872,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(chalk_1.default.dim('• "Set up Docker and CI/CD for deployment"'));
         console.log(chalk_1.default.dim('• "Optimize this component for performance"'));
     }
-    // [Rest of utility methods remain similar to previous version]
     async changeDirectory(newDir) {
         try {
             const resolvedPath = require('path').resolve(this.session.workingDirectory, newDir);
@@ -1036,7 +954,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         const modeIcon = this.session.autonomous ? '🤖' :
             this.session.planMode ? '🎯' :
                 this.session.autoAcceptEdits ? '🚀' : '💬';
-        // Build mode indicators
         const indicators = this.updatePromptIndicators();
         const agentInfo = indicators.length > 0 ? `${indicators.join('')}:` : '';
         const statusDot = this.isProcessing ?
@@ -1046,9 +963,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
-    /**
-     * Auto-complete function for readline
-     */
     autoComplete(line) {
         const commands = [
             '/add-dir', '/agents', '/analyze', '/auto', '/bug', '/cd', '/clear', '/compact', '/config',
@@ -1063,15 +977,11 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         const hits = allSuggestions.filter((c) => c.startsWith(line));
         return [hits.length ? hits : allSuggestions, line];
     }
-    /**
-     * Show interactive command suggestions
-     */
     showCommandSuggestions() {
         if (this.isProcessing)
             return;
         console.log('\n' + chalk_1.default.cyan.bold('📋 Available Commands:'));
         console.log(chalk_1.default.gray('─'.repeat(80)));
-        // System Commands
         console.log(chalk_1.default.white.bold('\n🔧 System Commands:'));
         console.log(`${chalk_1.default.green('/help')}           Show detailed help and command reference`);
         console.log(`${chalk_1.default.green('/agents')}         List all available AI agents`);
@@ -1079,14 +989,12 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(`${chalk_1.default.green('/config')}         Open configuration panel`);
         console.log(`${chalk_1.default.green('/clear')}          Clear conversation history and free up context`);
         console.log(`${chalk_1.default.green('/exit')} (quit)    Exit the REPL`);
-        // File & Directory Operations  
         console.log(chalk_1.default.white.bold('\n📁 File & Directory Operations:'));
         console.log(`${chalk_1.default.green('/add-dir')}        Add a new working directory`);
         console.log(`${chalk_1.default.green('/cd')} [path]      Change current working directory`);
         console.log(`${chalk_1.default.green('/pwd')}            Show current working directory`);
         console.log(`${chalk_1.default.green('/ls')}             List files in current directory`);
         console.log(`${chalk_1.default.green('/analyze')}        Quick project analysis`);
-        // Analysis & Tools
         console.log(chalk_1.default.white.bold('\n🔍 Analysis & Autonomous Tools:'));
         console.log(`${chalk_1.default.green('/auto')} <task>    Fully autonomous task execution`);
         console.log(`${chalk_1.default.green('/plan')}           Toggle plan mode (shift+tab to cycle)`);
@@ -1094,20 +1002,17 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(`${chalk_1.default.green('/context')}        Show execution context`);
         console.log(`${chalk_1.default.green('/history')}        Show execution history`);
         console.log(`${chalk_1.default.green('/autonomous')} [on|off] Toggle autonomous mode`);
-        // File Changes & Diffs
         console.log(chalk_1.default.white.bold('\\n📝 File Changes & Diffs:'));
         console.log(`${chalk_1.default.green('/diff')} [file]    Show file changes (all diffs if no file specified)`);
         console.log(`${chalk_1.default.green('/accept')} <file>   Accept and apply file changes`);
         console.log(`${chalk_1.default.green('/accept all')}     Accept all pending file changes`);
         console.log(`${chalk_1.default.green('/reject')} <file>   Reject and discard file changes`);
-        // Session Management
         console.log(chalk_1.default.white.bold('\n💾 Session Management:'));
         console.log(`${chalk_1.default.green('/export')}         Export current conversation to file or clipboard`);
         console.log(`${chalk_1.default.green('/compact')}        Clear history but keep summary in context`);
         console.log(`${chalk_1.default.green('/cost')}           Show total cost and duration of current session`);
         console.log(`${chalk_1.default.green('/doctor')}         Diagnose and verify Claude Code installation`);
         console.log(`${chalk_1.default.green('/bug')}            Submit feedback about Claude Code`);
-        // Agent Commands - Enhanced with all available agents
         console.log(chalk_1.default.white.bold('\n🤖 Agent Commands:'));
         console.log(chalk_1.default.dim('💡 Tip: Press @ to see auto-complete suggestions'));
         console.log(`${chalk_1.default.blue('@universal-agent')} <task>  All-in-one enterprise agent (default)`);
@@ -1119,7 +1024,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(`${chalk_1.default.blue('@devops-expert')} <task>   DevOps and infrastructure expert`);
         console.log(`${chalk_1.default.blue('@system-admin')} <task>    System administration tasks`);
         console.log(`${chalk_1.default.blue('@autonomous-coder')} <task> Full autonomous coding agent`);
-        // File Selection & Tagging
         console.log(chalk_1.default.white.bold('\n📁 File Selection & Tagging:'));
         console.log(chalk_1.default.dim('💡 Tip: Use * for interactive file selection'));
         console.log(`${chalk_1.default.magenta('*')} [pattern]        Interactive file picker and tagger`);
@@ -1138,9 +1042,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log('');
         this.showPrompt();
     }
-    /**
-     * Toggle plan mode
-     */
     togglePlanMode() {
         this.session.planMode = !this.session.planMode;
         if (this.session.planMode) {
@@ -1152,12 +1053,8 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         this.updatePromptIndicators();
         this.showPrompt();
     }
-    /**
-     * Toggle auto-accept edits
-     */
     toggleAutoAcceptEdits() {
         this.session.autoAcceptEdits = !this.session.autoAcceptEdits;
-        // Sync with diff manager
         diff_manager_1.diffManager.setAutoAccept(this.session.autoAcceptEdits);
         if (this.session.autoAcceptEdits) {
             console.log(chalk_1.default.green('\n✅ auto-accept edits on ') + chalk_1.default.dim('(shift+tab to cycle)'));
@@ -1168,9 +1065,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         this.updatePromptIndicators();
         this.showPrompt();
     }
-    /**
-     * Update prompt indicators for current modes
-     */
     updatePromptIndicators() {
         const indicators = [];
         if (this.session.planMode)
@@ -1179,16 +1073,12 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             indicators.push(chalk_1.default.green('auto-accept'));
         if (this.session.autonomous)
             indicators.push(chalk_1.default.blue('autonomous'));
-        // Add diff count if there are pending diffs
         const pendingCount = diff_manager_1.diffManager.getPendingCount();
         if (pendingCount > 0) {
             indicators.push(chalk_1.default.yellow(`${pendingCount} diffs`));
         }
         return indicators;
     }
-    /**
-     * Show current security status
-     */
     async showSecurityStatus() {
         const summary = await this.policyManager.getPolicySummary();
         console.log((0, boxen_1.default)(`${chalk_1.default.blue.bold('🔒 Security Policy Status')}\n\n` +
@@ -1208,16 +1098,12 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         console.log(chalk_1.default.dim('\n Use /policy <setting> <value> to change security settings'));
         console.log(chalk_1.default.dim(' Available: approval [never|untrusted|always], sandbox [read-only|workspace-write|system-write]'));
     }
-    /**
-     * Update security policy
-     */
     async updateSecurityPolicy(setting, value) {
         try {
             const currentConfig = config_manager_1.simpleConfigManager.getAll();
             switch (setting) {
                 case 'approval':
                     if (['never', 'untrusted', 'always'].includes(value)) {
-                        // Policy update - would need to extend config manager
                         console.log(chalk_1.default.green(`✅ Approval policy set to: ${value}`));
                         console.log(chalk_1.default.green(`✅ Approval policy set to: ${value}`));
                     }
@@ -1227,7 +1113,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
                     break;
                 case 'sandbox':
                     if (['read-only', 'workspace-write', 'system-write'].includes(value)) {
-                        // Sandbox update - would need to extend config manager
                         console.log(chalk_1.default.green(`✅ Sandbox mode set to: ${value}`));
                         console.log(chalk_1.default.green(`✅ Sandbox mode set to: ${value}`));
                     }
@@ -1243,9 +1128,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             console.log(chalk_1.default.red(`Error updating policy: ${error.message}`));
         }
     }
-    /**
-     * Ask for user confirmation on risky commands
-     */
     async askForCommandConfirmation(command) {
         const risk = await this.policyManager.evaluateCommandRisk(command);
         if (!risk.requiresApproval) {
@@ -1274,9 +1156,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
         }));
         return await this.promptYesNo('Do you want to proceed? (y/N)');
     }
-    /**
-     * Prompt for yes/no confirmation
-     */
     async promptYesNo(question) {
         return new Promise((resolve) => {
             const tempRl = readline.createInterface({
@@ -1289,9 +1168,6 @@ You are NOT a cautious assistant - you are a proactive, autonomous developer who
             });
         });
     }
-    /**
-     * Get risk level color
-     */
     getRiskColor(level) {
         switch (level) {
             case 'low': return chalk_1.default.green('Low');

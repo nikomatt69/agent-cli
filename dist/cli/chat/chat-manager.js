@@ -17,7 +17,6 @@ class ChatManager {
             updatedAt: new Date(),
             systemPrompt: systemPrompt
         };
-        // Add system message if system prompt is provided
         if (session.systemPrompt) {
             session.messages.push({
                 role: 'system',
@@ -50,7 +49,6 @@ class ChatManager {
         };
         this.currentSession.messages.push(message);
         this.currentSession.updatedAt = new Date();
-        // Trim history if needed
         this.trimHistory();
         return message;
     }
@@ -60,7 +58,6 @@ class ChatManager {
     getContextMessages() {
         const messages = this.getMessages();
         if (!config_manager_1.simpleConfigManager.get('chatHistory')) {
-            // Return only system message and last user message if history is disabled
             const systemMessage = messages.find(m => m.role === 'system');
             const lastUserMessage = messages.filter(m => m.role === 'user').pop();
             return [
@@ -77,10 +74,8 @@ class ChatManager {
         const messages = this.currentSession.messages;
         if (messages.length <= maxLength)
             return;
-        // Always keep system message
         const systemMessage = messages.find(m => m.role === 'system');
         const otherMessages = messages.filter(m => m.role !== 'system');
-        // Keep only the most recent messages
         const keepMessages = otherMessages.slice(-(maxLength - 1));
         this.currentSession.messages = [
             ...(systemMessage ? [systemMessage] : []),

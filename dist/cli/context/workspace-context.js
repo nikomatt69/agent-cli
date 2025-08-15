@@ -58,11 +58,9 @@ class WorkspaceContextManager {
             lastUpdated: new Date(),
         };
     }
-    // Select specific directories/files for focused context
     async selectPaths(paths) {
         console.log(chalk_1.default.blue(`🎯 Selecting workspace context: ${paths.join(', ')}`));
         this.context.selectedPaths = paths.map(p => path.resolve(this.context.rootPath, p));
-        // Analyze selected paths
         await this.analyzeSelectedPaths();
         console.log(chalk_1.default.green(`✅ Workspace context updated with ${this.context.files.size} files`));
     }
@@ -80,13 +78,11 @@ class WorkspaceContextManager {
                 }
             }
         }
-        // Update project metadata
         await this.updateProjectMetadata();
         this.context.lastUpdated = new Date();
     }
     async analyzeDirectory(dirPath) {
         const relativePath = path.relative(this.context.rootPath, dirPath);
-        // Skip node_modules and other irrelevant directories
         const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
         if (skipDirs.some(skip => relativePath.includes(skip))) {
             return {
@@ -118,7 +114,6 @@ class WorkspaceContextManager {
                 }
             }
         }
-        // Calculate directory importance and metadata
         const totalFiles = files.length + subdirectories.reduce((sum, d) => sum + d.totalFiles, 0);
         const totalSize = files.reduce((sum, f) => sum + f.size, 0) +
             subdirectories.reduce((sum, d) => sum + d.totalSize, 0);
@@ -144,7 +139,6 @@ class WorkspaceContextManager {
         try {
             const relativePath = path.relative(this.context.rootPath, filePath);
             const extension = path.extname(filePath).slice(1);
-            // Skip binary files and irrelevant files
             const skipExtensions = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'zip', 'tar', 'gz'];
             if (skipExtensions.includes(extension.toLowerCase())) {
                 return null;
@@ -193,7 +187,6 @@ class WorkspaceContextManager {
         const detected = langMap[extension.toLowerCase()];
         if (detected)
             return detected;
-        // Try to detect from content
         if (content.includes('import React') || content.includes('from react'))
             return 'typescript';
         if (content.includes('#!/usr/bin/env python'))
@@ -203,34 +196,27 @@ class WorkspaceContextManager {
         return 'text';
     }
     calculateFileImportance(filePath, extension, content) {
-        let importance = 50; // Base importance
-        // Higher importance for certain files
+        let importance = 50;
         const importantFiles = ['package.json', 'tsconfig.json', 'README.md', 'index.ts', 'index.js', 'app.ts'];
         if (importantFiles.some(f => filePath.endsWith(f))) {
             importance += 30;
         }
-        // Higher importance for main source directories
         if (filePath.includes('src/') || filePath.includes('components/')) {
             importance += 20;
         }
-        // Higher importance based on file size (but not too large)
         const sizeScore = Math.min(content.length / 100, 20);
         importance += sizeScore;
-        // Higher importance for files with exports
         const exportCount = (content.match(/export\s+/g) || []).length;
         importance += Math.min(exportCount * 5, 25);
         return Math.min(importance, 100);
     }
     calculateDirectoryImportance(path, fileCount, languages) {
-        let importance = 30; // Base importance
-        // Higher importance for source directories
+        let importance = 30;
         const importantDirs = ['src', 'components', 'pages', 'app', 'lib', 'utils', 'api'];
         if (importantDirs.some(dir => path.includes(dir))) {
             importance += 40;
         }
-        // Higher importance based on file count
         importance += Math.min(fileCount * 2, 30);
-        // Higher importance for TypeScript/JavaScript heavy directories
         const jstsCount = languages.filter(l => ['javascript', 'typescript'].includes(l)).length;
         if (jstsCount > 0) {
             importance += 20;
@@ -240,7 +226,6 @@ class WorkspaceContextManager {
     extractDependencies(content, language) {
         const dependencies = [];
         if (language === 'typescript' || language === 'javascript') {
-            // Extract import statements
             const importMatches = content.match(/import .+ from ['"]([^'"]+)['"]/g);
             if (importMatches) {
                 importMatches.forEach(match => {
@@ -250,7 +235,6 @@ class WorkspaceContextManager {
                     }
                 });
             }
-            // Extract require statements
             const requireMatches = content.match(/require\(['"]([^'"]+)['"]\)/g);
             if (requireMatches) {
                 requireMatches.forEach(match => {
@@ -266,7 +250,6 @@ class WorkspaceContextManager {
     extractExports(content, language) {
         const exports = [];
         if (language === 'typescript' || language === 'javascript') {
-            // Extract export statements
             const exportMatches = content.match(/export\s+(const|function|class|interface|type)\s+(\w+)/g);
             if (exportMatches) {
                 exportMatches.forEach(match => {
@@ -276,7 +259,6 @@ class WorkspaceContextManager {
                     }
                 });
             }
-            // Extract default exports
             const defaultExportMatch = content.match(/export\s+default\s+(\w+)/);
             if (defaultExportMatch) {
                 exports.push(`default:${defaultExportMatch[1]}`);
@@ -285,7 +267,6 @@ class WorkspaceContextManager {
         return exports;
     }
     async generateFileSummary(filePath, content, language) {
-        // Simple rule-based summary generation
         const lines = content.split('\n').length;
         if (filePath.endsWith('package.json')) {
             try {
@@ -316,7 +297,6 @@ class WorkspaceContextManager {
         return `Directory with ${totalFiles} files in ${languages.join(', ')}`;
     }
     async updateProjectMetadata() {
-        // Analyze project structure
         const projectAnalysis = await tools_manager_1.toolsManager.analyzeProject();
         this.context.projectMetadata = {
             name: projectAnalysis.packageInfo?.name,
@@ -326,19 +306,15 @@ class WorkspaceContextManager {
             structure: projectAnalysis.structure,
         };
     }
-    // Get context for AI agents with automatic grep filtering
     getContextForAgent(agentId, maxFiles = 20, searchQuery) {
-        // Auto-apply grep filtering if we have too many files or if a search query is provided
         if (searchQuery || this.context.files.size > 50) {
             return this.getFilteredContextForAgent(agentId, maxFiles, searchQuery);
         }
-        // Get most important files within selected paths
         const relevantFiles = Array.from(this.context.files.values())
             .filter(file => this.context.selectedPaths.some(path => file.path.startsWith(path.replace(this.context.rootPath, ''))))
             .sort((a, b) => b.importance - a.importance)
             .slice(0, maxFiles);
         const projectSummary = this.generateProjectSummary();
-        // Generate total context string
         const totalContext = this.generateContextString(relevantFiles, projectSummary);
         return {
             selectedPaths: this.context.selectedPaths,
@@ -347,16 +323,13 @@ class WorkspaceContextManager {
             totalContext,
         };
     }
-    // Get filtered context using grep-like search
     getFilteredContextForAgent(agentId, maxFiles = 20, searchQuery) {
         console.log(chalk_1.default.yellow(`🔍 Auto-filtering context${searchQuery ? ` for query: "${searchQuery}"` : ' (large workspace)'}...`));
         let relevantFiles;
         if (searchQuery) {
-            // Use search query to filter files
             relevantFiles = this.searchFilesWithQuery(searchQuery, maxFiles);
         }
         else {
-            // Just get the most important files when no search query
             relevantFiles = Array.from(this.context.files.values())
                 .sort((a, b) => b.importance - a.importance)
                 .slice(0, maxFiles);
@@ -371,35 +344,27 @@ class WorkspaceContextManager {
             totalContext,
         };
     }
-    // Search files using grep-like functionality
     searchFilesWithQuery(query, maxFiles) {
         const searchResults = [];
-        // Search in file content and paths
         for (const file of this.context.files.values()) {
             let score = 0;
-            // Score based on query matches in file path
             const pathMatches = (file.path.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
             score += pathMatches * 20;
-            // Score based on query matches in content
             const contentMatches = (file.content.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
             score += contentMatches * 10;
-            // Score based on query matches in summary
             if (file.summary) {
                 const summaryMatches = (file.summary.toLowerCase().match(new RegExp(query.toLowerCase(), 'g')) || []).length;
                 score += summaryMatches * 15;
             }
-            // Score based on query matches in exports
             if (file.exports) {
                 const exportMatches = file.exports.filter(exp => exp.toLowerCase().includes(query.toLowerCase())).length;
                 score += exportMatches * 25;
             }
-            // Add base importance score
             score += file.importance;
             if (score > 0) {
                 searchResults.push({ file, score });
             }
         }
-        // Sort by relevance score and return top results
         return searchResults
             .sort((a, b) => b.score - a.score)
             .slice(0, maxFiles)
@@ -418,9 +383,8 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
     generateContextString(files, projectSummary) {
         let context = `=== WORKSPACE CONTEXT ===\n${projectSummary}\n\n`;
         context += `=== SELECTED FILES (${files.length}) ===\n`;
-        // Calculate if we need to truncate content due to size
         const totalSize = files.reduce((sum, file) => sum + file.content.length, 0);
-        const maxContextSize = 50000; // ~50KB limit for context
+        const maxContextSize = 50000;
         const shouldTruncate = totalSize > maxContextSize;
         const truncateSize = shouldTruncate ? Math.floor(maxContextSize / files.length) : 4000;
         if (shouldTruncate) {
@@ -435,7 +399,6 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
             if (file.dependencies && file.dependencies.length > 0) {
                 context += `Dependencies: ${file.dependencies.join(', ')}\n`;
             }
-            // Smart content truncation
             const contentPreview = file.content.length > truncateSize ?
                 file.content.slice(0, truncateSize) + '\n... [truncated - use /search to find specific content]' :
                 file.content;
@@ -443,15 +406,13 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
         });
         return context;
     }
-    // Watch for file changes in selected paths
     startWatching() {
-        this.stopWatching(); // Clear existing watchers
+        this.stopWatching();
         this.context.selectedPaths.forEach(selectedPath => {
             if (fs.existsSync(selectedPath)) {
                 const watcher = fs.watch(selectedPath, { recursive: true }, (eventType, filename) => {
                     if (filename) {
                         console.log(chalk_1.default.yellow(`📁 File changed: ${filename} (${eventType})`));
-                        // Debounced re-analysis
                         setTimeout(() => this.analyzeSelectedPaths(), 1000);
                     }
                 });
@@ -464,7 +425,6 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
         this.watchers.forEach(watcher => watcher.close());
         this.watchers.clear();
     }
-    // Smart context extraction for specific queries
     extractRelevantContext(query) {
         console.log(chalk_1.default.blue(`🔍 Extracting context for: "${query}"`));
         const relevantFiles = this.searchFilesWithQuery(query, 10);
@@ -474,25 +434,22 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
         let context = `=== RELEVANT CONTEXT FOR: "${query}" ===\n\n`;
         relevantFiles.forEach(file => {
             context += `\n--- ${file.path} ---\n`;
-            // Extract relevant snippets from the file
             const snippets = this.extractRelevantSnippets(file.content, query);
             if (snippets.length > 0) {
                 context += snippets.join('\n...\n') + '\n';
             }
             else {
-                // If no specific snippets, show summary and first part
                 context += `${file.summary}\n`;
                 context += file.content.slice(0, 500) + '\n';
             }
         });
         return context;
     }
-    // Extract relevant code snippets around query matches
     extractRelevantSnippets(content, query) {
         const lines = content.split('\n');
         const queryLower = query.toLowerCase();
         const snippets = [];
-        const contextLines = 3; // Lines of context around matches
+        const contextLines = 3;
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].toLowerCase().includes(queryLower)) {
                 const start = Math.max(0, i - contextLines);
@@ -507,9 +464,8 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
                 snippets.push(snippet);
             }
         }
-        return snippets.slice(0, 5); // Limit to 5 snippets per file
+        return snippets.slice(0, 5);
     }
-    // Display context summary
     showContextSummary() {
         console.log(chalk_1.default.blue.bold('\n🌍 Workspace Context Summary'));
         console.log(chalk_1.default.gray('═'.repeat(50)));
@@ -524,7 +480,6 @@ Selected Paths: ${this.context.selectedPaths.join(', ')}`;
         console.log(`💻 Languages: ${this.context.projectMetadata.languages.join(', ')}`);
         console.log(`📦 Dependencies: ${this.context.projectMetadata.dependencies.length}`);
         console.log(`🕐 Last Updated: ${this.context.lastUpdated.toLocaleTimeString()}`);
-        // Show most important files
         const topFiles = Array.from(this.context.files.values())
             .sort((a, b) => b.importance - a.importance)
             .slice(0, 5);

@@ -45,7 +45,6 @@ const marked_terminal_1 = __importDefault(require("marked-terminal"));
 const chat_manager_1 = require("./chat-manager");
 const model_provider_1 = require("../ai/model-provider");
 const nik_cli_commands_1 = require("./nik-cli-commands");
-// Configure marked for terminal rendering
 const renderer = new marked_terminal_1.default();
 marked_1.marked.setOptions({
     renderer,
@@ -63,7 +62,6 @@ class ChatInterface {
         this.setupEventHandlers();
     }
     setupEventHandlers() {
-        // Handle Ctrl+C gracefully
         this.rl.on('SIGINT', () => {
             if (this.isStreaming) {
                 console.log(chalk_1.default.yellow('\n⏸️  Streaming stopped'));
@@ -75,7 +73,6 @@ class ChatInterface {
                 process.exit(0);
             }
         });
-        // Handle line input
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
             if (!trimmed) {
@@ -85,7 +82,6 @@ class ChatInterface {
             await this.handleInput(trimmed);
             this.prompt();
         });
-        // Handle close
         this.rl.on('close', () => {
             console.log(chalk_1.default.yellow('\n👋 Goodbye!'));
             process.exit(0);
@@ -101,12 +97,10 @@ class ChatInterface {
     }
     async start() {
         this.showWelcome();
-        // Validate API key
         if (!model_provider_1.modelProvider.validateApiKey()) {
             console.log(chalk_1.default.red('\n❌ Cannot start chat without valid API key'));
             console.log(chalk_1.default.gray('Use /help for setup instructions\n'));
         }
-        // Create initial session
         chat_manager_1.chatManager.createNewSession();
         this.updatePrompt();
         this.prompt();
@@ -132,7 +126,6 @@ ${chalk_1.default.gray('Type your message or use slash commands...')}
         }));
     }
     async handleInput(input) {
-        // Handle slash commands
         if (input.startsWith('/')) {
             const result = await this.slashCommands.handle(input);
             if (result.shouldUpdatePrompt) {
@@ -143,17 +136,14 @@ ${chalk_1.default.gray('Type your message or use slash commands...')}
             }
             return;
         }
-        // Regular chat message
         await this.handleChatMessage(input);
     }
     async handleChatMessage(input) {
-        // Add user message to chat
         chat_manager_1.chatManager.addMessage(input, 'user');
         try {
             console.log(chalk_1.default.blue('\n🤖 '));
             this.isStreaming = true;
             let responseText = '';
-            // Stream the response
             const messages = chat_manager_1.chatManager.getContextMessages();
             for await (const chunk of model_provider_1.modelProvider.streamResponse({ messages })) {
                 if (!this.isStreaming)
@@ -162,8 +152,7 @@ ${chalk_1.default.gray('Type your message or use slash commands...')}
                 responseText += chunk;
             }
             this.isStreaming = false;
-            console.log('\n'); // New line after streaming
-            // Add assistant message to chat
+            console.log('\n');
             chat_manager_1.chatManager.addMessage(responseText, 'assistant');
         }
         catch (error) {

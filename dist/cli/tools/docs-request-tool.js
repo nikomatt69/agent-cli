@@ -11,10 +11,6 @@ const docs_context_manager_1 = require("../context/docs-context-manager");
 const cloud_docs_provider_1 = require("../core/cloud-docs-provider");
 const documentation_library_1 = require("../core/documentation-library");
 const feedback_system_1 = require("../core/feedback-system");
-/**
- * Tool per richiedere automaticamente documentazione quando gli agenti
- * incontrano concetti, tecnologie o implementazioni che non conoscono
- */
 exports.docsRequestTool = (0, ai_1.tool)({
     description: 'Request documentation when you encounter unknown concepts, technologies, or need implementation guidance',
     parameters: zod_1.z.object({
@@ -36,10 +32,8 @@ exports.docsRequestTool = (0, ai_1.tool)({
                 externalSources: [],
                 summary: ''
             };
-            // 1. First, check what documentation is already loaded
             const currentStats = docs_context_manager_1.docsContextManager.getContextStats();
             const currentDocs = docs_context_manager_1.docsContextManager.getLoadedDocs();
-            // Check if we already have relevant docs loaded
             const relevantLoaded = currentDocs.filter(doc => doc.title.toLowerCase().includes(concept.toLowerCase()) ||
                 doc.content.toLowerCase().includes(concept.toLowerCase()) ||
                 doc.tags.some(tag => tag.toLowerCase().includes(concept.toLowerCase())));
@@ -54,7 +48,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
                 result.summary = `✅ Found ${relevantLoaded.length} relevant documents already loaded in context:\n${relevantLoaded.map(doc => `- ${doc.title}`).join('\n')}\n\nYou can use this information immediately.`;
                 return result;
             }
-            // 2. Search for documentation using smart search approach
             const searchQueries = [
                 concept,
                 `${concept} tutorial`,
@@ -65,23 +58,18 @@ exports.docsRequestTool = (0, ai_1.tool)({
             ];
             let bestMatches = [];
             const cloudProvider = (0, cloud_docs_provider_1.getCloudDocsProvider)();
-            // Search through different queries to find the best matches
-            for (const query of searchQueries.slice(0, 3)) { // Limit to avoid too many requests
+            for (const query of searchQueries.slice(0, 3)) {
                 try {
-                    // Search local docs first
                     const localResults = await documentation_library_1.docLibrary.search(query, undefined, 3);
-                    // Search cloud docs if available
                     let cloudResults = [];
                     if (cloudProvider) {
                         try {
                             cloudResults = await cloudProvider.searchShared(query, undefined, 3);
                         }
                         catch (error) {
-                            // Cloud provider not ready or failed - continue with local results only
                             console.debug('Cloud search failed:', error);
                         }
                     }
-                    // Combine and score results
                     const combinedResults = [
                         ...localResults.map(r => ({ ...r, source: 'local', score: r.score })),
                         ...cloudResults.map(r => ({
@@ -93,24 +81,21 @@ exports.docsRequestTool = (0, ai_1.tool)({
                                 content: r.content
                             },
                             source: 'cloud',
-                            score: r.popularity_score / 100 // Normalize to 0-1 range
+                            score: r.popularity_score / 100
                         }))
                     ];
-                    // Add best scoring results
                     bestMatches.push(...combinedResults.filter(r => r.score > 0.3));
                 }
                 catch (error) {
                     console.error(`Search failed for query "${query}":`, error);
                 }
             }
-            // Remove duplicates and sort by score
             const uniqueMatches = bestMatches
                 .filter((match, index, self) => index === self.findIndex(m => m.entry.title === match.entry.title))
                 .sort((a, b) => b.score - a.score)
-                .slice(0, 5); // Top 5 results
+                .slice(0, 5);
             if (uniqueMatches.length > 0) {
                 result.found = true;
-                // Auto-load best matches if requested and urgency is medium/high
                 if (autoLoad && (urgency === 'medium' || urgency === 'high')) {
                     const docsToLoad = uniqueMatches.slice(0, 2).map(match => match.entry.title);
                     try {
@@ -127,7 +112,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
                         console.error('Auto-load failed:', error);
                     }
                 }
-                // Provide suggestions for manual loading
                 result.suggestions = uniqueMatches.map(match => ({
                     title: match.entry.title,
                     category: match.entry.category,
@@ -136,10 +120,8 @@ exports.docsRequestTool = (0, ai_1.tool)({
                     url: match.entry.url
                 }));
             }
-            // 3. Suggest external sources if not found locally and requested
             if (!result.found && suggestSources) {
                 const conceptLower = concept.toLowerCase();
-                // Technology-specific suggestions
                 if (conceptLower.includes('react')) {
                     result.externalSources.push({
                         name: 'React Official Documentation',
@@ -168,7 +150,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
                         description: 'Official Next.js documentation'
                     });
                 }
-                // Generic suggestions
                 result.externalSources.push({
                     name: 'MDN Web Docs',
                     url: `https://developer.mozilla.org/en-US/search?q=${encodeURIComponent(concept)}`,
@@ -179,11 +160,9 @@ exports.docsRequestTool = (0, ai_1.tool)({
                     description: 'Community Q&A and solutions'
                 });
             }
-            // 4. Generate summary based on findings
             if (result.found) {
                 const loaded = result.loadedDocs.length;
                 const available = result.suggestions.length;
-                // Report successful documentation discovery
                 await feedback_system_1.feedbackSystem.reportSuccess(concept, context, `Found ${loaded + available} relevant documents`, { agentType: 'docs_request' });
                 result.summary = `🎯 Found documentation for "${concept}"!\n\n`;
                 if (loaded > 0) {
@@ -199,7 +178,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
                 result.summary += `**Next steps:** You now have relevant documentation loaded. Proceed with your implementation using the provided information.`;
             }
             else {
-                // Report documentation gap automatically
                 const impactLevel = urgency === 'high' ? 'high' : urgency === 'medium' ? 'medium' : 'low';
                 await feedback_system_1.feedbackSystem.reportDocGap(concept, context, impactLevel, 'first-time', {
                     agentType: 'docs_request',
@@ -233,9 +211,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
         }
     }
 });
-/**
- * Tool per segnalare gap nella documentazione che gli agenti incontrano frequentemente
- */
 exports.docsGapReportTool = (0, ai_1.tool)({
     description: 'Report documentation gaps when you repeatedly encounter unknown concepts that block your progress',
     parameters: zod_1.z.object({
@@ -248,7 +223,6 @@ exports.docsGapReportTool = (0, ai_1.tool)({
     execute: async ({ missingConcept, frequency, impact, suggestedSources, userContext }) => {
         try {
             console.log(chalk_1.default.yellow(`🔍 Reporting docs gap: "${missingConcept}"`));
-            // Report gap through feedback system
             await feedback_system_1.feedbackSystem.reportDocGap(missingConcept, userContext, impact, frequency, {
                 sources: suggestedSources,
                 agentType: 'manual_report'
@@ -278,7 +252,6 @@ exports.docsGapReportTool = (0, ai_1.tool)({
                 `- Add documentation using /doc-add command\n` +
                 `- Implement with available information and iterate\n` +
                 `- Ask user for specific guidance or examples`;
-            // The gap is now automatically tracked by the feedback system
             return {
                 success: true,
                 gapReport,
@@ -301,7 +274,6 @@ exports.docsGapReportTool = (0, ai_1.tool)({
         }
     }
 });
-// Export combined docs tools for AI agents
 exports.aiDocsTools = {
     request: exports.docsRequestTool,
     gapReport: exports.docsGapReportTool

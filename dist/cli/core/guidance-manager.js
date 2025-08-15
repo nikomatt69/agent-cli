@@ -7,10 +7,6 @@ exports.GuidanceManager = void 0;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
-/**
- * GuidanceManager collects instructions from AGENTS.md, CLAUDE.md, CODEX.md
- * at various levels: home dir, repo root, current directory.
- */
 class GuidanceManager {
     constructor() {
         this.files = [
@@ -19,7 +15,6 @@ class GuidanceManager {
             path_1.default.join(process.cwd(), 'AGENTS.md'),
         ];
     }
-    /** Read and merge guidance content from files. */
     async getGuidance() {
         let guidance = '';
         for (const f of this.files) {
@@ -32,7 +27,7 @@ class GuidanceManager {
 ${content}
 `;
             }
-            catch { /* ignore missing */ }
+            catch { }
         }
         return guidance.trim();
     }

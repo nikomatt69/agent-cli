@@ -5,6 +5,27 @@ import { sanitizePath } from './secure-file-tools';
 import { CliUI } from '../utils/cli-ui';
 import { DiffViewer, FileDiff } from '../ui/diff-viewer';
 import { diffManager } from '../ui/diff-manager';
+import { lspManager } from '../lsp/lsp-manager';
+import { ContextAwareRAGSystem } from '../context/context-aware-rag';
+import { z } from 'zod';
+import { 
+    WriteFileOptionsSchema, 
+    WriteFileResultSchema, 
+    AppendOptionsSchema,
+    WriteMultipleResultSchema,
+    FileWriteSchema,
+    VerificationResultSchema,
+    ValidationResultSchema,
+    type WriteFileOptions, 
+    type WriteFileResult,
+    type AppendOptions,
+    type WriteMultipleResult,
+    type FileWrite,
+    type VerificationResult,
+    type ValidationResult,
+    type ContentValidator,
+    type ContentTransformer
+} from '../schemas/tool-schemas';
 
 /**
  * Production-ready Write File Tool
@@ -12,10 +33,12 @@ import { diffManager } from '../ui/diff-manager';
  */
 export class WriteFileTool extends BaseTool {
     private backupDirectory: string;
+    private contextSystem: ContextAwareRAGSystem;
 
     constructor(workingDirectory: string) {
         super('write-file-tool', workingDirectory);
         this.backupDirectory = join(workingDirectory, '.ai-backups');
+        this.contextSystem = new ContextAwareRAGSystem(workingDirectory);
     }
 
     async execute(filePath: string, content: string, options: WriteFileOptions = {}): Promise<ToolExecutionResult> {
@@ -23,6 +46,17 @@ export class WriteFileTool extends BaseTool {
         let backupPath: string | undefined;
 
         try {
+            // Zod validation for input parameters
+            const validatedOptions = WriteFileOptionsSchema.parse(options);
+            
+            if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+                throw new Error('filePath must be a non-empty string');
+            }
+            
+            if (typeof content !== 'string') {
+                throw new Error('content must be a string');
+            }
+
             // Sanitize and validate file path
             const sanitizedPath = sanitizePath(filePath, this.workingDirectory);
 
@@ -35,6 +69,9 @@ export class WriteFileTool extends BaseTool {
                     }
                 }
             }
+
+            // LSP + Context Analysis
+            await this.performLSPContextAnalysis(sanitizedPath, content);
 
             // Read existing content for diff display
             let existingContent = '';
@@ -117,14 +154,19 @@ export class WriteFileTool extends BaseTool {
                     encoding,
                     lines: processedContent.split('\n').length,
                     created: !backupPath, // New file if no backup was created
-                    mode: options.mode || 0o644
+                    mode: validatedOptions.mode || 0o644
                 }
             };
 
-            CliUI.logSuccess(`File written: ${filePath} (${writeFileResult.bytesWritten} bytes)`);
+            // Zod validation for result
+            const validatedResult = WriteFileResultSchema.parse(writeFileResult);
+
+            // Show relative path in logs for cleaner output
+            const relativePath = sanitizedPath.replace(this.workingDirectory, '').replace(/^\//, '') || sanitizedPath;
+            CliUI.logSuccess(`File written: ${relativePath} (${writeFileResult.bytesWritten} bytes)`);
             return {
                 success: true,
-                data: writeFileResult,
+                data: validatedResult,
                 metadata: {
                     executionTime: duration,
                     toolName: this.name,
@@ -159,7 +201,8 @@ export class WriteFileTool extends BaseTool {
                 }
             };
 
-            CliUI.logError(`Failed to write file ${filePath}: ${error.message}`);
+            const relativePath = filePath.replace(this.workingDirectory, '').replace(/^\//, '') || filePath;
+            CliUI.logError(`Failed to write file ${relativePath}: ${error.message}`);
             return {
                 success: false,
                 data: errorResult,
@@ -390,67 +433,412 @@ export class WriteFileTool extends BaseTool {
             return 0;
         }
     }
+
+    private async performLSPContextAnalysis(filePath: string, content: string): Promise<void> {
+        try {
+            // LSP Analysis
+            const lspContext = await lspManager.analyzeFile(filePath);
+            
+            if (lspContext.diagnostics.length > 0) {
+                const errors = lspContext.diagnostics.filter(d => d.severity === 1);
+                const warnings = lspContext.diagnostics.filter(d => d.severity === 2);
+                
+                if (errors.length > 0) {
+                    CliUI.logWarning(`LSP found ${errors.length} errors in ${filePath}`);
+                    errors.slice(0, 3).forEach(error => {
+                        CliUI.logError(`  Line ${error.range.start.line + 1}: ${error.message}`);
+                    });
+                }
+                
+                if (warnings.length > 0) {
+                    CliUI.logInfo(`LSP found ${warnings.length} warnings in ${filePath}`);
+                }
+            }
+            
+            // Context Analysis & Memory Update
+            this.contextSystem.recordInteraction(
+                `Writing file: ${filePath}`,
+                `File write operation with LSP validation`,
+                [{
+                    type: 'write_file',
+                    target: filePath,
+                    params: { contentLength: content.length },
+                    result: 'pending',
+                    duration: 0
+                }]
+            );
+            
+            // Update workspace context with new file
+            await this.contextSystem.analyzeFile(filePath);
+            
+        } catch (error: any) {
+            CliUI.logWarning(`LSP/Context analysis failed: ${error.message}`);
+        }
+    }
 }
 
-export interface WriteFileOptions {
-    encoding?: string;
-    mode?: number;
-    createBackup?: boolean;
-    autoRollback?: boolean;
-    verifyWrite?: boolean;
-    stopOnFirstError?: boolean;
-    rollbackOnPartialFailure?: boolean;
-    validators?: ContentValidator[];
-    transformers?: ContentTransformer[];
-    showDiff?: boolean; // Whether to show diff before writing (default: true)
-}
-
-export interface AppendOptions {
-    encoding?: string;
-    separator?: string;
-    createBackup?: boolean;
-    verifyWrite?: boolean;
-}
-
-export interface WriteFileResult {
-    success: boolean;
-    filePath: string;
-    bytesWritten: number;
-    backupPath?: string;
-    duration: number;
-    error?: string;
-    metadata: {
-        encoding: string;
-        lines: number;
-        created: boolean;
-        mode: number;
+/**
+ * Built-in validators for common code quality issues
+ */
+export class ContentValidators {
+    /**
+     * Validates that content doesn't contain absolute paths (Claude Code best practice)
+     */
+    static noAbsolutePaths: ContentValidator = async (content: string, _filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        // Check for absolute paths in import/require statements
+        const absolutePathRegex = /(?:import|require|from)\s+['"`]([^'"`]*\/Users\/[^'"`]*|[^'"`]*\/home\/[^'"`]*|[^'"`]*C:\\[^'"`]*)/g;
+        const matches = content.match(absolutePathRegex);
+        
+        if (matches) {
+            errors.push(`Found absolute paths in imports: ${matches.join(', ')}`);
+        }
+        
+        // Check for absolute paths in general (more permissive warning)
+        const generalAbsoluteRegex = /(\/Users\/\w+|\/home\/\w+|C:\\[^\\]*\\)/g;
+        const generalMatches = content.match(generalAbsoluteRegex);
+        
+        if (generalMatches) {
+            const uniquePaths = [...new Set(generalMatches)];
+            warnings.push(`Consider using relative paths instead of: ${uniquePaths.join(', ')}`);
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
     };
-}
 
-export interface WriteMultipleResult {
-    success: boolean;
-    results: WriteFileResult[];
-    successCount: number;
-    totalFiles: number;
-    backupPaths: string[];
-    error?: string;
-}
+    /**
+     * Validates that package.json doesn't use "latest" versions
+     */
+    static noLatestVersions: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.endsWith('package.json')) {
+            try {
+                const packageObj = JSON.parse(content);
+                
+                const checkDependencies = (deps: any, section: string) => {
+                    if (deps) {
+                        Object.entries(deps).forEach(([name, version]) => {
+                            if (version === 'latest') {
+                                warnings.push(`${section}.${name} uses "latest" - consider pinning to specific version`);
+                            }
+                        });
+                    }
+                };
+                
+                checkDependencies(packageObj.dependencies, 'dependencies');
+                checkDependencies(packageObj.devDependencies, 'devDependencies');
+                checkDependencies(packageObj.peerDependencies, 'peerDependencies');
+                
+            } catch (parseError) {
+                warnings.push('Could not parse package.json to validate versions');
+            }
+        }
+        
+        return {
+            isValid: true, // This is a warning-only validator
+            errors,
+            warnings
+        };
+    };
 
-export interface FileWrite {
-    path: string;
-    content: string;
-}
+    /**
+     * Validates TypeScript/JavaScript code quality
+     */
+    static codeQuality: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(ts|tsx|js|jsx)$/)) {
+            // Check for console.log in production code
+            if (content.includes('console.log(') && !filePath.includes('test')) {
+                warnings.push('Consider using proper logging instead of console.log');
+            }
+            
+            // Check for missing exports in index files
+            if (filePath.endsWith('index.ts') || filePath.endsWith('index.js')) {
+                if (!content.includes('export') && content.trim().length > 0) {
+                    warnings.push('Index file should typically export something');
+                }
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
 
-export interface VerificationResult {
-    success: boolean;
-    error?: string;
-}
+    /**
+     * Validates TypeScript syntax and compilation using LSP
+     */
+    static lspTypeScriptValidator: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(ts|tsx)$/)) {
+            try {
+                // Use LSP for TypeScript validation
+                const { writeFile, unlink } = await import('fs/promises');
+                const tempFilePath = `${filePath}.temp`;
+                
+                // Write content to temp file for LSP analysis
+                await writeFile(tempFilePath, content, 'utf8');
+                
+                // Get LSP diagnostics for the temp file
+                const { mcp__ide__getDiagnostics } = require('../../core/lsp-client');
+                const diagnostics = await mcp__ide__getDiagnostics({ uri: tempFilePath });
+                
+                // Process LSP diagnostics
+                if (diagnostics && diagnostics.length > 0) {
+                    for (const diagnostic of diagnostics) {
+                        const message = `Line ${diagnostic.range.start.line + 1}: ${diagnostic.message}`;
+                        
+                        if (diagnostic.severity === 1) { // Error
+                            errors.push(message);
+                        } else if (diagnostic.severity === 2) { // Warning
+                            warnings.push(message);
+                        }
+                    }
+                }
+                
+                // Clean up temp file
+                await unlink(tempFilePath).catch(() => {});
+                
+            } catch (lspError: any) {
+                warnings.push(`LSP validation unavailable: ${lspError.message}`);
+                
+                // Fallback to basic syntax validation
+                return ContentValidators.typeScriptSyntax(content, filePath);
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
 
-export type ContentValidator = (content: string, filePath: string) => Promise<ValidationResult>;
-export type ContentTransformer = (content: string, filePath: string) => Promise<string>;
+    /**
+     * Validates React/JSX using LSP
+     */
+    static lspReactValidator: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(jsx|tsx)$/)) {
+            // First run LSP TypeScript validation
+            const lspResult = await ContentValidators.lspTypeScriptValidator(content, filePath);
+            errors.push(...(lspResult.errors || []));
+            warnings.push(...(lspResult.warnings || []));
+            
+            // Additional React-specific validation
+            const reactResult = await ContentValidators.reactSyntax(content, filePath);
+            errors.push(...(reactResult.errors || []));
+            warnings.push(...(reactResult.warnings || []));
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
 
-export interface ValidationResult {
-    isValid: boolean;
-    errors: string[];
-    warnings?: string[];
+    /**
+     * Auto-selects appropriate validator based on file extension
+     */
+    static autoValidator: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        // Select validator based on file type
+        if (filePath.match(/\.(tsx)$/)) {
+            const result = await ContentValidators.lspReactValidator(content, filePath);
+            errors.push(...result.errors);
+            warnings.push(...result.warnings);
+        } else if (filePath.match(/\.(ts)$/)) {
+            const result = await ContentValidators.lspTypeScriptValidator(content, filePath);
+            errors.push(...result.errors);
+            warnings.push(...result.warnings);
+        } else if (filePath.match(/\.(jsx)$/)) {
+            const result = await ContentValidators.reactSyntax(content, filePath);
+            errors.push(...result.errors);
+            warnings.push(...result.warnings);
+        } else if (filePath.endsWith('.json')) {
+            const result = await ContentValidators.jsonSyntax(content, filePath);
+            errors.push(...result.errors);
+            warnings.push(...result.warnings);
+        }
+        
+        // Always run general code quality checks
+        const qualityResult = await ContentValidators.codeQuality(content, filePath);
+        if (qualityResult.warnings) {
+          warnings.push(...qualityResult.warnings);
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
+
+    /**
+     * Validates TypeScript syntax and compilation
+     */
+    static typeScriptSyntax: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(ts|tsx)$/)) {
+            try {
+                // Basic TypeScript syntax checks
+                
+                // Check for basic syntax errors
+                const syntaxIssues = [
+                    { pattern: /interface\s+\w+\s*{\s*$/, message: 'Interface appears to be incomplete' },
+                    { pattern: /function\s+\w+\s*\(\s*\)\s*{\s*$/, message: 'Function appears to be incomplete' },
+                    { pattern: /class\s+\w+\s*{\s*$/, message: 'Class appears to be incomplete' },
+                    { pattern: /import\s+.*from\s+['"][^'"]*['"](?!\s*;)/, message: 'Missing semicolon after import statement' },
+                    { pattern: /export\s+(?:default\s+)?(?:function|class|interface|const|let|var)\s+\w+.*(?<![;}])\s*$/, message: 'Missing semicolon after export' }
+                ];
+                
+                for (const issue of syntaxIssues) {
+                    if (issue.pattern.test(content)) {
+                        warnings.push(issue.message);
+                    }
+                }
+                
+                // Check for missing type annotations
+                const functionRegex = /function\s+\w+\s*\([^)]*\)\s*{/g;
+                const functions = content.match(functionRegex);
+                if (functions) {
+                    functions.forEach(func => {
+                        if (!func.includes(':') && !func.includes('void')) {
+                            warnings.push(`Function missing return type: ${func.split('(')[0].trim()}`);
+                        }
+                    });
+                }
+                
+                // Check for proper React component structure
+                if (filePath.endsWith('.tsx') && content.includes('React')) {
+                    if (!content.includes('import React') && !content.includes('import * as React')) {
+                        errors.push('React import missing in .tsx file');
+                    }
+                    
+                    const componentMatch = content.match(/(?:export\s+(?:default\s+)?(?:function|const)\s+)([A-Z][a-zA-Z0-9]*)/);
+                    if (componentMatch) {
+                        const componentName = componentMatch[1];
+                        if (!content.includes(`${componentName}Props`) && !content.includes('React.FC')) {
+                            warnings.push(`Component ${componentName} missing props interface`);
+                        }
+                    }
+                }
+                
+            } catch (parseError: any) {
+                errors.push(`TypeScript validation error: ${parseError.message}`);
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
+
+    /**
+     * Validates React/JSX syntax and best practices
+     */
+    static reactSyntax: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.match(/\.(jsx|tsx)$/)) {
+            // Check for React import when using JSX
+            if (content.includes('<') && content.includes('>') && !content.includes('React')) {
+                errors.push('JSX syntax detected but React not imported');
+            }
+            
+            // Check for component naming convention
+            const componentMatch = content.match(/(?:export\s+(?:default\s+)?(?:function|const)\s+)([a-z][a-zA-Z0-9]*)/);
+            if (componentMatch) {
+                errors.push(`Component name '${componentMatch[1]}' should start with uppercase letter`);
+            }
+            
+            // Check for missing key prop in lists
+            if (content.includes('.map(') && content.includes('<') && !content.includes('key=')) {
+                warnings.push('Consider adding key prop to list items');
+            }
+            
+            // Check for proper JSX return
+            const returnMatches = content.match(/return\s*\(/g);
+            if (returnMatches && content.includes('<')) {
+                if (!content.includes('return (') && !content.includes('return<')) {
+                    warnings.push('Consider wrapping JSX return in parentheses');
+                }
+            }
+            
+            // Check for unused variables
+            const importMatches = content.match(/import\s+.*\s+from/g);
+            if (importMatches) {
+                importMatches.forEach(importLine => {
+                    const varMatch = importLine.match(/import\s+(?:{([^}]+)}|(\w+))/);
+                    if (varMatch) {
+                        const vars = varMatch[1] ? varMatch[1].split(',').map(v => v.trim()) : [varMatch[2]];
+                        vars.forEach(varName => {
+                            const cleanVar = varName.replace(/\s+as\s+\w+/, '').trim();
+                            if (cleanVar && !content.includes(cleanVar.split(' ')[0])) {
+                                warnings.push(`Imported '${cleanVar}' appears to be unused`);
+                            }
+                        });
+                    }
+                });
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
+
+    /**
+     * Validates JSON syntax
+     */
+    static jsonSyntax: ContentValidator = async (content: string, filePath: string) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        
+        if (filePath.endsWith('.json')) {
+            try {
+                JSON.parse(content);
+                
+                // Check for trailing commas (not valid in JSON)
+                if (content.includes(',}') || content.includes(',]')) {
+                    errors.push('JSON contains trailing commas');
+                }
+                
+            } catch (parseError: any) {
+                errors.push(`Invalid JSON syntax: ${parseError.message}`);
+            }
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    };
 }

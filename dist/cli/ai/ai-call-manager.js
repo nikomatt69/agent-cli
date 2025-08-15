@@ -43,9 +43,7 @@ const ragSystem = __importStar(require("../context/rag-system"));
 const chalk_1 = __importDefault(require("chalk"));
 const ora_1 = __importDefault(require("ora"));
 const zod_1 = require("zod");
-/**
- * Schema for AI tool call planning
- */
+const crypto_1 = require("crypto");
 const ExecutionPlanSchema = zod_1.z.object({
     description: zod_1.z.string().describe('Brief description of what this plan will accomplish'),
     toolCalls: zod_1.z.array(zod_1.z.object({
@@ -58,21 +56,14 @@ const ExecutionPlanSchema = zod_1.z.object({
     riskLevel: zod_1.z.enum(['low', 'medium', 'high']).describe('Risk level of this execution plan'),
     requiresApproval: zod_1.z.boolean().describe('Whether this plan requires user approval')
 });
-/**
- * AI Call Manager with secure tool integration and batch approval
- */
 class AICallManager {
     constructor() {
         this.executionHistory = [];
     }
-    /**
-     * Generate an execution plan from user request with RAG context
-     */
     async generateExecutionPlan(userRequest, context) {
         const spinner = (0, ora_1.default)('🧠 Generating AI execution plan...').start();
         try {
             let ragContextText = null;
-            // Get RAG context if requested
             if (context?.useRAG !== false) {
                 spinner.text = '🔍 Searching relevant code context...';
                 const query = context?.ragQuery || userRequest;
@@ -135,10 +126,10 @@ Estimate realistic durations and assess risk levels accurately.`;
                     schema: ExecutionPlanSchema,
                     schemaName: 'ExecutionPlan',
                     schemaDescription: 'Structured plan for secure tool execution',
-                    temperature: 0.1, // Low temperature for consistent planning
+                    temperature: 0.1,
                 });
                 const plan = {
-                    id: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    id: `plan_${Date.now()}_${(0, crypto_1.randomBytes)(6).toString('base64url')}`,
                     description: planData.description,
                     toolCalls: planData.toolCalls.map(tc => ({ ...tc, id: tc.id || "", name: tc.name || "", arguments: tc.arguments || {} })),
                     estimatedDuration: planData.estimatedDuration,
@@ -162,9 +153,6 @@ Estimate realistic durations and assess risk levels accurately.`;
             throw error;
         }
     }
-    /**
-     * Execute a plan using secure tools with batch approval if needed
-     */
     async executePlan(plan, options = {}) {
         console.log(chalk_1.default.blue.bold(`
 🚀 Executing Plan: ${plan.description}`));
@@ -193,7 +181,6 @@ Estimate realistic durations and assess risk levels accurately.`;
         const results = [];
         let batchSession;
         try {
-            // If using batch session and plan requires approval, create batch session
             if (options.useBatchSession && plan.requiresApproval && plan.toolCalls.some(tc => tc.name === 'executeCommand')) {
                 const commands = plan.toolCalls
                     .filter(tc => tc.name === 'executeCommand')
@@ -215,12 +202,10 @@ Estimate realistic durations and assess risk levels accurately.`;
                     });
                     if (batchResult.success && batchResult.data) {
                         batchSession = batchResult.data;
-                        // Start async execution
                         await secure_tools_registry_1.secureTools.executeBatchAsync(batchSession.id);
                     }
                 }
             }
-            // Execute tool calls
             for (let i = 0; i < plan.toolCalls.length; i++) {
                 const toolCall = plan.toolCalls[i];
                 const startTime = Date.now();
@@ -230,7 +215,6 @@ Estimate realistic durations and assess risk levels accurately.`;
                 }
                 try {
                     let result;
-                    // Execute tool call based on name
                     switch (toolCall.name) {
                         case 'readFile':
                             const readResult = await secure_tools_registry_1.secureTools.readFile(toolCall.arguments.filePath);
@@ -259,7 +243,6 @@ Estimate realistic durations and assess risk levels accurately.`;
                             result = replaceResult.data;
                             break;
                         case 'executeCommand':
-                            // If we have a batch session, skip individual execution
                             if (batchSession) {
                                 result = { message: 'Command queued in batch session', batchSessionId: batchSession.id };
                             }
@@ -297,14 +280,12 @@ Estimate realistic durations and assess risk levels accurately.`;
                         executionTime
                     });
                     console.log(chalk_1.default.red(`❌ [${i + 1}/${plan.toolCalls.length}] Failed: ${error.message}`));
-                    // Stop execution on first failure unless continuing
                     if (plan.riskLevel === 'high') {
                         console.log(chalk_1.default.red('🛑 Stopping execution due to high-risk failure'));
                         break;
                     }
                 }
             }
-            // Add to execution history
             this.executionHistory.push({
                 plan,
                 results,
@@ -321,28 +302,17 @@ Estimate realistic durations and assess risk levels accurately.`;
             throw error;
         }
     }
-    /**
-     * Execute user request end-to-end with planning and execution
-     */
     async executeUserRequest(userRequest, context, options) {
         console.log(chalk_1.default.blue.bold('\n🎯 Processing User Request'));
         console.log(chalk_1.default.gray(`Request: ${userRequest}`));
-        // Generate execution plan
         const plan = await this.generateExecutionPlan(userRequest, context);
-        // Execute plan
         const results = await this.executePlan(plan, options);
         return { plan, results };
     }
-    /**
-     * Get execution history
-     */
     getExecutionHistory(limit) {
         const history = this.executionHistory.slice().reverse();
         return limit ? history.slice(0, limit) : history;
     }
-    /**
-     * Get execution statistics
-     */
     getExecutionStats() {
         const history = this.executionHistory;
         const totalPlans = history.length;
@@ -372,9 +342,6 @@ Estimate realistic durations and assess risk levels accurately.`;
             mostUsedTools
         };
     }
-    /**
-     * Print execution statistics
-     */
     printExecutionStats() {
         const stats = this.getExecutionStats();
         console.log(chalk_1.default.blue.bold('\n📊 AI Call Manager Statistics'));
@@ -394,5 +361,4 @@ Estimate realistic durations and assess risk levels accurately.`;
     }
 }
 exports.AICallManager = AICallManager;
-// Export singleton instance
 exports.aiCallManager = new AICallManager();

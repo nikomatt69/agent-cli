@@ -41,9 +41,6 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const chalk_1 = __importDefault(require("chalk"));
-/**
- * Enterprise Logger with structured logging, audit trails, and monitoring
- */
 class Logger {
     constructor() {
         this.logBuffer = [];
@@ -60,7 +57,7 @@ class Logger {
             enableConsole: true,
             enableFile: true,
             enableAudit: false,
-            maxFileSize: 10 * 1024 * 1024, // 10MB
+            maxFileSize: 10 * 1024 * 1024,
             maxFiles: 10,
             format: 'json'
         };
@@ -75,9 +72,6 @@ class Logger {
         }
         return Logger.instance;
     }
-    /**
-     * Configure the logger
-     */
     async configure(config) {
         this.config = { ...this.config, ...config };
         if (config.logDir) {
@@ -87,39 +81,21 @@ class Logger {
         this.ensureDirectories();
         await this.info('Logger configured', { config: this.config });
     }
-    /**
-     * Log an error message
-     */
     async error(message, context, error) {
         await this.log('error', message, context, error);
     }
-    /**
-     * Log a warning message
-     */
     async warn(message, context) {
         await this.log('warn', message, context);
     }
-    /**
-     * Log an info message
-     */
     async info(message, context) {
         await this.log('info', message, context);
     }
-    /**
-     * Log a debug message
-     */
     async debug(message, context) {
         await this.log('debug', message, context);
     }
-    /**
-     * Log a trace message
-     */
     async trace(message, context) {
         await this.log('trace', message, context);
     }
-    /**
-     * Log an audit event (always logged regardless of level)
-     */
     async audit(action, context) {
         const entry = {
             timestamp: new Date(),
@@ -135,32 +111,18 @@ class Logger {
         if (this.config.enableConsole) {
             console.log(chalk_1.default.magenta('🔍 AUDIT:'), chalk_1.default.yellow(action), context);
         }
-        // Force flush audit events immediately for security
         await this.flushAuditBuffer();
     }
-    /**
-     * Log with agent context
-     */
     async logAgent(level, agentId, message, context) {
         await this.log(level, message, { ...context, agentId });
     }
-    /**
-     * Log with task context
-     */
     async logTask(level, taskId, agentId, message, context) {
         await this.log(level, message, { ...context, taskId, agentId });
     }
-    /**
-     * Log with session context
-     */
     async logSession(level, sessionId, message, context) {
         await this.log(level, message, { ...context, sessionId });
     }
-    /**
-     * Core logging method
-     */
     async log(level, message, context, error) {
-        // Check if this level should be logged
         if (this.levelOrder[level] > this.levelOrder[this.config.level]) {
             return;
         }
@@ -171,20 +133,14 @@ class Logger {
             context,
             error
         };
-        // Add to buffer
         this.logBuffer.push(entry);
-        // Console output
         if (this.config.enableConsole) {
             this.logToConsole(entry);
         }
-        // If buffer is getting full, flush immediately
         if (this.logBuffer.length > 100) {
             await this.flushLogBuffer();
         }
     }
-    /**
-     * Output log entry to console with colors
-     */
     logToConsole(entry) {
         const timestamp = entry.timestamp.toISOString();
         const level = entry.level.toUpperCase().padEnd(5);
@@ -223,9 +179,6 @@ class Logger {
             }
         }
     }
-    /**
-     * Ensure log directories exist
-     */
     ensureDirectories() {
         if (!fs.existsSync(this.logDir)) {
             fs.mkdirSync(this.logDir, { recursive: true });
@@ -234,18 +187,12 @@ class Logger {
             fs.mkdirSync(this.auditDir, { recursive: true });
         }
     }
-    /**
-     * Setup periodic buffer flushing
-     */
     setupPeriodicFlush() {
         this.flushTimer = setInterval(async () => {
             await this.flushLogBuffer();
             await this.flushAuditBuffer();
-        }, 5000); // Flush every 5 seconds
+        }, 5000);
     }
-    /**
-     * Flush log buffer to file
-     */
     async flushLogBuffer() {
         if (this.logBuffer.length === 0 || !this.config.enableFile) {
             return;
@@ -255,16 +202,12 @@ class Logger {
             const logData = this.logBuffer.map(entry => this.formatLogEntry(entry)).join('\n') + '\n';
             fs.appendFileSync(logFile, logData);
             this.logBuffer = [];
-            // Rotate log files if needed
             await this.rotateLogFiles();
         }
         catch (error) {
             console.error('Failed to flush log buffer:', error.message);
         }
     }
-    /**
-     * Flush audit buffer to file
-     */
     async flushAuditBuffer() {
         if (this.auditBuffer.length === 0 || !this.config.enableAudit) {
             return;
@@ -279,9 +222,6 @@ class Logger {
             console.error('Failed to flush audit buffer:', error.message);
         }
     }
-    /**
-     * Get current log file path
-     */
     async getCurrentLogFile() {
         if (!this.currentLogFile) {
             const date = new Date().toISOString().split('T')[0];
@@ -289,9 +229,6 @@ class Logger {
         }
         return this.currentLogFile;
     }
-    /**
-     * Get current audit file path
-     */
     async getCurrentAuditFile() {
         if (!this.currentAuditFile) {
             const date = new Date().toISOString().split('T')[0];
@@ -299,9 +236,6 @@ class Logger {
         }
         return this.currentAuditFile;
     }
-    /**
-     * Format log entry for file output
-     */
     formatLogEntry(entry) {
         if (this.config.format === 'json') {
             return JSON.stringify({
@@ -333,21 +267,15 @@ class Logger {
             return line;
         }
     }
-    /**
-     * Rotate log files to prevent them from getting too large
-     */
     async rotateLogFiles() {
         try {
             const logFile = await this.getCurrentLogFile();
             const stats = fs.statSync(logFile);
             if (stats.size > this.config.maxFileSize) {
-                // Rotate current log file
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
                 const rotatedFile = logFile.replace('.log', `-${timestamp}.log`);
                 fs.renameSync(logFile, rotatedFile);
-                // Reset current log file
                 this.currentLogFile = undefined;
-                // Clean up old log files
                 await this.cleanupOldLogFiles();
             }
         }
@@ -355,9 +283,6 @@ class Logger {
             console.error('Failed to rotate log files:', error.message);
         }
     }
-    /**
-     * Clean up old log files beyond retention limit
-     */
     async cleanupOldLogFiles() {
         try {
             const files = fs.readdirSync(this.logDir)
@@ -368,7 +293,6 @@ class Logger {
                 mtime: fs.statSync(path.join(this.logDir, file)).mtime
             }))
                 .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-            // Keep only the most recent files
             if (files.length > this.config.maxFiles) {
                 const filesToDelete = files.slice(this.config.maxFiles);
                 filesToDelete.forEach(file => {
@@ -380,9 +304,6 @@ class Logger {
             console.error('Failed to cleanup old log files:', error.message);
         }
     }
-    /**
-     * Get logger statistics
-     */
     getStats() {
         return {
             bufferedLogs: this.logBuffer.length,
@@ -392,16 +313,10 @@ class Logger {
             config: { ...this.config }
         };
     }
-    /**
-     * Force flush all buffers
-     */
     async flush() {
         await this.flushLogBuffer();
         await this.flushAuditBuffer();
     }
-    /**
-     * Cleanup and shutdown logger
-     */
     async shutdown() {
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
@@ -410,9 +325,6 @@ class Logger {
     }
 }
 exports.Logger = Logger;
-/**
- * Convenience functions for common logging patterns
- */
 exports.logger = Logger.getInstance();
 const logAgent = (level, agentId, message, context) => exports.logger.logAgent(level, agentId, message, context);
 exports.logAgent = logAgent;

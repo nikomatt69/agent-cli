@@ -7,7 +7,6 @@ class AgentManager {
         this.workingDirectory = workingDirectory;
     }
     registerAgent(agentClass) {
-        // Create a temporary instance to get the name
         const tempInstance = new agentClass(this.workingDirectory);
         if (!tempInstance.id) {
             throw new Error('Agent class must have an id property');

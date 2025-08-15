@@ -8,7 +8,6 @@ const chalk_1 = __importDefault(require("chalk"));
 class ToolRouter {
     constructor() {
         this.toolKeywords = [
-            // Web Search Tools
             {
                 tool: 'web_search',
                 keywords: ['cerca', 'search', 'trova', 'find', 'informazioni', 'information', 'documentazione', 'documentation', 'stackoverflow', 'github', 'medium', 'blog', 'tutorial', 'guida', 'guide', 'come fare', 'how to', 'best practice', 'migliore pratica', 'aggiornamento', 'update', 'novità', 'news', 'versione', 'version'],
@@ -16,7 +15,6 @@ class ToolRouter {
                 description: 'Ricerca informazioni web aggiornate',
                 examples: ['cerca React 18 features', 'trova tutorial TypeScript', 'informazioni su Next.js 15']
             },
-            // IDE Context Tools
             {
                 tool: 'ide_context',
                 keywords: ['ambiente', 'environment', 'editor', 'ide', 'workspace', 'progetto', 'project', 'struttura', 'structure', 'dipendenze', 'dependencies', 'package.json', 'git', 'branch', 'commit', 'stato', 'status', 'file aperti', 'open files', 'recenti', 'recent'],
@@ -24,7 +22,6 @@ class ToolRouter {
                 description: 'Analisi contesto IDE e workspace',
                 examples: ['analizza ambiente di sviluppo', 'stato del progetto', 'dipendenze installate']
             },
-            // Semantic Search Tools
             {
                 tool: 'semantic_search',
                 keywords: ['simile', 'similar', 'uguale', 'same', 'pattern', 'modello', 'esempio', 'example', 'come questo', 'like this', 'stesso tipo', 'same type', 'funzione simile', 'similar function', 'componente simile', 'similar component', 'implementazione', 'implementation'],
@@ -32,7 +29,6 @@ class ToolRouter {
                 description: 'Ricerca semantica nel codebase',
                 examples: ['trova file simili a questo', 'cerca implementazioni simili', 'pattern simili nel codice']
             },
-            // Code Analysis Tools
             {
                 tool: 'code_analysis',
                 keywords: ['analizza', 'analyze', 'qualità', 'quality', 'problemi', 'issues', 'bug', 'errori', 'errors', 'migliora', 'improve', 'ottimizza', 'optimize', 'refactor', 'refactoring', 'pulizia', 'clean', 'sicurezza', 'security', 'performance', 'prestazioni', 'complessità', 'complexity'],
@@ -40,7 +36,6 @@ class ToolRouter {
                 description: 'Analisi qualità e ottimizzazione codice',
                 examples: ['analizza qualità del codice', 'trova problemi di sicurezza', 'ottimizza performance']
             },
-            // Dependency Analysis Tools
             {
                 tool: 'dependency_analysis',
                 keywords: ['dipendenze', 'dependencies', 'package', 'npm', 'yarn', 'node_modules', 'vulnerabilità', 'vulnerabilities', 'sicurezza', 'security', 'aggiorna', 'update', 'outdated', 'obsoleto', 'versione', 'version', 'lock', 'package-lock', 'yarn.lock'],
@@ -48,7 +43,6 @@ class ToolRouter {
                 description: 'Analisi dipendenze e sicurezza',
                 examples: ['analizza dipendenze', 'trova vulnerabilità', 'aggiorna pacchetti obsoleti']
             },
-            // Git Workflow Tools
             {
                 tool: 'git_workflow',
                 keywords: ['git', 'commit', 'branch', 'merge', 'pull', 'push', 'repository', 'repo', 'workflow', 'storia', 'history', 'log', 'stato', 'status', 'cambia', 'changes', 'diff', 'conflict', 'conflitto', 'rebase', 'cherry-pick'],
@@ -56,7 +50,6 @@ class ToolRouter {
                 description: 'Analisi workflow Git',
                 examples: ['analizza workflow Git', 'stato del repository', 'storia dei commit']
             },
-            // File Operations
             {
                 tool: 'read_file',
                 keywords: ['leggi', 'read', 'mostra', 'show', 'visualizza', 'view', 'contenuto', 'content', 'file', 'codice', 'code', 'script', 'configurazione', 'configuration', 'config'],
@@ -78,7 +71,6 @@ class ToolRouter {
                 description: 'Esplorazione directory',
                 examples: ['esplora struttura progetto', 'lista file nella cartella', 'trova file TypeScript']
             },
-            // Command Execution
             {
                 tool: 'run_command',
                 keywords: ['esegui', 'execute', 'run', 'comando', 'command', 'script', 'build', 'test', 'install', 'start', 'dev', 'development', 'production', 'deploy', 'deployment'],
@@ -88,19 +80,17 @@ class ToolRouter {
             }
         ];
     }
-    // Analyze user message and recommend tools
     analyzeMessage(message) {
         const content = typeof message.content === 'string'
             ? message.content
             : String(message.content);
         const lowerContent = content.toLowerCase();
         const recommendations = [];
-        // Check each tool for keyword matches
         for (const toolKeyword of this.toolKeywords) {
             const matches = toolKeyword.keywords.filter(keyword => lowerContent.includes(keyword.toLowerCase()));
             if (matches.length > 0) {
                 const confidence = this.calculateConfidence(matches, toolKeyword, lowerContent);
-                if (confidence > 0.3) { // Minimum confidence threshold
+                if (confidence > 0.3) {
                     recommendations.push({
                         tool: toolKeyword.tool,
                         confidence,
@@ -110,43 +100,35 @@ class ToolRouter {
                 }
             }
         }
-        // Sort by confidence and priority
         return recommendations
             .sort((a, b) => {
             const toolA = this.toolKeywords.find(t => t.tool === a.tool);
             const toolB = this.toolKeywords.find(t => t.tool === b.tool);
             const priorityA = toolA?.priority || 0;
             const priorityB = toolB?.priority || 0;
-            // Higher confidence and priority first
             if (a.confidence !== b.confidence) {
                 return b.confidence - a.confidence;
             }
             return priorityB - priorityA;
         })
-            .slice(0, 3); // Return top 3 recommendations
+            .slice(0, 3);
     }
-    // Calculate confidence score for tool recommendation
     calculateConfidence(matches, toolKeyword, content) {
         let confidence = 0;
-        // Base confidence from number of matches
         confidence += matches.length * 0.2;
-        // Bonus for exact matches
         for (const match of matches) {
             if (content.toLowerCase().includes(match.toLowerCase())) {
                 confidence += 0.1;
             }
         }
-        // Context bonus for related words
         const contextWords = this.getContextWords(toolKeyword.tool);
         const contextMatches = contextWords.filter(word => content.toLowerCase().includes(word));
         confidence += contextMatches.length * 0.05;
-        // Length bonus for more specific requests
         if (content.length > 50) {
             confidence += 0.1;
         }
         return Math.min(1.0, confidence);
     }
-    // Get context words for each tool
     getContextWords(tool) {
         const contextMap = {
             'web_search': ['web', 'online', 'internet', 'browser', 'url', 'link'],
@@ -162,17 +144,14 @@ class ToolRouter {
         };
         return contextMap[tool] || [];
     }
-    // Suggest parameters based on tool and content
     suggestParameters(tool, content) {
         const suggestions = {};
         switch (tool) {
             case 'web_search':
-                // Extract search query
                 const searchMatch = content.match(/(?:cerca|search|trova|find)\s+(.+?)(?:\s|$)/i);
                 if (searchMatch) {
                     suggestions.query = searchMatch[1];
                 }
-                // Detect search type
                 if (content.includes('stackoverflow') || content.includes('error')) {
                     suggestions.searchType = 'stackoverflow';
                 }
@@ -184,12 +163,10 @@ class ToolRouter {
                 }
                 break;
             case 'code_analysis':
-                // Extract file path
                 const fileMatch = content.match(/(?:analizza|analyze)\s+(.+?)(?:\s|$)/i);
                 if (fileMatch) {
                     suggestions.filePath = fileMatch[1];
                 }
-                // Detect analysis type
                 if (content.includes('sicurezza') || content.includes('security')) {
                     suggestions.analysisType = 'security';
                 }
@@ -201,7 +178,6 @@ class ToolRouter {
                 }
                 break;
             case 'semantic_search':
-                // Extract search query
                 const semanticMatch = content.match(/(?:trova|cerca|find)\s+(.+?)(?:\s|$)/i);
                 if (semanticMatch) {
                     suggestions.query = semanticMatch[1];
@@ -210,18 +186,15 @@ class ToolRouter {
         }
         return suggestions;
     }
-    // Get tool description for AI
     getToolDescription(tool) {
         const toolKeyword = this.toolKeywords.find(t => t.tool === tool);
         return toolKeyword?.description || 'Tool generico';
     }
-    // Get all available tools with descriptions
     getAllTools() {
         return this.toolKeywords;
     }
-    // Log tool recommendations for debugging
     logRecommendations(message, recommendations) {
-        console.log(chalk_1.default.blue(`🔍 Tool Analysis for: "${message.substring(0, 50)}..."\n`));
+        console.log(chalk_1.default.blue(`Processing message: "${message.substring(0, 50)}..."\n`));
         if (recommendations.length === 0) {
             return;
         }

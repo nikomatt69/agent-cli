@@ -5,10 +5,6 @@ const nanoid_1 = require("nanoid");
 const events_1 = require("events");
 const logger_1 = require("../utils/logger");
 const guidance_manager_1 = require("../guidance/guidance-manager");
-/**
- * Enterprise Agent Manager
- * Unifies agent lifecycle, task management, and coordination
- */
 class AgentManager extends events_1.EventEmitter {
     constructor(configManager, guidanceManager) {
         super();
@@ -22,15 +18,11 @@ class AgentManager extends events_1.EventEmitter {
         this.config = this.configManager.getConfig();
         this.setupEventHandlers();
     }
-    /**
-     * Initialize the agent manager
-     */
     async initialize() {
         await logger_1.logger.info('Initializing AgentManager', {
             maxConcurrentAgents: this.config.maxConcurrentAgents,
             enableGuidanceSystem: this.config.enableGuidanceSystem
         });
-        // Initialize guidance system if enabled
         if (this.config.enableGuidanceSystem) {
             await this.guidanceManager.initialize((context) => {
                 this.onGuidanceUpdated(context);
@@ -38,22 +30,16 @@ class AgentManager extends events_1.EventEmitter {
         }
         await logger_1.logger.info('AgentManager initialized successfully');
     }
-    /**
-     * Register an agent in the system
-     */
     async registerAgent(agent) {
         await logger_1.logger.logAgent('info', agent.id, 'Registering agent', {
             name: agent.name,
             specialization: agent.specialization,
             capabilities: agent.capabilities
         });
-        // Initialize agent with context
         const context = await this.buildAgentContext(agent);
         await agent.initialize(context);
-        // Store agent
         this.agents.set(agent.id, agent);
         this.taskQueues.set(agent.id, []);
-        // Emit registration event
         this.emit('agent.registered', {
             id: (0, nanoid_1.nanoid)(),
             type: 'agent.initialized',
@@ -63,9 +49,6 @@ class AgentManager extends events_1.EventEmitter {
         });
         await logger_1.logger.logAgent('info', agent.id, 'Agent registered successfully');
     }
-    /**
-     * Register an agent class in the registry
-     */
     registerAgentClass(agentClass, metadata) {
         this.agentRegistry.set(metadata.id, {
             agentClass,
@@ -78,9 +61,6 @@ class AgentManager extends events_1.EventEmitter {
             specialization: metadata.specialization
         });
     }
-    /**
-     * Create and register an agent from registry
-     */
     async createAgent(agentId, config) {
         const registryEntry = this.agentRegistry.get(agentId);
         if (!registryEntry) {
@@ -89,25 +69,16 @@ class AgentManager extends events_1.EventEmitter {
         if (!registryEntry.isEnabled) {
             throw new Error(`Agent class is disabled: ${agentId}`);
         }
-        // Create agent instance
         const agent = new registryEntry.agentClass(process.cwd());
-        // Configure agent
         if (config) {
             agent.updateConfiguration(config);
         }
-        // Register the agent
         await this.registerAgent(agent);
         return agent;
     }
-    /**
-     * Get an agent by ID
-     */
     getAgent(agentId) {
         return this.agents.get(agentId);
     }
-    /**
-     * Get all registered agents
-     */
     listAgents() {
         return Array.from(this.agents.values()).map(agent => ({
             id: agent.id,
@@ -120,22 +91,13 @@ class AgentManager extends events_1.EventEmitter {
             metrics: agent.getMetrics()
         }));
     }
-    /**
-     * Get available agent names for command-line usage
-     */
     getAvailableAgentNames() {
         return Array.from(this.agents.values()).map(agent => agent.name);
     }
-    /**
-     * Get agents by capability
-     */
     getAgentsByCapability(capability) {
         return Array.from(this.agents.values())
             .filter(agent => agent.capabilities.includes(capability));
     }
-    /**
-     * Find the best agent for a task
-     */
     findBestAgentForTask(task) {
         let bestAgent = null;
         let bestScore = 0;
@@ -149,16 +111,12 @@ class AgentManager extends events_1.EventEmitter {
             if (!agent.canHandle(task)) {
                 continue;
             }
-            // Calculate score based on capabilities match
             let score = 0;
-            // Check required capabilities
             if (task.requiredCapabilities) {
                 const matchingCapabilities = task.requiredCapabilities.filter((cap) => agent.capabilities.includes(cap));
                 score += matchingCapabilities.length * 10;
             }
-            // Prefer less busy agents
             score += (agent.maxConcurrentTasks - agent.currentTasks) * 5;
-            // Prefer agents with better metrics
             const metrics = agent.getMetrics();
             score += metrics.successRate * 2;
             if (score > bestScore) {
@@ -168,9 +126,6 @@ class AgentManager extends events_1.EventEmitter {
         }
         return bestAgent;
     }
-    /**
-     * Schedule a task for execution
-     */
     async scheduleTask(task, preferredAgentId) {
         await logger_1.logger.logTask('info', task.id, preferredAgentId || 'auto', 'Scheduling task', {
             title: task.title,
@@ -178,7 +133,6 @@ class AgentManager extends events_1.EventEmitter {
             requiredCapabilities: task.requiredCapabilities
         });
         let agent = null;
-        // Use preferred agent if specified
         if (preferredAgentId) {
             agent = this.getAgent(preferredAgentId) || null;
             if (!agent || !agent.canHandle(task)) {
@@ -186,28 +140,22 @@ class AgentManager extends events_1.EventEmitter {
             }
         }
         else {
-            // Find best agent automatically
             agent = this.findBestAgentForTask(task);
             if (!agent) {
                 throw new Error('No suitable agent available for this task');
             }
         }
-        // Add to agent's task queue
         const queue = this.taskQueues.get(agent.id) || [];
         queue.push(task);
         this.taskQueues.set(agent.id, queue);
         await logger_1.logger.logTask('info', task.id, agent.id, 'Task scheduled', {
             queueLength: queue.length
         });
-        // Start execution if agent is available
         if (agent.currentTasks < agent.maxConcurrentTasks) {
             setImmediate(() => this.processAgentQueue(agent.id));
         }
         return agent.id;
     }
-    /**
-     * Execute a task on a specific agent
-     */
     async executeTask(agentId, task) {
         const agent = this.getAgent(agentId);
         if (!agent) {
@@ -222,7 +170,6 @@ class AgentManager extends events_1.EventEmitter {
             task.status = 'in_progress';
             task.startedAt = new Date();
             const result = await agent.executeTask(task);
-            // Store result
             this.taskHistory.set(task.id, result);
             await logger_1.logger.logTask('info', task.id, agentId, 'Task completed successfully', {
                 duration: result.duration,
@@ -250,9 +197,6 @@ class AgentManager extends events_1.EventEmitter {
             this.activeTaskCount--;
         }
     }
-    /**
-     * Schedule a todo item (legacy compatibility)
-     */
     scheduleTodo(agentId, todo) {
         const task = {
             id: todo.id,
@@ -269,9 +213,6 @@ class AgentManager extends events_1.EventEmitter {
         };
         this.scheduleTask(task, agentId);
     }
-    /**
-     * Run all scheduled tasks sequentially
-     */
     async runSequential() {
         await logger_1.logger.info('Starting sequential task execution');
         for (const [agentId, tasks] of this.taskQueues.entries()) {
@@ -289,14 +230,10 @@ class AgentManager extends events_1.EventEmitter {
                     await logger_1.logger.logTask('error', task.id, agentId, 'Sequential execution failed', { error: error.message });
                 }
             }
-            // Clear completed tasks
             this.taskQueues.set(agentId, []);
         }
         await logger_1.logger.info('Sequential task execution completed');
     }
-    /**
-     * Run tasks in parallel with concurrency limit
-     */
     async runParallel(concurrency) {
         const maxConcurrency = concurrency || this.config.maxConcurrentAgents;
         await logger_1.logger.info('Starting parallel task execution', {
@@ -313,9 +250,6 @@ class AgentManager extends events_1.EventEmitter {
         await Promise.all(promises);
         await logger_1.logger.info('Parallel task execution completed');
     }
-    /**
-     * Process task queue for a specific agent
-     */
     async processAgentQueue(agentId) {
         const agent = this.getAgent(agentId);
         const queue = this.taskQueues.get(agentId);
@@ -332,9 +266,6 @@ class AgentManager extends events_1.EventEmitter {
             }
         }
     }
-    /**
-     * Build agent context with guidance and configuration
-     */
     async buildAgentContext(agent) {
         const guidance = this.config.enableGuidanceSystem ?
             this.guidanceManager.getContextForAgent(agent.specialization, process.cwd()) : '';
@@ -381,13 +312,10 @@ class AgentManager extends events_1.EventEmitter {
             approvalRequired: this.config.approvalPolicy === 'strict'
         };
     }
-    /**
-     * Get sandbox restrictions based on configuration
-     */
     getSandboxRestrictions() {
         const restrictions = [];
         if (!this.config.sandbox.enabled) {
-            return restrictions; // No restrictions if sandbox disabled
+            return restrictions;
         }
         if (!this.config.sandbox.allowFileSystem) {
             restrictions.push('no-file-write', 'no-file-delete');
@@ -400,9 +328,6 @@ class AgentManager extends events_1.EventEmitter {
         }
         return restrictions;
     }
-    /**
-     * Event handlers setup
-     */
     setupEventHandlers() {
         this.on('agent.registered', (event) => {
             logger_1.logger.info('Agent registered event', event);
@@ -414,20 +339,13 @@ class AgentManager extends events_1.EventEmitter {
             logger_1.logger.warn('Task failed event', event);
         });
     }
-    /**
-     * Handle guidance system updates
-     */
     onGuidanceUpdated(context) {
         logger_1.logger.info('Guidance context updated, notifying agents');
-        // Update all agents with new guidance
         for (const agent of this.agents.values()) {
             const guidance = this.guidanceManager.getContextForAgent(agent.specialization, process.cwd());
             agent.updateGuidance(guidance);
         }
     }
-    /**
-     * Get agent info for events and logging
-     */
     getAgentInfo(agent) {
         return {
             id: agent.id,
@@ -437,16 +355,10 @@ class AgentManager extends events_1.EventEmitter {
             status: agent.status
         };
     }
-    /**
-     * Get total pending tasks across all agents
-     */
     getTotalPendingTasks() {
         return Array.from(this.taskQueues.values())
             .reduce((total, queue) => total + queue.length, 0);
     }
-    /**
-     * Get system statistics
-     */
     getStats() {
         const agents = Array.from(this.agents.values());
         const results = Array.from(this.taskHistory.values());
@@ -466,12 +378,8 @@ class AgentManager extends events_1.EventEmitter {
                 totalDuration / completedResults.length : 0
         };
     }
-    /**
-     * Cleanup and shutdown
-     */
     async cleanup() {
         await logger_1.logger.info('Shutting down AgentManager');
-        // Cleanup all agents
         for (const agent of this.agents.values()) {
             try {
                 await agent.cleanup();
@@ -480,23 +388,17 @@ class AgentManager extends events_1.EventEmitter {
                 await logger_1.logger.error(`Error cleaning up agent ${agent.id}`, { error: error.message });
             }
         }
-        // Cleanup guidance system
         if (this.config.enableGuidanceSystem) {
             await this.guidanceManager.cleanup();
         }
-        // Clear all data
         this.agents.clear();
         this.taskQueues.clear();
         this.taskHistory.clear();
         await logger_1.logger.info('AgentManager shutdown complete');
     }
-    /**
-     * Execute multiple tasks in parallel (compatibility method)
-     */
     async executeTasksParallel(tasks) {
         const promises = tasks.map(async (task) => {
             try {
-                // Auto-assign to the universal agent
                 return await this.executeTask('universal-agent', task);
             }
             catch (error) {
@@ -512,9 +414,6 @@ class AgentManager extends events_1.EventEmitter {
         });
         return Promise.all(promises);
     }
-    /**
-     * List registered agents (compatibility method)
-     */
     listRegisteredAgents() {
         return Array.from(this.agentRegistry.entries()).map(([id, entry]) => ({
             id,

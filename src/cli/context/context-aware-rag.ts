@@ -72,7 +72,7 @@ export class ContextAwareRAGSystem {
 
   constructor(workingDirectory: string) {
     this.workingDir = resolve(workingDirectory);
-    this.memoryPath = join(this.workingDir, '.claude-memory');
+    this.memoryPath = join(this.workingDir, '.nikcli');
     this.ensureMemoryDir();
     this.loadMemory();
   }

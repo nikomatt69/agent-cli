@@ -97,7 +97,6 @@ class ModernAgent {
     }
 }
 exports.ModernAgent = ModernAgent;
-// Pre-defined agent capabilities
 exports.AGENT_CAPABILITIES = {
     'full-stack-developer': {
         name: 'Full-Stack Developer',
@@ -317,7 +316,6 @@ class ModernAgentOrchestrator {
     constructor(workingDirectory) {
         this.agents = new Map();
         this.executions = [];
-        // Initialize agents with capabilities
         Object.entries(exports.AGENT_CAPABILITIES).forEach(([key, capability]) => {
             this.agents.set(key, new ModernAgent(key, capability, workingDirectory));
         });
@@ -347,7 +345,6 @@ class ModernAgentOrchestrator {
         }
         for await (const update of agent.executeStreaming(task)) {
             yield update;
-            // Store execution when complete
             if (update.type === 'complete' || update.type === 'error') {
                 if (update.execution) {
                     this.executions.push(update.execution);
@@ -375,25 +372,21 @@ class ModernAgentOrchestrator {
     }
     setWorkingDirectory(directory) {
         modern_ai_provider_1.modernAIProvider.setWorkingDirectory(directory);
-        // Update all agents
         this.agents.forEach(agent => {
             agent.workingDirectory = directory;
         });
     }
-    // Smart agent selection based on task description
     suggestAgent(task) {
         const taskLower = task.toLowerCase();
         const suggestions = [];
         Object.entries(exports.AGENT_CAPABILITIES).forEach(([agentName, capability]) => {
             let score = 0;
-            // Check examples relevance
             capability.examples.forEach(example => {
                 const exampleWords = example.toLowerCase().split(' ');
                 const taskWords = taskLower.split(' ');
                 const commonWords = exampleWords.filter(word => taskWords.includes(word));
                 score += commonWords.length;
             });
-            // Check description relevance
             const descWords = capability.description.toLowerCase().split(' ');
             const taskWords = taskLower.split(' ');
             const commonDescWords = descWords.filter(word => taskWords.includes(word));

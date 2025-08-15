@@ -8,15 +8,10 @@ const chalk_1 = __importDefault(require("chalk"));
 const secure_file_tools_1 = require("./secure-file-tools");
 const find_files_tool_1 = require("./find-files-tool");
 const _1 = require(".");
-/**
- * Secure tools registry that provides sandboxed, confirmed operations
- * Replaces the unsafe ToolsManager with security-first approach
- */
 class SecureToolsRegistry {
     constructor(workingDir) {
         this.executionHistory = [];
         this.workingDirectory = workingDir || process.cwd();
-        // Initialize secure tools
         this.readFileTool = new secure_file_tools_1.ReadFileTool(this.workingDirectory);
         this.writeFileTool = new secure_file_tools_1.WriteFileTool(this.workingDirectory);
         this.listDirectoryTool = new secure_file_tools_1.ListDirectoryTool(this.workingDirectory);
@@ -26,9 +21,6 @@ class SecureToolsRegistry {
         console.log(chalk_1.default.green('🔒 Secure Tools Registry initialized'));
         console.log(chalk_1.default.gray(`📁 Working directory: ${this.workingDirectory}`));
     }
-    /**
-     * Create a tool execution context
-     */
     createContext(securityLevel = 'safe') {
         return {
             workingDirectory: this.workingDirectory,
@@ -36,9 +28,6 @@ class SecureToolsRegistry {
             securityLevel,
         };
     }
-    /**
-     * Execute a tool with security tracking
-     */
     async executeWithTracking(toolName, operation, context, securityChecks) {
         const startTime = Date.now();
         try {
@@ -70,16 +59,10 @@ class SecureToolsRegistry {
             throw error;
         }
     }
-    /**
-     * Secure file reading with path validation
-     */
     async readFile(filePath) {
         const context = this.createContext('safe');
         return this.executeWithTracking('ReadFile', () => this.readFileTool.execute(filePath), context, { pathValidated: true, userConfirmed: false });
     }
-    /**
-     * Secure file writing with user confirmation
-     */
     async writeFile(filePath, content, options = {}) {
         const context = this.createContext(options.skipConfirmation ? 'safe' : 'confirmed');
         return this.executeWithTracking('WriteFile', () => this.writeFileTool.execute(filePath, content, options), context, {
@@ -87,16 +70,10 @@ class SecureToolsRegistry {
             userConfirmed: !options.skipConfirmation
         });
     }
-    /**
-     * Secure directory listing with path validation
-     */
     async listDirectory(directoryPath = '.', options = {}) {
         const context = this.createContext('safe');
         return this.executeWithTracking('ListDirectory', () => this.listDirectoryTool.execute(directoryPath, options), context, { pathValidated: true, userConfirmed: false });
     }
-    /**
-     * Secure file content replacement with user confirmation
-     */
     async replaceInFile(filePath, replacements, options = {}) {
         const context = this.createContext(options.skipConfirmation ? 'safe' : 'confirmed');
         return this.executeWithTracking('ReplaceInFile', () => this.replaceInFileTool.execute(filePath, replacements, options), context, {
@@ -104,9 +81,6 @@ class SecureToolsRegistry {
             userConfirmed: !options.skipConfirmation
         });
     }
-    /**
-     * Secure file finding with path validation
-     */
     async findFiles(pattern, options = {}) {
         const context = this.createContext('safe');
         return this.executeWithTracking('FindFiles', async () => {
@@ -114,9 +88,6 @@ class SecureToolsRegistry {
             return result.data;
         }, context, { pathValidated: true, userConfirmed: false });
     }
-    /**
-     * Secure command execution with allow-listing and confirmation
-     */
     async executeCommand(command, options = {}) {
         const context = this.createContext(options.allowDangerous ? 'dangerous' :
             options.skipConfirmation ? 'safe' : 'confirmed');
@@ -126,9 +97,6 @@ class SecureToolsRegistry {
             commandAnalyzed: true
         });
     }
-    /**
-     * Execute multiple commands in sequence with confirmation
-     */
     async executeCommandSequence(commands, options = {}) {
         const context = this.createContext(options.allowDangerous ? 'dangerous' :
             options.skipConfirmation ? 'safe' : 'confirmed');
@@ -138,9 +106,6 @@ class SecureToolsRegistry {
             commandAnalyzed: true
         });
     }
-    /**
-     * Create a batch session for one-time approval of multiple commands
-     */
     async createBatchSession(commands, options = {}) {
         const context = this.createContext(options.allowDangerous ? 'dangerous' : 'confirmed');
         return this.executeWithTracking('CreateBatchSession', () => this.secureCommandTool.createBatchSession(commands, options), context, {
@@ -149,9 +114,6 @@ class SecureToolsRegistry {
             commandAnalyzed: true
         });
     }
-    /**
-     * Execute a batch session asynchronously
-     */
     async executeBatchAsync(sessionId, options = {}) {
         const context = this.createContext('confirmed');
         return this.executeWithTracking('ExecuteBatchAsync', () => this.secureCommandTool.executeBatchAsync(sessionId, options), context, {
@@ -160,27 +122,15 @@ class SecureToolsRegistry {
             commandAnalyzed: true
         });
     }
-    /**
-     * Get batch session status
-     */
     getBatchSession(sessionId) {
         return this.secureCommandTool.getBatchSession(sessionId);
     }
-    /**
-     * List all batch sessions
-     */
     listBatchSessions() {
         return this.secureCommandTool.listBatchSessions();
     }
-    /**
-     * Clean up expired batch sessions
-     */
     cleanupExpiredSessions() {
         return this.secureCommandTool.cleanupExpiredSessions();
     }
-    /**
-     * Validate a file path without executing any operation
-     */
     validatePath(filePath) {
         try {
             const safePath = (0, secure_file_tools_1.sanitizePath)(filePath, this.workingDirectory);
@@ -190,15 +140,9 @@ class SecureToolsRegistry {
             return { valid: false, error: error.message };
         }
     }
-    /**
-     * Check if a command would be safe to execute
-     */
     checkCommand(command) {
         return this.secureCommandTool.checkCommand(command);
     }
-    /**
-     * Get execution history with optional filtering
-     */
     getExecutionHistory(options = {}) {
         let history = this.executionHistory.slice().reverse();
         if (options.securityLevel) {
@@ -212,9 +156,6 @@ class SecureToolsRegistry {
         }
         return history;
     }
-    /**
-     * Get security statistics
-     */
     getSecurityStats() {
         const total = this.executionHistory.length;
         const safe = this.executionHistory.filter(r => r.context.securityLevel === 'safe').length;
@@ -233,9 +174,6 @@ class SecureToolsRegistry {
             userConfirmationRate: total > 0 ? userConfirmed / total : 0,
         };
     }
-    /**
-     * Print security summary
-     */
     printSecuritySummary() {
         const stats = this.getSecurityStats();
         console.log(chalk_1.default.blue.bold('\n🔒 Security Summary'));
@@ -250,5 +188,4 @@ class SecureToolsRegistry {
     }
 }
 exports.SecureToolsRegistry = SecureToolsRegistry;
-// Export singleton instance
 exports.secureTools = new SecureToolsRegistry();

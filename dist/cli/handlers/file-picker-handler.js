@@ -40,18 +40,12 @@ exports.FilePickerHandler = void 0;
 const path = __importStar(require("path"));
 const chalk_1 = __importDefault(require("chalk"));
 const find_files_tool_1 = require("../tools/find-files-tool");
-/**
- * Handles file selection and tagging operations for the * command
- */
 class FilePickerHandler {
     constructor(workingDirectory) {
         this.selections = new Map();
         this.workingDirectory = workingDirectory;
         this.findTool = new find_files_tool_1.FindFilesTool(workingDirectory);
     }
-    /**
-     * Handle file selection with pattern
-     */
     async selectFiles(pattern, options = {}) {
         const defaultOptions = {
             maxDisplay: 50,
@@ -60,7 +54,6 @@ class FilePickerHandler {
             groupByDirectory: true
         };
         const opts = { ...defaultOptions, ...options };
-        // Use FindFilesTool to get files
         const result = await this.findTool.execute(pattern, { cwd: this.workingDirectory });
         if (!result.success || result.data.length === 0) {
             throw new Error(`No files found matching pattern: ${pattern}`);
@@ -70,15 +63,10 @@ class FilePickerHandler {
             pattern,
             timestamp: new Date()
         };
-        // Store selection for future reference
         this.storeSelection(pattern, selection);
-        // Display results
         await this.displayFileSelection(selection, opts);
         return selection;
     }
-    /**
-     * Display file selection results in organized format
-     */
     async displayFileSelection(selection, options) {
         const { files, pattern } = selection;
         console.log(chalk_1.default.blue(`\n📂 Found ${files.length} files matching "${pattern}":`));
@@ -91,9 +79,6 @@ class FilePickerHandler {
         }
         this.displaySelectionOptions(selection);
     }
-    /**
-     * Display files grouped by directory
-     */
     async displayGroupedFiles(files, options) {
         const groupedFiles = this.groupFilesByDirectory(files);
         let fileIndex = 0;
@@ -118,9 +103,6 @@ class FilePickerHandler {
             }
         }
     }
-    /**
-     * Display files in flat list format
-     */
     async displayFlatFiles(files, options) {
         const displayCount = Math.min(files.length, options.maxDisplay);
         for (let i = 0; i < displayCount; i++) {
@@ -132,28 +114,20 @@ class FilePickerHandler {
             console.log(chalk_1.default.yellow(`... and ${files.length - options.maxDisplay} more files`));
         }
     }
-    /**
-     * Display selection options and usage instructions
-     */
     displaySelectionOptions(selection) {
         console.log(chalk_1.default.gray('\n─'.repeat(60)));
         console.log(chalk_1.default.green('📋 File Selection Options:'));
         console.log(chalk_1.default.dim('• Files are now available for reference in your next message'));
         console.log(chalk_1.default.dim('• Use the file paths directly: "Analyze these files: file1.ts, file2.ts"'));
         console.log(chalk_1.default.dim('• Integration with agent commands: "@code-review analyze these files"'));
-        // Show quick reference for smaller selections
         if (selection.files.length <= 10) {
             console.log(chalk_1.default.yellow('\n💡 Quick reference paths:'));
             selection.files.forEach((file, index) => {
                 console.log(chalk_1.default.dim(`   ${index + 1}. ${file}`));
             });
         }
-        // Show pattern variations
         this.displayPatternSuggestions(selection.pattern);
     }
-    /**
-     * Display pattern suggestions based on current selection
-     */
     displayPatternSuggestions(currentPattern) {
         console.log(chalk_1.default.cyan('\n🔍 Try these pattern variations:'));
         if (currentPattern === '*') {
@@ -167,9 +141,6 @@ class FilePickerHandler {
             console.log(chalk_1.default.dim('  * test/**   - Test files'));
         }
     }
-    /**
-     * Group files by their directory for organized display
-     */
     groupFilesByDirectory(files) {
         const groups = new Map();
         files.forEach(file => {
@@ -180,7 +151,6 @@ class FilePickerHandler {
             }
             groups.get(directory).push(fileName);
         });
-        // Sort directories, with '.' (current) first
         return new Map([...groups.entries()].sort(([a], [b]) => {
             if (a === '.')
                 return -1;
@@ -189,9 +159,6 @@ class FilePickerHandler {
             return a.localeCompare(b);
         }));
     }
-    /**
-     * Get appropriate icon for file extension
-     */
     getFileIcon(extension) {
         const iconMap = {
             '.ts': '🔷',
@@ -222,12 +189,8 @@ class FilePickerHandler {
         };
         return iconMap[extension.toLowerCase()] || '📄';
     }
-    /**
-     * Store file selection for future reference
-     */
     storeSelection(pattern, selection) {
         this.selections.set(pattern, selection);
-        // Keep only the last 5 selections to avoid memory buildup
         if (this.selections.size > 5) {
             const oldestKey = this.selections.keys().next().value;
             if (oldestKey !== undefined) {
@@ -235,34 +198,19 @@ class FilePickerHandler {
             }
         }
     }
-    /**
-     * Get stored file selection by pattern
-     */
     getSelection(pattern) {
         return this.selections.get(pattern);
     }
-    /**
-     * Get all stored selections
-     */
     getAllSelections() {
         return new Map(this.selections);
     }
-    /**
-     * Clear all stored selections
-     */
     clearSelections() {
         this.selections.clear();
     }
-    /**
-     * Get files matching pattern without display
-     */
     async getFiles(pattern) {
         const result = await this.findTool.execute(pattern, { cwd: this.workingDirectory });
         return result.success ? result.data : [];
     }
-    /**
-     * Check if pattern has any matches
-     */
     async hasMatches(pattern) {
         const files = await this.getFiles(pattern);
         return files.length > 0;

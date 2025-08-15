@@ -40,18 +40,12 @@ class WorkspaceRAG {
         }
         return require('path').basename(path);
     }
-    // Analisi completa del workspace con RAG
     async analyzeWorkspace() {
         console.log(chalk_1.default.blue('🧠 Building workspace context with RAG...'));
-        // 1. Scan all files
         await this.scanFiles();
-        // 2. Analyze project structure  
         await this.analyzeProjectStructure();
-        // 3. Extract dependencies and relationships
         this.extractDependencies(this.context.files, this.context.framework);
-        // 4. Analyze git context
         await this.analyzeGitContext();
-        // 5. Build semantic understanding
         await this.buildSemanticIndex();
         this.context.lastAnalyzed = new Date();
         return this.context;
@@ -59,7 +53,7 @@ class WorkspaceRAG {
     async scanFiles() {
         const scanDirectory = (dirPath, depth = 0) => {
             if (depth > 5)
-                return; // Prevent infinite recursion
+                return;
             const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage'];
             const items = (0, fs_1.readdirSync)(dirPath, { withFileTypes: true });
             for (const item of items) {
@@ -83,7 +77,6 @@ class WorkspaceRAG {
             const content = (0, fs_1.readFileSync)(fullPath, 'utf-8');
             const ext = (0, path_1.extname)(fullPath);
             const language = this.detectLanguage(ext);
-            // Skip binary files and very large files
             if (stats.size > 1024 * 1024 || this.isBinaryFile(ext))
                 return;
             const fileEmbedding = {
@@ -102,13 +95,11 @@ class WorkspaceRAG {
                 types: this.extractTypes(content, language),
             };
             this.context.files.set(relativePath, fileEmbedding);
-            // Track languages
             if (!this.context.languages.includes(language)) {
                 this.context.languages.push(language);
             }
         }
         catch (error) {
-            // Skip files that can't be read
         }
     }
     generateFileSummary(content, language) {
@@ -134,8 +125,7 @@ class WorkspaceRAG {
         }
     }
     calculateImportance(path, content, language) {
-        let importance = 50; // Base importance
-        // Path-based importance
+        let importance = 50;
         if (path.includes('package.json'))
             importance += 40;
         if (path.includes('tsconfig.json'))
@@ -154,13 +144,11 @@ class WorkspaceRAG {
             importance += 15;
         if (path.includes('test') || path.includes('spec'))
             importance -= 10;
-        // Content-based importance
         const lines = content.split('\n').length;
         if (lines > 500)
             importance += 10;
         if (lines > 1000)
             importance += 15;
-        // Language-specific importance
         if (language === 'typescript')
             importance += 10;
         if (content.includes('export default'))
@@ -195,7 +183,6 @@ class WorkspaceRAG {
     extractDependencies(content, language) {
         const deps = [];
         if (language === 'typescript' || language === 'javascript') {
-            // Import statements
             const importMatches = content.match(/import .* from ['"]([^'"]+)['"]/g);
             if (importMatches) {
                 importMatches.forEach(match => {
@@ -204,7 +191,6 @@ class WorkspaceRAG {
                         deps.push(dep);
                 });
             }
-            // Require statements  
             const requireMatches = content.match(/require\(['"]([^'"]+)['"]\)/g);
             if (requireMatches) {
                 requireMatches.forEach(match => {
@@ -219,7 +205,6 @@ class WorkspaceRAG {
     extractExports(content, language) {
         const exports = [];
         if (language === 'typescript' || language === 'javascript') {
-            // Named exports
             const namedExports = content.match(/export \{ ([^}]+) \}/g);
             if (namedExports) {
                 namedExports.forEach(match => {
@@ -227,11 +212,9 @@ class WorkspaceRAG {
                     items.forEach(item => exports.push(item.trim()));
                 });
             }
-            // Default exports
             if (content.includes('export default')) {
                 exports.push('default');
             }
-            // Direct exports
             const directExports = content.match(/export (const|function|class) (\w+)/g);
             if (directExports) {
                 directExports.forEach(match => {
@@ -246,7 +229,6 @@ class WorkspaceRAG {
     extractFunctions(content, language) {
         const functions = [];
         if (language === 'typescript' || language === 'javascript') {
-            // Function declarations
             const funcDeclarations = content.match(/function (\w+)/g);
             if (funcDeclarations) {
                 funcDeclarations.forEach(match => {
@@ -254,7 +236,6 @@ class WorkspaceRAG {
                     functions.push(name);
                 });
             }
-            // Arrow functions
             const arrowFunctions = content.match(/const (\w+) = [^=]*=>/g);
             if (arrowFunctions) {
                 arrowFunctions.forEach(match => {
@@ -282,7 +263,6 @@ class WorkspaceRAG {
     extractTypes(content, language) {
         const types = [];
         if (language === 'typescript') {
-            // Interface declarations
             const interfaces = content.match(/interface (\w+)/g);
             if (interfaces) {
                 interfaces.forEach(match => {
@@ -290,7 +270,6 @@ class WorkspaceRAG {
                     types.push(name);
                 });
             }
-            // Type declarations
             const typeDeclarations = content.match(/type (\w+)/g);
             if (typeDeclarations) {
                 typeDeclarations.forEach(match => {
@@ -302,7 +281,6 @@ class WorkspaceRAG {
         return types;
     }
     async analyzeProjectStructure() {
-        // Detect framework
         const packageJsonPath = (0, path_1.join)(this.context.rootPath, 'package.json');
         if ((0, fs_1.existsSync)(packageJsonPath)) {
             const pkg = JSON.parse((0, fs_1.readFileSync)(packageJsonPath, 'utf-8'));
@@ -310,7 +288,6 @@ class WorkspaceRAG {
             this.context.dependencies = Object.keys(pkg.dependencies || {});
             this.context.scripts = pkg.scripts || {};
         }
-        // Analyze directory structure
         this.context.structure = this.buildStructureTree();
     }
     detectFramework(pkg) {
@@ -335,7 +312,6 @@ class WorkspaceRAG {
     }
     buildStructureTree() {
         const structure = { directories: [], files: [] };
-        // Build a semantic tree of the most important parts
         const importantDirs = ['src', 'components', 'pages', 'api', 'lib', 'utils', 'hooks', 'types', 'styles'];
         const importantFiles = Array.from(this.context.files.values())
             .filter(f => f.importance > 70)
@@ -365,31 +341,26 @@ class WorkspaceRAG {
             }
         }
         catch (error) {
-            // Git not available or not a git repo
         }
     }
     async buildSemanticIndex() {
-        // Build semantic relationships between files
         for (const [path, file] of this.context.files) {
-            // Create simple semantic vectors based on content
             this.embeddings.set(path, this.createSimpleEmbedding(file));
         }
     }
     createSimpleEmbedding(file) {
-        // Simple TF-IDF-like embedding for semantic similarity
         const words = file.content.toLowerCase().match(/\b\w+\b/g) || [];
         const wordFreq = new Map();
         words.forEach(word => {
             wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
         });
-        // Create embedding vector (simplified)
         const embedding = new Array(100).fill(0);
         let index = 0;
         for (const [word, freq] of wordFreq) {
             const hash = this.simpleHash(word) % 100;
             embedding[hash] += freq;
             if (++index > 50)
-                break; // Limit processing
+                break;
         }
         return embedding;
     }
@@ -400,13 +371,11 @@ class WorkspaceRAG {
         }
         return Math.abs(hash);
     }
-    // Query methods for the chat system
     getRelevantFiles(query, limit = 10) {
         const queryWords = query.toLowerCase().match(/\b\w+\b/g) || [];
         const scores = [];
         for (const [path, file] of this.context.files) {
             let score = 0;
-            // Content relevance
             queryWords.forEach(word => {
                 if (file.content.toLowerCase().includes(word)) {
                     score += 1;
@@ -415,7 +384,6 @@ class WorkspaceRAG {
                     score += 2;
                 }
             });
-            // Importance boost
             score += file.importance / 100;
             if (score > 0) {
                 scores.push({ file, score });
@@ -436,14 +404,12 @@ class WorkspaceRAG {
     getContext() {
         return this.context;
     }
-    // Update context when files change
     updateFile(path) {
         const fullPath = (0, path_1.join)(this.context.rootPath, path);
         if ((0, fs_1.existsSync)(fullPath)) {
             this.analyzeFile(fullPath, path);
         }
     }
-    // Get context for specific query/task
     getContextForTask(task) {
         const relevantFiles = this.getRelevantFiles(task, 15);
         const projectInfo = {
@@ -458,7 +424,6 @@ class WorkspaceRAG {
     }
     generateRecommendations(task, files) {
         const recommendations = [];
-        // Analyze task and suggest relevant patterns
         const taskLower = task.toLowerCase();
         if (taskLower.includes('component') && this.context.framework.includes('React')) {
             recommendations.push('Use functional components with hooks');

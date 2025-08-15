@@ -3,10 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AgentRouter = void 0;
 const event_bus_1 = require("./event-bus");
 const cli_ui_1 = require("../../utils/cli-ui");
-/**
- * Production-ready Agent Router
- * Intelligently routes tasks to specialized agents based on task type and context
- */
 class AgentRouter {
     constructor() {
         this.agents = new Map();
@@ -24,9 +20,6 @@ class AgentRouter {
         this.setupEventListeners();
         this.initializeDefaultRoutingRules();
     }
-    /**
-     * Register a specialized agent
-     */
     registerAgent(agentId, agent) {
         if (this.agents.has(agentId)) {
             cli_ui_1.CliUI.logWarning(`Agent ${agentId} already registered. Overwriting...`);
@@ -39,16 +32,12 @@ class AgentRouter {
             successRate: 0
         });
         cli_ui_1.CliUI.logInfo(`🤖 Agent registered: ${agentId} (${agent.capabilities.join(', ')})`);
-        // Publish agent registration event
         this.eventBus.publish(event_bus_1.EventTypes.AGENT_STARTED, {
             agentId,
             capabilities: agent.capabilities,
             specialization: agent.specialization
         });
     }
-    /**
-     * Unregister an agent
-     */
     unregisterAgent(agentId) {
         const agent = this.agents.get(agentId);
         if (!agent)
@@ -56,26 +45,19 @@ class AgentRouter {
         this.agents.delete(agentId);
         this.routingMetrics.agentUtilization.delete(agentId);
         cli_ui_1.CliUI.logInfo(`🤖 Agent unregistered: ${agentId}`);
-        // Publish agent stop event
         this.eventBus.publish(event_bus_1.EventTypes.AGENT_STOPPED, { agentId });
         return true;
     }
-    /**
-     * Route a task to the most appropriate agent
-     */
     async routeTask(task) {
         const startTime = Date.now();
         this.routingMetrics.totalTasks++;
         try {
             cli_ui_1.CliUI.logInfo(`🎯 Routing task: ${task.type} - ${task.description}`);
-            // Analyze task to determine requirements
             const taskAnalysis = await this.analyzeTask(task);
-            // Find best agent for the task
             const selectedAgent = await this.selectAgent(task, taskAnalysis);
             if (!selectedAgent) {
                 throw new Error(`No suitable agent found for task: ${task.type}`);
             }
-            // Create route execution
             const routeExecution = {
                 taskId: task.id,
                 agentId: selectedAgent.agentId,
@@ -84,12 +66,9 @@ class AgentRouter {
                 analysis: taskAnalysis
             };
             this.activeRoutes.set(task.id, routeExecution);
-            // Assign task to agent
             const result = await this.assignTaskToAgent(selectedAgent, task);
-            // Update metrics
             const routingTime = Date.now() - startTime;
             this.updateRoutingMetrics(selectedAgent.agentId, routingTime, true);
-            // Update route execution
             routeExecution.status = 'assigned';
             routeExecution.endTime = new Date();
             routeExecution.result = result;
@@ -116,17 +95,11 @@ class AgentRouter {
             };
         }
     }
-    /**
-     * Add a custom routing rule
-     */
     addRoutingRule(rule) {
         this.routingRules.push(rule);
         this.routingRules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
         cli_ui_1.CliUI.logInfo(`📋 Routing rule added: ${rule.name}`);
     }
-    /**
-     * Remove a routing rule
-     */
     removeRoutingRule(ruleName) {
         const initialLength = this.routingRules.length;
         this.routingRules = this.routingRules.filter(rule => rule.name !== ruleName);
@@ -136,21 +109,12 @@ class AgentRouter {
         }
         return removed;
     }
-    /**
-     * Get routing metrics
-     */
     getRoutingMetrics() {
         return { ...this.routingMetrics };
     }
-    /**
-     * Get active routes
-     */
     getActiveRoutes() {
         return Array.from(this.activeRoutes.values());
     }
-    /**
-     * Get registered agents
-     */
     getRegisteredAgents() {
         return Array.from(this.agents.entries()).map(([agentId, agent]) => ({
             agentId,
@@ -161,9 +125,6 @@ class AgentRouter {
             maxConcurrentTasks: agent.maxConcurrentTasks || 1
         }));
     }
-    /**
-     * Analyze task to determine requirements
-     */
     async analyzeTask(task) {
         const analysis = {
             taskType: task.type,
@@ -174,7 +135,6 @@ class AgentRouter {
             resourceRequirements: this.assessResourceRequirements(task),
             dependencies: task.dependencies || []
         };
-        // Apply custom analysis rules
         for (const rule of this.routingRules) {
             if (rule.taskAnalyzer) {
                 const customAnalysis = await rule.taskAnalyzer(task, analysis);
@@ -183,12 +143,8 @@ class AgentRouter {
         }
         return analysis;
     }
-    /**
-     * Select the best agent for a task
-     */
     async selectAgent(task, analysis) {
         const candidates = [];
-        // Evaluate each agent
         for (const [agentId, agent] of Array.from(this.agents.entries())) {
             if (agent.status !== 'available')
                 continue;
@@ -202,9 +158,7 @@ class AgentRouter {
                 });
             }
         }
-        // Sort by score (highest first)
         candidates.sort((a, b) => b.score - a.score);
-        // Apply routing rules
         for (const rule of this.routingRules) {
             if (rule.agentSelector) {
                 const selectedCandidate = await rule.agentSelector(candidates, task, analysis);
@@ -218,7 +172,6 @@ class AgentRouter {
                 }
             }
         }
-        // Return best candidate
         const bestCandidate = candidates[0];
         return bestCandidate ? {
             agentId: bestCandidate.agentId,
@@ -227,40 +180,28 @@ class AgentRouter {
             reasoning: bestCandidate.reasoning
         } : null;
     }
-    /**
-     * Score an agent for a specific task
-     */
     async scoreAgent(agent, task, analysis) {
         let score = 0;
-        // Capability matching (40% of score)
         const capabilityMatch = this.calculateCapabilityMatch(agent.capabilities, analysis.requiredCapabilities);
         score += capabilityMatch * 0.4;
-        // Specialization bonus (30% of score)
         if (agent.specialization === analysis.taskType ||
             analysis.requiredCapabilities.includes(agent.specialization)) {
             score += 0.3;
         }
-        // Load balancing (20% of score)
         const currentLoad = (agent.currentTasks || 0) / (agent.maxConcurrentTasks || 1);
         score += (1 - currentLoad) * 0.2;
-        // Performance history (10% of score)
         const utilization = this.routingMetrics.agentUtilization.get(agent.id);
         if (utilization && utilization.tasksCompleted > 0) {
             score += utilization.successRate * 0.1;
         }
-        return Math.max(0, Math.min(1, score)); // Normalize to 0-1
+        return Math.max(0, Math.min(1, score));
     }
-    /**
-     * Assign task to selected agent
-     */
     async assignTaskToAgent(selection, task) {
         const agent = selection.agent;
-        // Update agent status
         agent.currentTasks = (agent.currentTasks || 0) + 1;
         if (agent.currentTasks >= (agent.maxConcurrentTasks || 1)) {
             agent.status = 'busy';
         }
-        // Publish task assignment event
         await this.eventBus.publish(event_bus_1.EventTypes.TASK_ASSIGNED, {
             taskId: task.id,
             agentId: selection.agentId,
@@ -268,14 +209,11 @@ class AgentRouter {
             score: selection.score
         });
         try {
-            // Execute task on agent
             const result = await agent.executeTask(task);
-            // Update agent status
             agent.currentTasks = Math.max(0, (agent.currentTasks || 1) - 1);
             if (agent.currentTasks < (agent.maxConcurrentTasks || 1)) {
                 agent.status = 'available';
             }
-            // Publish completion event
             await this.eventBus.publish(event_bus_1.EventTypes.TASK_COMPLETED, {
                 taskId: task.id,
                 agentId: selection.agentId,
@@ -284,10 +222,8 @@ class AgentRouter {
             return result;
         }
         catch (error) {
-            // Update agent status
             agent.currentTasks = Math.max(0, (agent.currentTasks || 1) - 1);
             agent.status = 'available';
-            // Publish failure event
             await this.eventBus.publish(event_bus_1.EventTypes.TASK_FAILED, {
                 taskId: task.id,
                 agentId: selection.agentId,
@@ -296,20 +232,14 @@ class AgentRouter {
             throw error;
         }
     }
-    /**
-     * Setup event listeners
-     */
     setupEventListeners() {
-        // Listen for system events
         this.eventBus.subscribe(event_bus_1.EventTypes.SYSTEM_SHUTDOWN, () => {
             cli_ui_1.CliUI.logInfo('🔄 AgentRouter shutting down...');
             this.cleanup();
         });
-        // Listen for agent errors
         this.eventBus.subscribe(event_bus_1.EventTypes.AGENT_ERROR, (event) => {
             const { agentId, error } = event.data;
             cli_ui_1.CliUI.logError(`🤖 Agent ${agentId} error: ${error}`);
-            // Mark agent as unavailable temporarily
             const agent = this.agents.get(agentId);
             if (agent) {
                 agent.status = 'error';
@@ -317,15 +247,11 @@ class AgentRouter {
                     if (agent.status === 'error') {
                         agent.status = 'available';
                     }
-                }, 30000); // Retry after 30 seconds
+                }, 30000);
             }
         });
     }
-    /**
-     * Initialize default routing rules
-     */
     initializeDefaultRoutingRules() {
-        // Frontend specialization rule
         this.addRoutingRule({
             name: 'frontend-specialization',
             priority: 10,
@@ -336,7 +262,6 @@ class AgentRouter {
                 return null;
             }
         });
-        // Backend specialization rule
         this.addRoutingRule({
             name: 'backend-specialization',
             priority: 10,
@@ -347,7 +272,6 @@ class AgentRouter {
                 return null;
             }
         });
-        // Testing specialization rule
         this.addRoutingRule({
             name: 'testing-specialization',
             priority: 10,
@@ -358,12 +282,10 @@ class AgentRouter {
                 return null;
             }
         });
-        // Load balancing rule (fallback)
         this.addRoutingRule({
             name: 'load-balancing',
             priority: 1,
             agentSelector: async (candidates) => {
-                // Return agent with lowest current load
                 return candidates.reduce((best, current) => {
                     const currentLoad = (current.agent.currentTasks || 0) / (current.agent.maxConcurrentTasks || 1);
                     const bestLoad = (best.agent.currentTasks || 0) / (best.agent.maxConcurrentTasks || 1);
@@ -372,11 +294,7 @@ class AgentRouter {
             }
         });
     }
-    /**
-     * Helper methods for task analysis
-     */
     assessComplexity(task) {
-        // Simple heuristic based on task description length and type
         const descriptionLength = task.description.length;
         const hasMultipleSteps = task.description.includes('and') || task.description.includes('then');
         if (descriptionLength > 200 || hasMultipleSteps)
@@ -388,21 +306,18 @@ class AgentRouter {
     extractRequiredCapabilities(task) {
         const capabilities = [];
         const description = task.description.toLowerCase();
-        // File operations
         if (description.includes('read') || description.includes('file'))
             capabilities.push('file-read');
         if (description.includes('write') || description.includes('create'))
             capabilities.push('file-write');
         if (description.includes('delete') || description.includes('remove'))
             capabilities.push('file-delete');
-        // Code operations
         if (description.includes('refactor') || description.includes('modify'))
             capabilities.push('code-modify');
         if (description.includes('test') || description.includes('spec'))
             capabilities.push('testing');
         if (description.includes('debug') || description.includes('fix'))
             capabilities.push('debugging');
-        // System operations
         if (description.includes('command') || description.includes('run'))
             capabilities.push('command-execute');
         if (description.includes('install') || description.includes('setup'))
@@ -412,9 +327,9 @@ class AgentRouter {
     estimateDuration(task) {
         const complexity = this.assessComplexity(task);
         const baseTime = {
-            'low': 30000, // 30 seconds
-            'medium': 120000, // 2 minutes
-            'high': 300000 // 5 minutes
+            'low': 30000,
+            'medium': 120000,
+            'high': 300000
         };
         return baseTime[complexity];
     }
@@ -454,11 +369,9 @@ class AgentRouter {
         else {
             this.routingMetrics.failedRoutes++;
         }
-        // Update average routing time
         const totalRoutes = this.routingMetrics.successfulRoutes + this.routingMetrics.failedRoutes;
         this.routingMetrics.averageRoutingTime =
             (this.routingMetrics.averageRoutingTime * (totalRoutes - 1) + routingTime) / totalRoutes;
-        // Update agent utilization
         const utilization = this.routingMetrics.agentUtilization.get(agentId);
         if (utilization) {
             utilization.tasksAssigned++;

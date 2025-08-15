@@ -11,7 +11,7 @@ const chalk_1 = __importDefault(require("chalk"));
 class ContextAwareRAGSystem {
     constructor(workingDirectory) {
         this.workingDir = (0, path_1.resolve)(workingDirectory);
-        this.memoryPath = (0, path_1.join)(this.workingDir, '.claude-memory');
+        this.memoryPath = (0, path_1.join)(this.workingDir, '.nikcli');
         this.ensureMemoryDir();
         this.loadMemory();
     }
@@ -81,7 +81,6 @@ class ContextAwareRAGSystem {
             console.log(chalk_1.default.red('❌ Failed to save workspace memory'));
         }
     }
-    // Context-aware file analysis
     async analyzeFile(filePath, content) {
         const fullPath = (0, path_1.resolve)(this.workingDir, filePath);
         const relativePath = (0, path_1.relative)(this.workingDir, fullPath);
@@ -93,10 +92,9 @@ class ContextAwareRAGSystem {
         }
         const hash = (0, crypto_1.createHash)('md5').update(content).digest('hex');
         const language = this.detectLanguage((0, path_1.extname)(filePath));
-        // Check if file changed
         const existingMemory = this.memory.files.get(relativePath);
         if (existingMemory && existingMemory.hash === hash) {
-            return existingMemory; // No changes
+            return existingMemory;
         }
         console.log(chalk_1.default.blue(`🔍 Analyzing: ${relativePath}`));
         const analysis = this.performCodeAnalysis(content, language);
@@ -116,15 +114,12 @@ class ContextAwareRAGSystem {
             importance
         };
         this.memory.files.set(relativePath, fileMemory);
-        // Create embedding for semantic search
         await this.createEmbedding(relativePath, content, summary);
         this.saveMemory();
         return fileMemory;
     }
-    // Comprehensive workspace analysis
     async analyzeWorkspace() {
         console.log(chalk_1.default.blue('🔍 Performing comprehensive workspace analysis...'));
-        // Analyze package.json first
         const packagePath = (0, path_1.join)(this.workingDir, 'package.json');
         if ((0, fs_1.existsSync)(packagePath)) {
             const packageContent = (0, fs_1.readFileSync)(packagePath, 'utf-8');
@@ -136,7 +131,6 @@ class ContextAwareRAGSystem {
             };
             this.memory.context.framework = this.detectFramework(packageJson);
         }
-        // Scan and analyze important files
         const importantFiles = await this.findImportantFiles();
         for (const filePath of importantFiles) {
             try {
@@ -146,18 +140,15 @@ class ContextAwareRAGSystem {
                 console.log(chalk_1.default.yellow(`⚠️ Could not analyze ${filePath}`));
             }
         }
-        // Update context with findings
         this.memory.context.languages = this.extractLanguages();
         this.memory.context.structure = this.buildProjectStructure();
         this.saveMemory();
         return this.memory.context;
     }
-    // Semantic search and retrieval
     async searchRelevantContext(query, maxResults = 5) {
         const queryEmbedding = this.createSimpleEmbedding(query);
         const results = [];
         for (const [path, file] of this.memory.files) {
-            // Simple text similarity (in production, use proper embeddings)
             const similarity = this.calculateSimilarity(query, file.content + ' ' + file.summary);
             if (similarity > 0.1) {
                 results.push({ file, similarity });
@@ -168,7 +159,6 @@ class ContextAwareRAGSystem {
             .slice(0, maxResults)
             .map(r => r.file);
     }
-    // Store interaction for learning
     recordInteraction(userInput, aiResponse, actions) {
         const interaction = {
             id: (0, crypto_1.createHash)('md5').update(`${Date.now()}-${userInput}`).digest('hex').substring(0, 8),
@@ -180,24 +170,20 @@ class ContextAwareRAGSystem {
             successful: actions.every(a => !a.result?.error)
         };
         this.memory.interactions.push(interaction);
-        // Keep only last 100 interactions
         if (this.memory.interactions.length > 100) {
             this.memory.interactions = this.memory.interactions.slice(-100);
         }
         this.saveMemory();
         return interaction.id;
     }
-    // Get relevant context for AI
     getContextForAI(query) {
         let relevantFiles = [];
         if (query) {
-            // Get semantically relevant files
             relevantFiles = Array.from(this.memory.files.values())
                 .sort((a, b) => b.importance - a.importance)
                 .slice(0, 10);
         }
         else {
-            // Get most important files
             relevantFiles = Array.from(this.memory.files.values())
                 .sort((a, b) => b.importance - a.importance)
                 .slice(0, 8);
@@ -213,7 +199,6 @@ class ContextAwareRAGSystem {
             knownProblems: this.memory.context.problemsIdentified
         };
     }
-    // Update current goals and problems
     updateGoals(goals) {
         this.memory.context.currentGoals = goals;
         this.saveMemory();
@@ -232,13 +217,11 @@ class ContextAwareRAGSystem {
     }
     addRecentChange(change) {
         this.memory.context.recentChanges.push(change);
-        // Keep only last 20 changes
         if (this.memory.context.recentChanges.length > 20) {
             this.memory.context.recentChanges = this.memory.context.recentChanges.slice(-20);
         }
         this.saveMemory();
     }
-    // Helper methods
     performCodeAnalysis(content, language) {
         const analysis = {
             imports: [],
@@ -266,10 +249,8 @@ class ContextAwareRAGSystem {
         return analysis;
     }
     async generateFileSummary(content, language, analysis) {
-        // Simple rule-based summary (in production, use AI)
         const lines = content.split('\n').length;
         const summary = `${language} file with ${analysis.functions.length} functions, ${analysis.classes.length} classes (${lines} lines)`;
-        // Add specific insights based on content
         if (content.includes('useState') || content.includes('useEffect')) {
             return `React ${summary} with hooks`;
         }
@@ -283,7 +264,6 @@ class ContextAwareRAGSystem {
     }
     calculateImportance(path, analysis) {
         let importance = 0;
-        // Path-based importance
         if (path.includes('index.'))
             importance += 20;
         if (path.includes('app.') || path.includes('main.'))
@@ -296,7 +276,6 @@ class ContextAwareRAGSystem {
             importance += 10;
         if (path.includes('components/'))
             importance += 5;
-        // Content-based importance
         importance += Math.min(analysis.functions.length * 2, 20);
         importance += Math.min(analysis.classes.length * 3, 15);
         importance += Math.min(analysis.imports.length, 10);
@@ -307,13 +286,12 @@ class ContextAwareRAGSystem {
         const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.json', '.md'];
         const scan = (dir, depth = 0) => {
             if (depth > 3)
-                return; // Limit depth
+                return;
             try {
                 const items = (0, fs_1.readdirSync)(dir, { withFileTypes: true });
                 for (const item of items) {
                     const fullPath = (0, path_1.join)(dir, item.name);
                     const relativePath = (0, path_1.relative)(this.workingDir, fullPath);
-                    // Skip common ignored directories
                     if (item.name.startsWith('.') && item.name !== '.env')
                         continue;
                     if (['node_modules', 'dist', 'build', '.git'].includes(item.name))
@@ -327,7 +305,6 @@ class ContextAwareRAGSystem {
                 }
             }
             catch (error) {
-                // Skip inaccessible directories
             }
         };
         scan(this.workingDir);
@@ -403,7 +380,6 @@ class ContextAwareRAGSystem {
         return Array.from(languages);
     }
     buildProjectStructure() {
-        // Build simplified structure from memory
         const structure = {};
         for (const file of this.memory.files.values()) {
             const parts = file.path.split('/');
@@ -420,7 +396,6 @@ class ContextAwareRAGSystem {
         return structure;
     }
     createSimpleEmbedding(text) {
-        // Simple embedding - in production use proper embeddings
         const words = text.toLowerCase().split(/\W+/);
         const vector = new Array(100).fill(0);
         for (let i = 0; i < words.length; i++) {
@@ -439,7 +414,6 @@ class ContextAwareRAGSystem {
             metadata: { path, language: this.detectLanguage((0, path_1.extname)(path)) },
             timestamp: new Date()
         };
-        // Replace existing embedding
         this.memory.embeddings = this.memory.embeddings.filter(e => e.id !== path);
         this.memory.embeddings.push(embedding);
     }
@@ -452,7 +426,6 @@ class ContextAwareRAGSystem {
     }
     calculateComplexity(content) {
         let complexity = 0;
-        // Simple complexity metrics
         complexity += (content.match(/if\s*\(/g) || []).length;
         complexity += (content.match(/for\s*\(/g) || []).length * 2;
         complexity += (content.match(/while\s*\(/g) || []).length * 2;
@@ -465,7 +438,7 @@ class ContextAwareRAGSystem {
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
             hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32-bit integer
+            hash = hash & hash;
         }
         return Math.abs(hash);
     }
@@ -473,12 +446,10 @@ class ContextAwareRAGSystem {
         const ctx = this.memory.context;
         return `Project: ${ctx.projectName} (${ctx.framework}) | Files: ${this.memory.files.size} | Languages: ${ctx.languages.join(', ')}`;
     }
-    // Clear memory (useful for testing)
     clearMemory() {
         this.memory = this.createFreshMemory();
         this.saveMemory();
     }
-    // Get memory stats
     getMemoryStats() {
         return {
             totalFiles: this.memory.files.size,

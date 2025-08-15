@@ -3,10 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FrontendAgent = void 0;
 const base_agent_1 = require("./base-agent");
 const cli_ui_1 = require("../../utils/cli-ui");
-/**
- * Frontend Specialized Agent
- * Handles UI/UX related tasks, component development, and frontend tooling
- */
 class FrontendAgent extends base_agent_1.BaseAgent {
     constructor(workingDirectory) {
         super(workingDirectory);
@@ -25,13 +21,11 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             'performance-optimization'
         ];
         this.specialization = 'frontend';
-        this.maxConcurrentTasks = 2; // Frontend tasks often require focus
+        this.maxConcurrentTasks = 2;
     }
     async onInitialize() {
         cli_ui_1.CliUI.logInfo('🎨 Frontend Agent initializing...');
-        // Check for frontend frameworks and tools
         await this.detectFrontendStack();
-        // Setup frontend-specific tool configurations
         await this.configureFrontendTools();
         cli_ui_1.CliUI.logSuccess('✅ Frontend Agent ready for UI/UX tasks');
     }
@@ -56,25 +50,17 @@ class FrontendAgent extends base_agent_1.BaseAgent {
     }
     async onStop() {
         cli_ui_1.CliUI.logInfo('🎨 Frontend Agent shutting down...');
-        // Cleanup any frontend-specific resources
     }
-    /**
-     * Create a new frontend component
-     */
     async createComponent(task) {
         const { componentName, componentType, framework } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🧩 Creating ${componentType || 'React'} component: ${componentName}`);
         try {
-            // Determine component structure based on framework
             const componentCode = await this.generateComponentCode(componentName, componentType, framework);
-            // Create component file
             const componentPath = await this.determineComponentPath(componentName, framework);
             await this.executeTool('write-file-tool', componentPath, componentCode);
-            // Create accompanying test file
             const testCode = await this.generateComponentTest(componentName, framework);
             const testPath = componentPath.replace(/\.(jsx?|tsx?|vue)$/, '.test.$1');
             await this.executeTool('write-file-tool', testPath, testCode);
-            // Create styles if needed
             let stylePath = null;
             if (componentType !== 'functional-only') {
                 const styleCode = await this.generateComponentStyles(componentName);
@@ -93,20 +79,13 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to create component: ${error.message}`);
         }
     }
-    /**
-     * Style an existing component
-     */
     async styleComponent(task) {
         const { componentPath, styleRequirements } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🎨 Styling component: ${componentPath}`);
         try {
-            // Read existing component
             const componentContent = await this.executeTool('read-file-tool', componentPath);
-            // Analyze current styles
             const styleAnalysis = await this.analyzeComponentStyles(componentContent);
-            // Generate improved styles
             const newStyles = await this.generateImprovedStyles(styleAnalysis, styleRequirements);
-            // Apply styles to component
             const updatedComponent = await this.applyStylesToComponent(componentContent, newStyles);
             await this.executeTool('write-file-tool', componentPath, updatedComponent);
             return {
@@ -120,30 +99,23 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to style component: ${error.message}`);
         }
     }
-    /**
-     * Optimize frontend performance
-     */
     async optimizePerformance(task) {
         const { targetFiles, optimizationType } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`⚡ Optimizing frontend performance: ${optimizationType}`);
         try {
             const optimizations = [];
-            // Code splitting optimization
             if (optimizationType.includes('code-splitting')) {
                 const splitResult = await this.implementCodeSplitting(targetFiles);
                 optimizations.push(splitResult);
             }
-            // Bundle size optimization
             if (optimizationType.includes('bundle-size')) {
                 const bundleResult = await this.optimizeBundleSize(targetFiles);
                 optimizations.push(bundleResult);
             }
-            // Image optimization
             if (optimizationType.includes('images')) {
                 const imageResult = await this.optimizeImages(targetFiles);
                 optimizations.push(imageResult);
             }
-            // Lazy loading implementation
             if (optimizationType.includes('lazy-loading')) {
                 const lazyResult = await this.implementLazyLoading(targetFiles);
                 optimizations.push(lazyResult);
@@ -158,9 +130,6 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to optimize performance: ${error.message}`);
         }
     }
-    /**
-     * Add responsive design
-     */
     async addResponsiveDesign(task) {
         const { targetFiles, breakpoints } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`📱 Adding responsive design to components`);
@@ -169,7 +138,6 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             for (const file of targetFiles || []) {
                 const content = await this.executeTool('read-file-tool', file);
                 const responsiveCSS = await this.generateResponsiveCSS(content, breakpoints);
-                // Update component with responsive styles
                 const updatedContent = await this.addResponsiveStylesToComponent(content, responsiveCSS);
                 await this.executeTool('write-file-tool', file, updatedContent);
                 responsiveUpdates.push({ file, breakpoints: breakpoints.length });
@@ -184,9 +152,6 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to add responsive design: ${error.message}`);
         }
     }
-    /**
-     * Improve accessibility
-     */
     async improveAccessibility(task) {
         const { targetFiles, accessibilityLevel } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`♿ Improving accessibility: ${accessibilityLevel} level`);
@@ -194,9 +159,7 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             const accessibilityImprovements = [];
             for (const file of targetFiles || []) {
                 const content = await this.executeTool('read-file-tool', file);
-                // Analyze accessibility issues
                 const issues = await this.analyzeAccessibilityIssues(content);
-                // Apply accessibility improvements
                 const improvedContent = await this.applyAccessibilityFixes(content, issues, accessibilityLevel);
                 await this.executeTool('write-file-tool', file, improvedContent);
                 accessibilityImprovements.push({
@@ -215,16 +178,11 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to improve accessibility: ${error.message}`);
         }
     }
-    /**
-     * Setup frontend testing
-     */
     async setupFrontendTesting(task) {
         const { testingFramework, componentPaths } = task.metadata || {};
         cli_ui_1.CliUI.logInfo(`🧪 Setting up frontend testing with ${testingFramework}`);
         try {
-            // Setup testing configuration
             await this.setupTestingFramework(testingFramework);
-            // Generate tests for components
             const testFiles = [];
             for (const componentPath of componentPaths || []) {
                 const testContent = await this.generateComponentTest(componentPath, testingFramework);
@@ -243,19 +201,13 @@ class FrontendAgent extends base_agent_1.BaseAgent {
             throw new Error(`Failed to setup frontend testing: ${error.message}`);
         }
     }
-    /**
-     * Handle generic frontend tasks
-     */
     async handleGenericFrontendTask(task) {
         cli_ui_1.CliUI.logInfo(`🎨 Handling generic frontend task: ${task.type}`);
-        // Use planning system for complex tasks
         const plan = await this.generateTaskPlan(task);
         return await this.executePlan(plan);
     }
-    // Helper methods for frontend operations
     async detectFrontendStack() {
         try {
-            // Check for package.json to detect frameworks
             const packageJson = await this.executeTool('read-file-tool', 'package.json');
             const dependencies = JSON.parse(packageJson).dependencies || {};
             if (dependencies.react) {
@@ -273,11 +225,9 @@ class FrontendAgent extends base_agent_1.BaseAgent {
         }
     }
     async configureFrontendTools() {
-        // Configure tools specific to frontend development
         cli_ui_1.CliUI.logDebug('🔧 Configuring frontend-specific tools');
     }
     async generateComponentCode(name, type, framework) {
-        // Generate component code based on framework and type
         if (framework === 'react') {
             return this.generateReactComponent(name, type);
         }
@@ -448,7 +398,6 @@ describe('${componentName}', () => {
     toPascalCase(str) {
         return str.replace(/(?:^|[-_])(\w)/g, (_, c) => c.toUpperCase());
     }
-    // Placeholder methods for complex operations
     async analyzeComponentStyles(content) {
         return { currentStyles: [], suggestions: [] };
     }

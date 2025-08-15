@@ -11,7 +11,6 @@ const util_1 = require("util");
 const chalk_1 = __importDefault(require("chalk"));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class WebSearchProvider {
-    // Web search tool using AI SDK
     getWebSearchTool() {
         return (0, ai_1.tool)({
             description: 'Search the web for current information, documentation, or solutions',
@@ -23,7 +22,6 @@ class WebSearchProvider {
             execute: async ({ query, maxResults, searchType }) => {
                 try {
                     console.log(chalk_1.default.blue(`🔍 Searching web for: "${query}" (${searchType})`));
-                    // Use different search strategies based on type
                     let searchResults = [];
                     switch (searchType) {
                         case 'technical':
@@ -56,10 +54,8 @@ class WebSearchProvider {
             }
         });
     }
-    // General web search using curl and search engines
     async searchGeneral(query, maxResults) {
         try {
-            // Use DuckDuckGo for privacy-friendly search
             const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
             const { stdout } = await execAsync(`curl -s -A "Mozilla/5.0" "${searchUrl}" | grep -o 'href="[^"]*" class="result__url"' | head -${maxResults}`);
             const results = [];
@@ -82,22 +78,18 @@ class WebSearchProvider {
             return this.getFallbackResults(query, maxResults);
         }
     }
-    // Technical search focusing on developer resources
     async searchTechnical(query, maxResults) {
         const technicalQuery = `${query} site:github.com OR site:stackoverflow.com OR site:dev.to OR site:medium.com`;
         return this.searchGeneral(technicalQuery, maxResults);
     }
-    // Documentation search
     async searchDocumentation(query, maxResults) {
         const docQuery = `${query} site:docs.npmjs.com OR site:developer.mozilla.org OR site:docs.python.org OR site:docs.oracle.com`;
         return this.searchGeneral(docQuery, maxResults);
     }
-    // Stack Overflow specific search
     async searchStackOverflow(query, maxResults) {
         const soQuery = `${query} site:stackoverflow.com`;
         return this.searchGeneral(soQuery, maxResults);
     }
-    // Fallback results when search fails
     getFallbackResults(query, maxResults) {
         return [
             {

@@ -3,6 +3,8 @@ import { promisify } from 'util';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import * as path from 'path';
+import { randomBytes } from 'crypto';
+import { inputQueue } from '../core/input-queue';
 
 const execAsync = promisify(exec);
 
@@ -159,7 +161,7 @@ export class SecureCommandTool {
             onError?: (error: Error, command: string, index: number) => void;
         } = {}
     ): Promise<BatchSession> {
-        const sessionId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const sessionId = `batch_${Date.now()}_${randomBytes(6).toString('base64url')}`;
         const sessionDuration = options.sessionDuration || 30; // 30 minutes default
         const expiresAt = new Date(Date.now() + sessionDuration * 60 * 1000);
 
@@ -208,36 +210,40 @@ export class SecureCommandTool {
         console.log(chalk.blue('\n🔐 One-Time Batch Approval'));
         console.log(chalk.gray('Once approved, all commands will execute asynchronously without further confirmation.'));
         
-        const { approved } = await inquirer.prompt([{
-            type: 'confirm',
-            name: 'approved',
-            message: `Approve batch execution of ${commands.length} commands?`,
-            default: false,
-        }]);
+        inputQueue.enableBypass();
+        try {
+            const { approved } = await inquirer.prompt([{
+                type: 'confirm',
+                name: 'approved',
+                message: `Approve batch execution of ${commands.length} commands?`,
+                default: false,
+            }]);
 
-        const session: BatchSession = {
-            id: sessionId,
-            commands,
-            approved,
-            createdAt: new Date(),
-            expiresAt,
-            results: [],
-            status: approved ? 'approved' : 'pending',
-            onProgress: options.onProgress,
-            onComplete: options.onComplete,
-            onError: options.onError,
-        };
+            const session: BatchSession = {
+                id: sessionId,
+                commands,
+                approved,
+                createdAt: new Date(),
+                expiresAt,
+                results: [],
+                status: approved ? 'approved' : 'pending',
+                onProgress: options.onProgress,
+                onComplete: options.onComplete,
+                onError: options.onError,
+            };
 
-        this.batchSessions.set(sessionId, session);
+            this.batchSessions.set(sessionId, session);
+            
+            if (approved) {
+                console.log(chalk.green(`✅ Batch approved! Session ID: ${sessionId}`));
+            } else {
+                console.log(chalk.red('❌ Batch execution cancelled by user'));
+            }
 
-        if (approved) {
-            console.log(chalk.green(`✅ Batch session approved: ${sessionId}`));
-            console.log(chalk.blue('🚀 Ready for async execution'));
-        } else {
-            console.log(chalk.yellow('❌ Batch session not approved'));
+            return session;
+        } finally {
+            inputQueue.disableBypass();
         }
-
-        return session;
     }
 
     /**
@@ -388,16 +394,21 @@ export class SecureCommandTool {
         if (!analysis.safe && !options.skipConfirmation) {
             console.log(chalk.yellow(`\n⚠️  Command requires confirmation: ${command}`));
 
-            const { confirmed } = await inquirer.prompt([{
-                type: 'confirm',
-                name: 'confirmed',
-                message: 'Execute this command?',
-                default: false,
-            }]);
+            inputQueue.enableBypass();
+            try {
+                const { confirmed } = await inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'confirmed',
+                    message: 'Execute this command?',
+                    default: false,
+                }]);
 
-            if (!confirmed) {
-                console.log(chalk.yellow('✋ Command execution cancelled by user'));
-                throw new Error('Command execution cancelled by user');
+                if (!confirmed) {
+                    console.log(chalk.yellow('✋ Command execution cancelled by user'));
+                    throw new Error('Command execution cancelled by user');
+                }
+            } finally {
+                inputQueue.disableBypass();
             }
         }
 
@@ -486,16 +497,21 @@ export class SecureCommandTool {
         });
 
         if (!options.skipConfirmation) {
-            const { confirmed } = await inquirer.prompt([{
-                type: 'confirm',
-                name: 'confirmed',
-                message: 'Execute all commands?',
-                default: false,
-            }]);
+            inputQueue.enableBypass();
+            try {
+                const { confirmed } = await inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'confirmed',
+                    message: 'Execute all commands?',
+                    default: false,
+                }]);
 
-            if (!confirmed) {
-                console.log(chalk.yellow('✋ Command sequence cancelled by user'));
-                throw new Error('Command sequence cancelled by user');
+                if (!confirmed) {
+                    console.log(chalk.yellow('✋ Command sequence cancelled by user'));
+                    throw new Error('Command sequence cancelled by user');
+                }
+            } finally {
+                inputQueue.disableBypass();
             }
         }
 

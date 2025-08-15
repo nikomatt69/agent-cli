@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 "use strict";
-/**
- * NikCLI - Unified Chat Interface
- * Lifecycle: Banner → Chat → Prompt → Plan → Confirm → Execute → Queue Management
- */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -47,13 +43,11 @@ const chalk_1 = __importDefault(require("chalk"));
 const boxen_1 = __importDefault(require("boxen"));
 const readline = __importStar(require("readline"));
 const events_1 = require("events");
-// Core imports
 const advanced_ai_provider_1 = require("./ai/advanced-ai-provider");
 const workflow_orchestrator_1 = require("./automation/workflow-orchestrator");
 const chat_orchestrator_1 = require("./chat/chat-orchestrator");
 const agent_service_1 = require("./services/agent-service");
 const config_manager_1 = require("./core/config-manager");
-// ASCII Banner
 const banner = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
 ████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
@@ -62,9 +56,6 @@ const banner = `
 ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
 ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝
 `;
-/**
- * Unified Chat Interface with Complete Lifecycle Management
- */
 class UnifiedChatInterface extends events_1.EventEmitter {
     constructor() {
         super();
@@ -79,22 +70,16 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             id: Date.now().toString(),
             messages: [],
             workingDirectory: process.cwd(),
-            planMode: true, // Default to plan mode
+            planMode: true,
             isExecuting: false,
             promptQueue: [],
             activeAgents: new Map()
         };
         this.workflowOrchestrator = new workflow_orchestrator_1.WorkflowOrchestrator(this.session.workingDirectory);
-        this.chatOrchestrator = new chat_orchestrator_1.ChatOrchestrator(agent_service_1.agentService, {}, // todoManager placeholder
-        {}, // sessionManager placeholder
-        config_manager_1.simpleConfigManager);
+        this.chatOrchestrator = new chat_orchestrator_1.ChatOrchestrator(agent_service_1.agentService, {}, {}, config_manager_1.simpleConfigManager);
         this.setupEventHandlers();
     }
-    /**
-     * Setup event handlers for graceful operation
-     */
     setupEventHandlers() {
-        // Graceful shutdown
         this.rl.on('SIGINT', () => {
             if (this.session.isExecuting) {
                 console.log(chalk_1.default.yellow('\n⏸️  Stopping current execution...'));
@@ -106,7 +91,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                 process.exit(0);
             }
         });
-        // Handle input
         this.rl.on('line', async (input) => {
             const trimmed = input.trim();
             if (!trimmed) {
@@ -121,44 +105,31 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             process.exit(0);
         });
     }
-    /**
-     * Main lifecycle: Handle user input
-     */
     async handleInput(input) {
-        // Add user message to session
         this.session.messages.push({
             role: 'user',
             content: input,
             timestamp: new Date()
         });
-        // Handle slash commands
         if (input.startsWith('/')) {
             await this.handleSlashCommand(input);
             return;
         }
-        // If currently executing, queue the prompt
         if (this.session.isExecuting) {
             await this.queuePrompt(input);
             return;
         }
-        // Process the prompt
         await this.processPrompt(input);
     }
-    /**
-     * Process user prompt through the complete lifecycle
-     */
     async processPrompt(input) {
         console.log(chalk_1.default.blue('🤔 Processing your request...'));
         try {
-            // Step 1: Generate plan if in plan mode
             if (this.session.planMode) {
                 const plan = await this.generatePlan(input);
                 if (plan) {
-                    // Step 2: Show plan and ask for confirmation
                     this.displayPlan(plan);
                     const approved = await this.requestPlanApproval();
                     if (approved) {
-                        // Step 3: Execute plan autonomously
                         await this.executePlan(plan);
                     }
                     else {
@@ -167,12 +138,10 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                     }
                 }
                 else {
-                    // No plan needed, direct response
                     await this.generateDirectResponse(input);
                 }
             }
             else {
-                // Direct execution without planning
                 await this.generateDirectResponse(input);
             }
         }
@@ -181,13 +150,9 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             this.addAssistantMessage(`I encountered an error: ${error.message}. Please try again.`);
         }
     }
-    /**
-     * Generate execution plan from user prompt
-     */
     async generatePlan(prompt) {
         console.log(chalk_1.default.cyan('📋 Generating execution plan...'));
         try {
-            // Use AI to analyze prompt and create structured plan
             const planningResult = await advanced_ai_provider_1.advancedAIProvider.generateWithTools([
                 {
                     role: 'system',
@@ -212,7 +177,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                 }
             ]);
             const planText = planningResult;
-            // Try to parse as JSON
             try {
                 const planData = JSON.parse(planText);
                 if (planData && planData.steps && planData.steps.length > 0) {
@@ -230,7 +194,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                 }
             }
             catch (parseError) {
-                // If not JSON, treat as simple response
                 console.log(chalk_1.default.dim('💭 Simple request detected, no plan needed'));
                 return null;
             }
@@ -241,9 +204,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             return null;
         }
     }
-    /**
-     * Display the generated plan to user
-     */
     displayPlan(plan) {
         const planBox = (0, boxen_1.default)(chalk_1.default.white.bold(`📋 ${plan.title}\n\n`) +
             chalk_1.default.gray(`${plan.description}\n\n`) +
@@ -258,9 +218,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(planBox);
     }
-    /**
-     * Request user approval for the plan
-     */
     async requestPlanApproval() {
         return new Promise((resolve) => {
             const question = chalk_1.default.yellow.bold('🤔 Do you approve this execution plan? (y/N): ');
@@ -270,9 +227,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             });
         });
     }
-    /**
-     * Execute the approved plan autonomously
-     */
     async executePlan(plan) {
         console.log(chalk_1.default.green.bold(`🚀 Starting autonomous execution of: ${plan.title}`));
         this.session.isExecuting = true;
@@ -281,7 +235,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             for (let i = 0; i < plan.steps.length; i++) {
                 const step = plan.steps[i];
                 console.log(chalk_1.default.blue(`\n📍 Step ${i + 1}/${plan.steps.length}: ${step.title}`));
-                // Check if permission is required
                 if (step.requiresPermission) {
                     const permitted = await this.requestStepPermission(step);
                     if (!permitted) {
@@ -289,9 +242,7 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                         break;
                     }
                 }
-                // Execute the step
                 await this.executeStep(step);
-                // Process any queued prompts with secondary agents
                 await this.processQueuedPrompts();
             }
             console.log(chalk_1.default.green.bold('✅ Plan execution completed successfully!'));
@@ -306,9 +257,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             this.session.currentPlan = undefined;
         }
     }
-    /**
-     * Request permission for a specific step
-     */
     async requestStepPermission(step) {
         const permissionBox = (0, boxen_1.default)(chalk_1.default.yellow.bold('🔒 Permission Required\n\n') +
             chalk_1.default.white(`Step: ${step.title}\n`) +
@@ -328,13 +276,9 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             });
         });
     }
-    /**
-     * Execute a single plan step
-     */
     async executeStep(step) {
         console.log(chalk_1.default.cyan(`🔧 Executing: ${step.toolName}`));
         try {
-            // Simulate tool execution (replace with actual tool calls)
             await new Promise(resolve => setTimeout(resolve, step.estimatedTime * 100));
             console.log(chalk_1.default.green(`✅ Completed: ${step.title}`));
         }
@@ -343,9 +287,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             throw error;
         }
     }
-    /**
-     * Queue a prompt during execution
-     */
     async queuePrompt(prompt) {
         const queuedPrompt = {
             id: Date.now().toString(),
@@ -357,21 +298,15 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         console.log(chalk_1.default.blue(`📥 Prompt queued (${this.session.promptQueue.length} in queue)`));
         console.log(chalk_1.default.dim(`"${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}"`));
     }
-    /**
-     * Process queued prompts with secondary agents
-     */
     async processQueuedPrompts() {
         if (this.session.promptQueue.length === 0)
             return;
         console.log(chalk_1.default.magenta(`🤖 Processing ${this.session.promptQueue.length} queued prompts with secondary agents...`));
-        // Process each queued prompt
         while (this.session.promptQueue.length > 0) {
             const queuedPrompt = this.session.promptQueue.shift();
             try {
-                // Launch secondary agent for this prompt
                 const agentId = `secondary-${Date.now()}`;
                 console.log(chalk_1.default.magenta(`🤖 [${agentId}] Processing: "${queuedPrompt.content.slice(0, 40)}..."`));
-                // Simulate secondary agent work
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 console.log(chalk_1.default.green(`✅ [${agentId}] Completed secondary task`));
             }
@@ -380,9 +315,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             }
         }
     }
-    /**
-     * Generate direct response without planning
-     */
     async generateDirectResponse(prompt) {
         console.log(chalk_1.default.cyan('💭 Generating response...'));
         try {
@@ -392,7 +324,7 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                     content: `You are NikCLI, an autonomous AI development assistant. Provide helpful, concise responses.
           Working directory: ${this.session.workingDirectory}`
                 },
-                ...this.session.messages.slice(-5) // Last 5 messages for context
+                ...this.session.messages.slice(-5)
             ]);
             this.addAssistantMessage(response);
             console.log(chalk_1.default.white(response));
@@ -402,9 +334,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             this.addAssistantMessage('I apologize, but I encountered an error generating a response. Please try again.');
         }
     }
-    /**
-     * Handle slash commands
-     */
     async handleSlashCommand(command) {
         const [cmd, ...args] = command.slice(1).split(' ');
         switch (cmd.toLowerCase()) {
@@ -441,18 +370,12 @@ class UnifiedChatInterface extends events_1.EventEmitter {
                 console.log(chalk_1.default.red(`Unknown command: /${cmd}. Type /help for available commands.`));
         }
     }
-    /**
-     * Stop current execution
-     */
     stopExecution() {
         this.session.isExecuting = false;
         this.session.currentPlan = undefined;
         this.session.promptQueue = [];
         console.log(chalk_1.default.yellow('⏹️  Execution stopped'));
     }
-    /**
-     * Show help information
-     */
     showHelp() {
         const helpBox = (0, boxen_1.default)(chalk_1.default.white.bold('🤖 NikCLI Commands\n\n') +
             chalk_1.default.green('/help') + chalk_1.default.gray('     - Show this help\n') +
@@ -469,9 +392,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(helpBox);
     }
-    /**
-     * Show current status
-     */
     showStatus() {
         const statusBox = (0, boxen_1.default)(chalk_1.default.white.bold('📊 NikCLI Status\n\n') +
             chalk_1.default.blue('Working Directory: ') + chalk_1.default.cyan(this.session.workingDirectory) + '\n' +
@@ -486,9 +406,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(statusBox);
     }
-    /**
-     * Show prompt queue
-     */
     showQueue() {
         if (this.session.promptQueue.length === 0) {
             console.log(chalk_1.default.gray('📥 Prompt queue is empty'));
@@ -502,9 +419,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(queueBox);
     }
-    /**
-     * Add assistant message to session
-     */
     addAssistantMessage(content) {
         this.session.messages.push({
             role: 'assistant',
@@ -512,17 +426,11 @@ class UnifiedChatInterface extends events_1.EventEmitter {
             timestamp: new Date()
         });
     }
-    /**
-     * Auto-completion for commands
-     */
     autoComplete(line) {
         const commands = ['/help', '/plan', '/status', '/queue', '/stop', '/clear', '/exit'];
         const hits = commands.filter(cmd => cmd.startsWith(line));
         return [hits.length ? hits : commands, line];
     }
-    /**
-     * Display banner
-     */
     displayBanner() {
         console.clear();
         console.log(chalk_1.default.cyanBright(banner));
@@ -539,9 +447,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(welcomeBox);
     }
-    /**
-     * Show prompt
-     */
     showPrompt() {
         const workingDir = require('path').basename(this.session.workingDirectory);
         const indicators = [];
@@ -556,9 +461,6 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
-    /**
-     * Show goodbye message
-     */
     showGoodbye() {
         const goodbyeBox = (0, boxen_1.default)(chalk_1.default.white.bold('🤖 NikCLI Session Complete\n\n') +
             chalk_1.default.gray('Thank you for using NikCLI!\n') +
@@ -573,23 +475,16 @@ class UnifiedChatInterface extends events_1.EventEmitter {
         });
         console.log(goodbyeBox);
     }
-    /**
-     * Initialize and start the chat interface
-     */
     async start() {
         try {
-            // Check API keys
             if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
                 console.log(chalk_1.default.red('❌ No API keys found. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY'));
                 process.exit(1);
             }
-            // Display banner
             this.displayBanner();
-            // Initialize services
             console.log(chalk_1.default.blue('🔄 Initializing services...'));
             await this.chatOrchestrator.initialize();
             console.log(chalk_1.default.green('✅ Services initialized'));
-            // Show initial prompt
             this.showPrompt();
             this.initialized = true;
         }
@@ -600,14 +495,10 @@ class UnifiedChatInterface extends events_1.EventEmitter {
     }
 }
 exports.UnifiedChatInterface = UnifiedChatInterface;
-/**
- * Main entry point
- */
 async function main() {
     const chat = new UnifiedChatInterface();
     await chat.start();
 }
-// Start if run directly
 if (require.main === module) {
     main().catch(error => {
         console.error(chalk_1.default.red('❌ Startup failed:'), error);

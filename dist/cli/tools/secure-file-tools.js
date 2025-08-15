@@ -42,24 +42,16 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const inquirer_1 = __importDefault(require("inquirer"));
 const chalk_1 = __importDefault(require("chalk"));
-/**
- * Utility to sanitize and validate file paths to prevent directory traversal attacks
- */
+const input_queue_1 = require("../core/input-queue");
 function sanitizePath(filePath, workingDir = process.cwd()) {
-    // Normalize the path to resolve any '..' or '.' segments
     const normalizedPath = path.normalize(filePath);
-    // Resolve to absolute path
     const absolutePath = path.resolve(workingDir, normalizedPath);
-    // Ensure the resolved path is within the working directory
     const workingDirAbsolute = path.resolve(workingDir);
     if (!absolutePath.startsWith(workingDirAbsolute)) {
         throw new Error(`Path traversal detected: ${filePath} resolves outside working directory`);
     }
     return absolutePath;
 }
-/**
- * Secure file reading tool with path validation
- */
 class ReadFileTool {
     constructor(workingDir) {
         this.workingDirectory = workingDir || process.cwd();
@@ -92,9 +84,6 @@ class ReadFileTool {
     }
 }
 exports.ReadFileTool = ReadFileTool;
-/**
- * Secure file writing tool with path validation and user confirmation
- */
 class WriteFileTool {
     constructor(workingDir) {
         this.workingDirectory = workingDir || process.cwd();
@@ -103,21 +92,25 @@ class WriteFileTool {
         try {
             const safePath = sanitizePath(filePath, this.workingDirectory);
             const fileExists = fs.existsSync(safePath);
-            // Show confirmation prompt unless explicitly skipped
             if (!options.skipConfirmation) {
                 const action = fileExists ? 'overwrite' : 'create';
-                const { confirmed } = await inquirer_1.default.prompt([{
-                        type: 'confirm',
-                        name: 'confirmed',
-                        message: `${action === 'overwrite' ? '⚠️  Overwrite' : '📝 Create'} file: ${filePath}?`,
-                        default: false,
-                    }]);
-                if (!confirmed) {
-                    console.log(chalk_1.default.yellow('✋ File operation cancelled by user'));
-                    return;
+                input_queue_1.inputQueue.enableBypass();
+                try {
+                    const { confirmed } = await inquirer_1.default.prompt([{
+                            type: 'confirm',
+                            name: 'confirmed',
+                            message: `${action === 'overwrite' ? '⚠️  Overwrite' : '📝 Create'} file: ${filePath}?`,
+                            default: false,
+                        }]);
+                    if (!confirmed) {
+                        console.log(chalk_1.default.yellow('✋ File operation cancelled by user'));
+                        return;
+                    }
+                }
+                finally {
+                    input_queue_1.inputQueue.disableBypass();
                 }
             }
-            // Create parent directories if needed
             if (options.createDirectories) {
                 const dir = path.dirname(safePath);
                 if (!fs.existsSync(dir)) {
@@ -135,9 +128,6 @@ class WriteFileTool {
     }
 }
 exports.WriteFileTool = WriteFileTool;
-/**
- * Secure directory listing tool with path validation
- */
 class ListDirectoryTool {
     constructor(workingDir) {
         this.workingDirectory = workingDir || process.cwd();
@@ -157,7 +147,6 @@ class ListDirectoryTool {
             const walkDir = (dir, currentDepth = 0) => {
                 const items = fs.readdirSync(dir);
                 for (const item of items) {
-                    // Skip hidden files unless explicitly included
                     if (!options.includeHidden && item.startsWith('.')) {
                         continue;
                     }
@@ -165,18 +154,15 @@ class ListDirectoryTool {
                     const relativePath = path.relative(safePath, itemPath);
                     const stats = fs.statSync(itemPath);
                     if (stats.isDirectory()) {
-                        // Skip common directories that should be ignored
                         if (['node_modules', '.git', 'dist', 'build', '.next'].includes(item)) {
                             continue;
                         }
                         directories.push(relativePath || item);
-                        // Recurse if requested
                         if (options.recursive) {
                             walkDir(itemPath, currentDepth + 1);
                         }
                     }
                     else {
-                        // Apply pattern filter if provided
                         if (!options.pattern || options.pattern.test(relativePath || item)) {
                             files.push(relativePath || item);
                         }
@@ -198,9 +184,6 @@ class ListDirectoryTool {
     }
 }
 exports.ListDirectoryTool = ListDirectoryTool;
-/**
- * Secure file replacement tool with user confirmation
- */
 class ReplaceInFileTool {
     constructor(workingDir) {
         this.workingDirectory = workingDir || process.cwd();
@@ -214,7 +197,6 @@ class ReplaceInFileTool {
             const originalContent = fs.readFileSync(safePath, 'utf8');
             let modifiedContent = originalContent;
             let totalReplacements = 0;
-            // Apply all replacements
             for (const replacement of replacements) {
                 const regex = typeof replacement.find === 'string'
                     ? new RegExp(replacement.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), replacement.global ? 'g' : '')
@@ -229,29 +211,32 @@ class ReplaceInFileTool {
                 console.log(chalk_1.default.yellow(`⚠️  No replacements made in: ${filePath}`));
                 return { replacements: 0 };
             }
-            // Show confirmation unless skipped
             if (!options.skipConfirmation) {
                 console.log(chalk_1.default.blue(`\n📝 Proposed changes to ${filePath}:`));
                 console.log(chalk_1.default.gray(`${totalReplacements} replacement(s) will be made`));
-                const { confirmed } = await inquirer_1.default.prompt([{
-                        type: 'confirm',
-                        name: 'confirmed',
-                        message: 'Apply these changes?',
-                        default: false,
-                    }]);
-                if (!confirmed) {
-                    console.log(chalk_1.default.yellow('✋ File replacement cancelled by user'));
-                    return { replacements: 0 };
+                input_queue_1.inputQueue.enableBypass();
+                try {
+                    const { confirmed } = await inquirer_1.default.prompt([{
+                            type: 'confirm',
+                            name: 'confirmed',
+                            message: 'Apply these changes?',
+                            default: false,
+                        }]);
+                    if (!confirmed) {
+                        console.log(chalk_1.default.yellow('✋ File replacement cancelled by user'));
+                        return { replacements: 0 };
+                    }
+                }
+                finally {
+                    input_queue_1.inputQueue.disableBypass();
                 }
             }
             let backupPath;
-            // Create backup if requested
             if (options.createBackup) {
                 backupPath = `${safePath}.backup.${Date.now()}`;
                 fs.writeFileSync(backupPath, originalContent, 'utf8');
                 console.log(chalk_1.default.blue(`💾 Backup created: ${path.relative(this.workingDirectory, backupPath)}`));
             }
-            // Write the modified content
             fs.writeFileSync(safePath, modifiedContent, 'utf8');
             console.log(chalk_1.default.green(`✅ Applied ${totalReplacements} replacement(s) to: ${filePath}`));
             return {

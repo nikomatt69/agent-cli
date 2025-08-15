@@ -12,7 +12,6 @@ class AgentTodoManager {
         this.workPlans = new Map();
         this.agentContexts = new Map();
     }
-    // Create a new work plan for an agent
     createWorkPlan(agentId, goal) {
         const plan = {
             id: (0, nanoid_1.nanoid)(),
@@ -26,16 +25,12 @@ class AgentTodoManager {
         this.workPlans.set(plan.id, plan);
         return plan;
     }
-    // Agent creates its own todos based on a goal
     async planTodos(agentId, goal, context) {
         console.log(chalk_1.default.blue(`🧠 Agent ${agentId} is planning todos for: ${goal}`));
-        // Store agent context
         if (context) {
             this.agentContexts.set(agentId, context);
         }
-        // Simulate AI planning (this would call the AI model)
         const plannedTodos = await this.generateTodosFromGoal(agentId, goal, context);
-        // Add todos to the agent's collection
         plannedTodos.forEach(todo => {
             this.todos.set(todo.id, todo);
         });
@@ -51,8 +46,6 @@ class AgentTodoManager {
         return plannedTodos;
     }
     async generateTodosFromGoal(agentId, goal, context) {
-        // This would integrate with the AI model to break down goals into actionable todos
-        // For now, using rule-based generation
         const baseTodos = [];
         if (goal.toLowerCase().includes('create') || goal.toLowerCase().includes('build')) {
             baseTodos.push({
@@ -123,7 +116,6 @@ class AgentTodoManager {
             progress: 0,
         }));
     }
-    // Start executing todos for an agent
     async executeTodos(agentId) {
         const agentTodos = this.getAgentTodos(agentId);
         const pendingTodos = agentTodos.filter(t => t.status === 'planning');
@@ -139,14 +131,11 @@ class AgentTodoManager {
     async executeTodo(todo) {
         console.log(chalk_1.default.cyan(`\n⚡ Executing: ${todo.title}`));
         console.log(chalk_1.default.gray(`   ${todo.description}`));
-        // Update status
         todo.status = 'in_progress';
         todo.updatedAt = new Date();
         const startTime = Date.now();
         try {
-            // Simulate execution with progress updates
             await this.simulateTaskExecution(todo);
-            // Mark as completed
             todo.status = 'completed';
             todo.actualDuration = Math.round((Date.now() - startTime) / 1000 / 60);
             todo.progress = 100;
@@ -154,14 +143,14 @@ class AgentTodoManager {
         }
         catch (error) {
             todo.status = 'failed';
-            todo.progress = 50; // Partial progress
+            todo.progress = 50;
             console.log(chalk_1.default.red(`❌ Failed: ${todo.title} - ${error}`));
         }
         todo.updatedAt = new Date();
         this.todos.set(todo.id, todo);
     }
     async simulateTaskExecution(todo) {
-        const duration = (todo.estimatedDuration || 5) * 100; // Convert to milliseconds for simulation
+        const duration = (todo.estimatedDuration || 5) * 100;
         const progressSteps = 10;
         const stepDuration = duration / progressSteps;
         for (let step = 1; step <= progressSteps; step++) {
@@ -170,14 +159,12 @@ class AgentTodoManager {
             const progressBar = '█'.repeat(Math.floor(step / 2)) + '░'.repeat(5 - Math.floor(step / 2));
             process.stdout.write(`\r   Progress: [${chalk_1.default.cyan(progressBar)}] ${Math.round(todo.progress)}%`);
         }
-        console.log(); // New line after progress
+        console.log();
     }
-    // Get todos for a specific agent
     getAgentTodos(agentId) {
         return Array.from(this.todos.values())
             .filter(todo => todo.agentId === agentId)
             .sort((a, b) => {
-            // Sort by priority, then by creation date
             const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
             const aPriority = priorityOrder[a.priority];
             const bPriority = priorityOrder[b.priority];
@@ -187,7 +174,6 @@ class AgentTodoManager {
             return a.createdAt.getTime() - b.createdAt.getTime();
         });
     }
-    // Update todo status and progress
     updateTodo(todoId, updates) {
         const todo = this.todos.get(todoId);
         if (!todo)
@@ -195,7 +181,6 @@ class AgentTodoManager {
         Object.assign(todo, updates, { updatedAt: new Date() });
         this.todos.set(todoId, todo);
     }
-    // Get agent work statistics
     getAgentStats(agentId) {
         const todos = this.getAgentTodos(agentId);
         const completed = todos.filter(t => t.status === 'completed');
@@ -211,7 +196,6 @@ class AgentTodoManager {
             efficiency: totalEstimatedTime > 0 ? (totalEstimatedTime / Math.max(totalCompletionTime, 1)) * 100 : 100,
         };
     }
-    // Display agent dashboard
     showAgentDashboard(agentId) {
         const todos = this.getAgentTodos(agentId);
         const stats = this.getAgentStats(agentId);
@@ -241,7 +225,6 @@ class AgentTodoManager {
             });
         }
     }
-    // Clear completed todos for an agent
     clearCompleted(agentId) {
         const agentTodos = this.getAgentTodos(agentId);
         const completedTodos = agentTodos.filter(t => t.status === 'completed');

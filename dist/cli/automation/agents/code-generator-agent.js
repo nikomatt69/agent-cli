@@ -22,7 +22,6 @@ class CodeGeneratorAgent extends base_agent_1.BaseAgent {
         if (taskData) {
             console.log(`Task: ${taskData}`);
         }
-        // Default taskData if none provided
         const generationTask = taskData || 'Create a TypeScript function that validates email addresses';
         const prompt = `Generate clean, well-documented TypeScript code for the following requirement:\n\n${generationTask}\n\nInclude proper types, error handling, and JSDoc comments.`;
         try {
@@ -49,7 +48,6 @@ class CodeGeneratorAgent extends base_agent_1.BaseAgent {
     async onStop() {
         console.log('Code Generator Agent cleaned up');
     }
-    // Keep legacy methods for backward compatibility
     async run(taskData) {
         return await this.onExecuteTask(taskData);
     }

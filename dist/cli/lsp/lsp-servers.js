@@ -11,7 +11,6 @@ const child_process_1 = require("child_process");
 const path_1 = require("path");
 const fs_1 = require("fs");
 const chalk_1 = __importDefault(require("chalk"));
-// Find workspace root by walking up directory tree
 function findWorkspaceRoot(startPath, patterns) {
     let currentPath = (0, path_1.resolve)(startPath);
     const root = (0, path_1.resolve)('/');
@@ -26,7 +25,6 @@ function findWorkspaceRoot(startPath, patterns) {
     }
     return undefined;
 }
-// Check if command exists in PATH
 function commandExists(command) {
     try {
         const { execSync } = require('child_process');
@@ -45,7 +43,6 @@ exports.LSP_SERVERS = {
         rootPatterns: ['package.json', 'tsconfig.json', 'jsconfig.json'],
         async spawn(workspaceRoot) {
             try {
-                // Try to find typescript-language-server
                 if (!commandExists('typescript-language-server')) {
                     console.log(chalk_1.default.yellow('📦 Installing typescript-language-server...'));
                     const installProcess = (0, child_process_1.spawn)('yarn', ['global', 'add', 'typescript-language-server', 'typescript'], {
@@ -93,7 +90,6 @@ exports.LSP_SERVERS = {
         rootPatterns: ['pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile'],
         async spawn(workspaceRoot) {
             try {
-                // Check if pylsp is available
                 if (!commandExists('pylsp')) {
                     console.log(chalk_1.default.yellow('📦 Installing python-lsp-server...'));
                     const installProcess = (0, child_process_1.spawn)('pip', ['install', 'python-lsp-server[all]'], {
@@ -208,7 +204,6 @@ exports.LSP_SERVERS = {
         rootPatterns: ['pom.xml', 'build.gradle', 'build.xml', '.project'],
         async spawn(workspaceRoot) {
             try {
-                // This is a simplified version - full Java LSP setup is complex
                 console.log(chalk_1.default.yellow('⚠️ Java LSP requires manual Eclipse JDT Language Server setup'));
                 return undefined;
             }
@@ -253,7 +248,6 @@ exports.LSP_SERVERS = {
         },
     }
 };
-// Get appropriate LSP servers for a file
 function getApplicableLSPServers(filePath) {
     const extension = (0, path_1.extname)(filePath);
     const servers = [];
@@ -264,12 +258,10 @@ function getApplicableLSPServers(filePath) {
     }
     return servers;
 }
-// Find workspace root for a file using LSP server patterns
 function findLSPWorkspaceRoot(filePath, serverInfo) {
     if (serverInfo) {
         return findWorkspaceRoot((0, path_1.dirname)(filePath), serverInfo.rootPatterns);
     }
-    // Try all server patterns
     for (const server of Object.values(exports.LSP_SERVERS)) {
         const root = findWorkspaceRoot((0, path_1.dirname)(filePath), server.rootPatterns);
         if (root)
@@ -277,7 +269,6 @@ function findLSPWorkspaceRoot(filePath, serverInfo) {
     }
     return undefined;
 }
-// Auto-install missing LSP dependencies
 async function ensureLSPDependencies(serverIds) {
     console.log(chalk_1.default.blue('🔍 Checking LSP server dependencies...'));
     const installPromises = [];
@@ -285,7 +276,6 @@ async function ensureLSPDependencies(serverIds) {
         const server = exports.LSP_SERVERS[serverId];
         if (!server)
             continue;
-        // Check if server command exists
         if (serverId === 'typescript' && !commandExists('typescript-language-server')) {
             installPromises.push(installTypeScriptLSP());
         }
@@ -307,7 +297,6 @@ async function ensureLSPDependencies(serverIds) {
         console.log(chalk_1.default.green('✅ LSP dependencies check completed'));
     }
 }
-// Individual LSP installer functions
 async function installTypeScriptLSP() {
     console.log(chalk_1.default.yellow('📦 Installing TypeScript Language Server...'));
     return new Promise((resolve, reject) => {

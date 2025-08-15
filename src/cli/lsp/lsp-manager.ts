@@ -56,13 +56,13 @@ export class LSPManager {
     for (const serverInfo of applicableServers) {
       const workspaceRoot = findLSPWorkspaceRoot(absolutePath, serverInfo) || dirname(absolutePath);
       const clientKey = `${workspaceRoot}:${serverInfo.id}`;
-      
+
       let client = this.clients.get(clientKey);
-      
+
       if (!client) {
         try {
           console.log(chalk.blue(`🔌 Starting ${serverInfo.name} for ${relative(workspaceRoot, absolutePath)}...`));
-          
+
           const serverHandle = await serverInfo.spawn(workspaceRoot);
           if (!serverHandle) {
             console.log(chalk.yellow(`⚠️ Could not start ${serverInfo.name}`));
@@ -72,7 +72,7 @@ export class LSPManager {
           client = await LSPClient.create(serverHandle, serverInfo, workspaceRoot);
           this.clients.set(clientKey, client);
           this.workspaceRoots.add(workspaceRoot);
-          
+
         } catch (error: any) {
           console.log(chalk.red(`❌ Failed to start ${serverInfo.name}: ${error.message}`));
           continue;
@@ -88,7 +88,7 @@ export class LSPManager {
   // Analyze a file with full LSP context
   async analyzeFile(filePath: string): Promise<CodeContext> {
     const absolutePath = resolve(filePath);
-    
+
     // Check cache first
     const cached = this.fileAnalysisCache.get(absolutePath);
     if (cached) {
@@ -140,9 +140,9 @@ export class LSPManager {
 
     // Cache the result
     this.fileAnalysisCache.set(absolutePath, context);
-    
+
     console.log(chalk.green(`✅ Analyzed ${relative(context.workspaceRoot, absolutePath)}: ${context.symbols.length} symbols, ${context.diagnostics.length} diagnostics`));
-    
+
     return context;
   }
 
@@ -167,10 +167,10 @@ export class LSPManager {
 
       // Get all diagnostics
       const allDiagnostics = client.getDiagnostics() as Map<string, LSPDiagnostic[]>;
-      
+
       for (const [filePath, diagnostics] of allDiagnostics) {
         insights.totalFiles++;
-        
+
         // Detect language
         const language = detectLanguageFromExtension(filePath);
         if (language !== 'plaintext') {
@@ -182,7 +182,7 @@ export class LSPManager {
           switch (diag.severity) {
             case 1: insights.diagnostics.errors++; break;
             case 2: insights.diagnostics.warnings++; break;
-            case 3: 
+            case 3:
             case 4: insights.diagnostics.hints++; break;
           }
         });
@@ -195,7 +195,7 @@ export class LSPManager {
               case 12: insights.symbols.functions++; break;
               case 5: insights.symbols.classes++; break;
               case 11: insights.symbols.interfaces++; break;
-              case 13: 
+              case 13:
               case 14: insights.symbols.variables++; break;
             }
           });
@@ -212,7 +212,7 @@ export class LSPManager {
     if (insights.diagnostics.errors > 0) {
       insights.problems.push(`${insights.diagnostics.errors} compilation errors need fixing`);
     }
-    
+
     if (insights.diagnostics.warnings > 10) {
       insights.problems.push(`${insights.diagnostics.warnings} warnings should be addressed`);
     }
@@ -249,13 +249,13 @@ export class LSPManager {
   // Get hover information
   async getHoverInfo(filePath: string, line: number, character: number): Promise<any> {
     const clients = await this.getClientsForFile(filePath);
-    
+
     for (const client of clients) {
       try {
         if (!client.isFileOpen(filePath)) {
           await client.openFile(filePath);
         }
-        
+
         const hover = await client.getHover(filePath, line, character);
         if (hover) return hover;
       } catch (error) {
@@ -270,13 +270,13 @@ export class LSPManager {
   async getCompletions(filePath: string, line: number, character: number): Promise<any[]> {
     const clients = await this.getClientsForFile(filePath);
     const allCompletions: any[] = [];
-    
+
     for (const client of clients) {
       try {
         if (!client.isFileOpen(filePath)) {
           await client.openFile(filePath);
         }
-        
+
         const completions = await client.getCompletion(filePath, line, character);
         allCompletions.push(...completions);
       } catch (error) {
@@ -307,10 +307,10 @@ export class LSPManager {
   // Get all diagnostics as formatted strings
   getAllDiagnostics(): string[] {
     const diagnostics: string[] = [];
-    
+
     for (const client of this.clients.values()) {
       const clientDiagnostics = client.getDiagnostics() as Map<string, LSPDiagnostic[]>;
-      
+
       for (const [filePath, fileDiagnostics] of clientDiagnostics) {
         const relativePath = relative(process.cwd(), filePath);
         fileDiagnostics.forEach(diag => {
@@ -336,16 +336,16 @@ export class LSPManager {
   // Get error count for workspace
   getErrorCount(workspaceRoot?: string): number {
     let errorCount = 0;
-    
+
     for (const [key, client] of this.clients) {
       if (workspaceRoot && !key.startsWith(workspaceRoot)) continue;
-      
+
       const allDiagnostics = client.getDiagnostics() as Map<string, LSPDiagnostic[]>;
       for (const diagnostics of allDiagnostics.values()) {
         errorCount += diagnostics.filter(d => d.severity === 1).length;
       }
     }
-    
+
     return errorCount;
   }
 
@@ -379,20 +379,20 @@ export class LSPManager {
 
   // Shutdown all clients
   async shutdown(): Promise<void> {
-    console.log(chalk.blue('🛑 Shutting down LSP clients...'));
-    
-    const shutdownPromises = Array.from(this.clients.values()).map(client => 
-      client.shutdown().catch(err => 
+    console.log(chalk.blue('\n🛑 Shutting down LSP clients...'));
+
+    const shutdownPromises = Array.from(this.clients.values()).map(client =>
+      client.shutdown().catch(err =>
         console.log(chalk.yellow(`⚠️ Error shutting down client: ${err.message}`))
       )
     );
-    
+
     await Promise.allSettled(shutdownPromises);
-    
+
     this.clients.clear();
     this.workspaceRoots.clear();
     this.fileAnalysisCache.clear();
-    
+
     console.log(chalk.green('✅ LSP shutdown complete'));
   }
 }
