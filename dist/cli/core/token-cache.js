@@ -41,6 +41,7 @@ const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
 const chalk_1 = __importDefault(require("chalk"));
+const performance_optimizer_1 = require("./performance-optimizer");
 class TokenCacheManager {
     constructor(cacheDir = './.nikcli') {
         this.cache = new Map();
@@ -106,7 +107,7 @@ class TokenCacheManager {
             const entry = this.cache.get(exactKey);
             entry.hitCount++;
             entry.similarity = 1.0;
-            console.log(chalk_1.default.green(`🎯 Cache HIT (exact): saved ~${entry.tokensSaved} tokens`));
+            performance_optimizer_1.QuietCacheLogger.logCacheSave(entry.tokensSaved);
             return entry;
         }
         const semanticKey = this.generateSemanticKey(prompt, context);
@@ -133,7 +134,7 @@ class TokenCacheManager {
         if (similarEntries.length > 0) {
             const bestMatch = similarEntries[0];
             bestMatch.hitCount++;
-            console.log(chalk_1.default.cyan(`🎯 Cache HIT (similar ${Math.round(bestMatch.similarity * 100)}%): saved ~${bestMatch.tokensSaved} tokens`));
+            performance_optimizer_1.QuietCacheLogger.logCacheSave(bestMatch.tokensSaved);
             return bestMatch;
         }
         return null;
@@ -158,7 +159,7 @@ class TokenCacheManager {
         if (this.cache.size % 10 === 0) {
             await this.saveCache();
         }
-        console.log(chalk_1.default.blue(`💾 Cached response (${this.cache.size} entries)`));
+        performance_optimizer_1.QuietCacheLogger.logCacheSave(entry.tokensSaved);
     }
     estimateTokens(text) {
         return Math.round(text.length / 4);
@@ -174,9 +175,6 @@ class TokenCacheManager {
         });
         const toRemove = entries.slice(this.maxCacheSize);
         toRemove.forEach(([key]) => this.cache.delete(key));
-        if (toRemove.length > 0) {
-            console.log(chalk_1.default.yellow(`🧹 Cleaned up ${toRemove.length} old cache entries`));
-        }
     }
     async loadCache() {
         try {
@@ -187,17 +185,14 @@ class TokenCacheManager {
                 entry.timestamp = new Date(entry.timestamp);
                 this.cache.set(entry.key, entry);
             });
-            console.log(chalk_1.default.dim(`📚 Loaded ${this.cache.size} cached responses`));
         }
         catch (error) {
-            console.log(chalk_1.default.dim('💾 Starting with empty cache'));
         }
     }
     async saveCache() {
         try {
             const data = Array.from(this.cache.values());
             await fs.writeFile(this.cacheFile, JSON.stringify(data, null, 2));
-            console.log(chalk_1.default.dim(`💾 Saved ${data.length} cache entries`));
         }
         catch (error) {
             console.log(chalk_1.default.red(`❌ Failed to save cache: ${error.message}`));
@@ -236,7 +231,6 @@ class TokenCacheManager {
         }
         const removed = beforeSize - this.cache.size;
         if (removed > 0) {
-            console.log(chalk_1.default.yellow(`🧹 Removed ${removed} expired cache entries`));
             await this.saveCache();
         }
         return removed;

@@ -1,11 +1,119 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PerformanceOptimizer = void 0;
+exports.PerformanceOptimizer = exports.TokenOptimizer = exports.QuietCacheLogger = void 0;
 const perf_hooks_1 = require("perf_hooks");
+class QuietCacheLogger {
+    static logCacheSave(tokensSaved) {
+        if (tokensSaved && tokensSaved > 0) {
+            this.totalSavings += tokensSaved;
+            process.stdout.write(this.CACHE_ICON);
+        }
+    }
+    static getTotalSavings() {
+        return this.totalSavings;
+    }
+    static resetSavings() {
+        this.totalSavings = 0;
+    }
+}
+exports.QuietCacheLogger = QuietCacheLogger;
+QuietCacheLogger.CACHE_ICON = '💾';
+QuietCacheLogger.totalSavings = 0;
+class TokenOptimizer {
+    constructor(config = {
+        level: 'balanced',
+        enablePredictive: true,
+        enableMicroCache: true,
+        maxCompressionRatio: 0.6
+    }) {
+        this.compressionDictionary = new Map();
+        this.usagePatterns = new Map();
+        this.config = config;
+        this.initializeCompressionDictionary();
+    }
+    initializeCompressionDictionary() {
+        this.compressionDictionary.set('function', 'fn');
+        this.compressionDictionary.set('implement', 'impl');
+        this.compressionDictionary.set('configuration', 'config');
+        this.compressionDictionary.set('component', 'comp');
+        this.compressionDictionary.set('interface', 'intfc');
+        this.compressionDictionary.set('performance', 'perf');
+        this.compressionDictionary.set('optimization', 'opt');
+        this.compressionDictionary.set('application', 'app');
+        this.compressionDictionary.set('development', 'dev');
+        this.compressionDictionary.set('management', 'mgmt');
+    }
+    async optimizePrompt(input) {
+        const originalTokens = this.estimateTokens(input);
+        let optimized = input;
+        switch (this.config.level) {
+            case 'conservative':
+                optimized = this.conservativeOptimization(input);
+                break;
+            case 'balanced':
+                optimized = this.balancedOptimization(input);
+                break;
+            case 'aggressive':
+                optimized = this.aggressiveOptimization(input);
+                break;
+        }
+        const optimizedTokens = this.estimateTokens(optimized);
+        const tokensSaved = originalTokens - optimizedTokens;
+        const compressionRatio = optimizedTokens / originalTokens;
+        if (tokensSaved > 5) {
+            QuietCacheLogger.logCacheSave(tokensSaved);
+        }
+        return {
+            content: optimized,
+            originalTokens,
+            optimizedTokens,
+            tokensSaved,
+            compressionRatio
+        };
+    }
+    conservativeOptimization(text) {
+        return text
+            .replace(/\s+/g, ' ')
+            .replace(/\b(um|uh|well)\b/gi, '')
+            .trim();
+    }
+    balancedOptimization(text) {
+        let optimized = this.conservativeOptimization(text);
+        this.compressionDictionary.forEach((short, full) => {
+            const regex = new RegExp(`\\b${full}\\b`, 'gi');
+            optimized = optimized.replace(regex, short);
+        });
+        optimized = optimized
+            .replace(/\b(please note that|it should be noted)\b/gi, '')
+            .replace(/\b(in my opinion|I think|I believe)\b/gi, '')
+            .replace(/\bfor example\b/gi, 'e.g.')
+            .replace(/\bthat is\b/gi, 'i.e.');
+        return optimized.replace(/\s+/g, ' ').trim();
+    }
+    aggressiveOptimization(text) {
+        let optimized = this.balancedOptimization(text);
+        optimized = optimized
+            .replace(/\b(very|really|quite|extremely)\s+/gi, '')
+            .replace(/\b(basically|essentially|fundamentally)\b/gi, '')
+            .replace(/\b(you should|you must|you need to)\b/gi, '')
+            .replace(/\bin order to\b/gi, 'to')
+            .replace(/\band so on\b/gi, 'etc.');
+        return optimized.replace(/\s+/g, ' ').trim();
+    }
+    estimateTokens(text) {
+        if (!text)
+            return 0;
+        const words = text.split(/\s+/).filter(word => word.length > 0);
+        const specialChars = (text.match(/[{}[\](),.;:!?'"]/g) || []).length;
+        return Math.ceil((words.length + specialChars * 0.5) * 1.3);
+    }
+}
+exports.TokenOptimizer = TokenOptimizer;
 class PerformanceOptimizer {
-    constructor() {
+    constructor(optimizationConfig) {
         this.metrics = new Map();
         this.startTime = 0;
+        this.tokenOptimizer = new TokenOptimizer(optimizationConfig);
     }
     startMonitoring() {
         this.startTime = perf_hooks_1.performance.now();
@@ -22,7 +130,7 @@ class PerformanceOptimizer {
         this.metrics.set(sessionId, fullMetrics);
         return fullMetrics;
     }
-    optimizeMessages(messages) {
+    async optimizeMessages(messages) {
         const optimized = [...messages];
         const systemMessages = optimized.filter(msg => msg.role === 'system');
         if (systemMessages.length > 1) {
@@ -32,12 +140,19 @@ class PerformanceOptimizer {
                 content: mergedSystemContent
             });
         }
-        optimized.forEach(msg => {
-            if (typeof msg.content === 'string' && msg.content.length > 5000) {
-                msg.content = msg.content.substring(0, 5000) + '... [truncated]';
+        for (let i = 0; i < optimized.length; i++) {
+            if (typeof optimized[i].content === 'string') {
+                const result = await this.tokenOptimizer.optimizePrompt(optimized[i].content);
+                optimized[i].content = result.content;
             }
-        });
+        }
         return optimized;
+    }
+    getTokenOptimizer() {
+        return this.tokenOptimizer;
+    }
+    async optimizeText(text) {
+        return this.tokenOptimizer.optimizePrompt(text);
     }
     getRecommendations(sessionId) {
         const metrics = this.metrics.get(sessionId);

@@ -50,8 +50,9 @@ const diff_manager_1 = require("./ui/diff-manager");
 const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
 const input_queue_1 = require("./core/input-queue");
+const performance_optimizer_1 = require("./core/performance-optimizer");
 class StreamingOrchestratorImpl extends events_1.EventEmitter {
-    constructor() {
+    constructor(optimizationConfig) {
         super();
         this.messageQueue = [];
         this.processingMessage = false;
@@ -59,6 +60,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         this.streamBuffer = '';
         this.lastUpdate = Date.now();
         this.inputQueueEnabled = true;
+        this.tokenOptimizer = new performance_optimizer_1.TokenOptimizer(optimizationConfig);
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -174,14 +176,32 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         });
     }
     async queueUserInput(input) {
+        const riskLevel = this.assessInputRisk(input);
+        if (riskLevel === 'high') {
+            const approved = await this.requestUserApproval(input, riskLevel);
+            if (!approved) {
+                console.log(chalk_1.default.yellow(`⚠️  Task cancelled by user`));
+                return;
+            }
+        }
+        const optimizationResult = await this.tokenOptimizer.optimizePrompt(input);
         const message = {
             id: `user_${Date.now()}`,
             type: 'user',
-            content: input,
+            content: optimizationResult.content,
             timestamp: new Date(),
-            status: 'queued'
+            status: 'queued',
+            metadata: {
+                originalTokens: optimizationResult.originalTokens,
+                optimizedTokens: optimizationResult.optimizedTokens,
+                tokensSaved: optimizationResult.tokensSaved,
+                policyChecked: true
+            }
         };
         this.messageQueue.push(message);
+        if (optimizationResult.tokensSaved > 5) {
+            performance_optimizer_1.QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
+        }
         if (!this.processingMessage && this.messageQueue.length === 1) {
             this.processNextMessage();
         }
@@ -193,8 +213,81 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             status: 'queued',
             ...partial
         };
+        const now = Date.now();
+        if (message.type === 'system' && typeof message.content === 'string') {
+            if (now - this.lastUpdate < 500 && this.streamBuffer.includes(message.content.substring(0, 50))) {
+                this.streamBuffer += `\n${message.content}`;
+                this.lastUpdate = now;
+                return;
+            }
+            else {
+                if (this.streamBuffer) {
+                    this.flushStreamBuffer();
+                }
+                this.streamBuffer = message.content;
+                this.lastUpdate = now;
+            }
+        }
+        if (typeof message.content === 'string' && message.content.length > 50) {
+            this.tokenOptimizer.optimizePrompt(message.content).then(result => {
+                message.content = result.content;
+                if (result.tokensSaved > 3) {
+                    performance_optimizer_1.QuietCacheLogger.logCacheSave(result.tokensSaved);
+                }
+            }).catch(() => {
+            });
+        }
         this.messageQueue.push(message);
         this.displayMessage(message);
+    }
+    flushStreamBuffer() {
+        if (this.streamBuffer) {
+            const bufferedMessage = {
+                id: `buffered_${Date.now()}`,
+                type: 'system',
+                content: this.streamBuffer,
+                timestamp: new Date(),
+                status: 'completed'
+            };
+            this.displayMessage(bufferedMessage);
+            this.streamBuffer = '';
+        }
+    }
+    assessInputRisk(input) {
+        const lowercaseInput = input.toLowerCase();
+        const highRiskKeywords = [
+            'delete', 'remove', 'rm ', 'sudo', 'chmod', 'format', 'wipe',
+            'destroy', 'uninstall', 'drop database', 'truncate', 'reset',
+            'factory reset', 'system restore', 'reboot', 'shutdown'
+        ];
+        const mediumRiskKeywords = [
+            'modify', 'change', 'update', 'install', 'configure', 'setup',
+            'create database', 'migrate', 'deploy', 'publish', 'push',
+            'merge', 'rebase', 'force push'
+        ];
+        if (highRiskKeywords.some(keyword => lowercaseInput.includes(keyword))) {
+            return 'high';
+        }
+        if (mediumRiskKeywords.some(keyword => lowercaseInput.includes(keyword))) {
+            return 'medium';
+        }
+        return 'low';
+    }
+    async requestUserApproval(input, riskLevel) {
+        return new Promise((resolve) => {
+            console.log(chalk_1.default.yellow(`\n⚠️  Risk Level: ${riskLevel.toUpperCase()}`));
+            console.log(chalk_1.default.cyan(`Request: ${input}`));
+            console.log(chalk_1.default.yellow(`This operation may affect your system. Do you want to proceed?`));
+            const rl = require('readline').createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            rl.question(chalk_1.default.cyan('Continue? (y/N): '), (answer) => {
+                rl.close();
+                const approved = answer.toLowerCase().startsWith('y');
+                resolve(approved);
+            });
+        });
     }
     async processNextMessage() {
         if (this.processingMessage || this.messageQueue.length === 0)

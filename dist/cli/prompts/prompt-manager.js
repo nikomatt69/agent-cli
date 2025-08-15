@@ -4,16 +4,18 @@ exports.PromptManager = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
 const cli_ui_1 = require("../utils/cli-ui");
+const performance_optimizer_1 = require("../core/performance-optimizer");
 class PromptManager {
-    constructor(projectRoot) {
+    constructor(projectRoot, optimizationConfig) {
         this.promptCache = new Map();
         this.cacheEnabled = true;
         this.maxCacheSize = 5;
         this.promptsDirectory = (0, path_1.join)(projectRoot, 'prompts');
+        this.tokenOptimizer = new performance_optimizer_1.TokenOptimizer(optimizationConfig);
     }
-    static getInstance(projectRoot) {
+    static getInstance(projectRoot, optimizationConfig) {
         if (!PromptManager.instance && projectRoot) {
-            PromptManager.instance = new PromptManager(projectRoot);
+            PromptManager.instance = new PromptManager(projectRoot, optimizationConfig);
         }
         return PromptManager.instance;
     }
@@ -28,12 +30,17 @@ class PromptManager {
         }
         try {
             const prompt = await this.loadPrompt(promptPath);
-            return this.interpolatePrompt(prompt.content, context);
+            const interpolated = this.interpolatePrompt(prompt.content, context);
+            const optimizationResult = await this.tokenOptimizer.optimizePrompt(interpolated);
+            return optimizationResult.content;
         }
         catch (error) {
             cli_ui_1.CliUI.logError(`Failed to load prompt ${promptPath}: ${error.message}`);
             return this.getDefaultPrompt(context);
         }
+    }
+    async loadOptimizedPrompt(context) {
+        return this.loadPromptForContext(context);
     }
     resolvePromptPath(context) {
         const candidates = [];

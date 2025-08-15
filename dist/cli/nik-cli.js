@@ -74,6 +74,7 @@ const planning_service_1 = require("./services/planning-service");
 const register_agents_1 = require("./register-agents");
 const advanced_cli_ui_1 = require("./ui/advanced-cli-ui");
 const input_queue_1 = require("./core/input-queue");
+const performance_optimizer_1 = require("./core/performance-optimizer");
 marked_1.marked.setOptions({
     renderer: new marked_terminal_1.default(),
 });
@@ -116,6 +117,78 @@ class NikCLI {
         this.initializeStructuredUI();
         this.initializeModelPricing();
         this.initializeTokenCache();
+    }
+    getTokenOptimizer() {
+        if (!this.tokenOptimizer) {
+            try {
+                this.tokenOptimizer = new performance_optimizer_1.TokenOptimizer({
+                    level: 'conservative',
+                    enablePredictive: false,
+                    enableMicroCache: false,
+                    maxCompressionRatio: 0.9
+                });
+            }
+            catch (error) {
+                console.debug('Failed to create token optimizer:', error);
+                return null;
+            }
+        }
+        return this.tokenOptimizer;
+    }
+    async loadProjectContext() {
+        try {
+            const context = await fs.readFile(this.projectContextFile, 'utf8');
+            const optimizer = this.getTokenOptimizer();
+            if (optimizer) {
+                const optimized = await optimizer.optimizePrompt(context);
+                if (optimized.tokensSaved > 10) {
+                    performance_optimizer_1.QuietCacheLogger.logCacheSave(optimized.tokensSaved);
+                }
+                return optimized.content;
+            }
+            return context;
+        }
+        catch (error) {
+            return '';
+        }
+    }
+    async saveProjectContext(context) {
+        try {
+            await fs.writeFile(this.projectContextFile, context, 'utf8');
+        }
+        catch (error) {
+            console.debug('Failed to save project context:', error);
+        }
+    }
+    async updateProjectContext(userInput) {
+        try {
+            const currentContext = await this.loadProjectContext();
+            const timestamp = new Date().toISOString();
+            const keyInfo = this.extractKeyInformation(userInput);
+            if (keyInfo) {
+                const updatedContext = `${currentContext}\n\n## Update ${timestamp}\n${keyInfo}`;
+                await this.saveProjectContext(updatedContext);
+            }
+        }
+        catch (error) {
+            console.debug('Failed to update project context:', error);
+        }
+    }
+    extractKeyInformation(input) {
+        const lowercaseInput = input.toLowerCase();
+        if (lowercaseInput.includes('project') || lowercaseInput.includes('goal') ||
+            lowercaseInput.includes('objective') || lowercaseInput.includes('requirement')) {
+            return `User goal/requirement: ${input}`;
+        }
+        if (lowercaseInput.includes('error') || lowercaseInput.includes('issue') ||
+            lowercaseInput.includes('problem')) {
+            return `Issue reported: ${input}`;
+        }
+        if (lowercaseInput.includes('feature') || lowercaseInput.includes('add') ||
+            lowercaseInput.includes('implement')) {
+            return `Feature request: ${input}`;
+        }
+        return null;
     }
     async initializeTokenCache() {
         setTimeout(async () => {
@@ -1018,6 +1091,22 @@ class NikCLI {
                 this.showPrompt();
                 return;
             }
+            let optimizedInput = trimmed;
+            if (trimmed.length > 20 && !trimmed.startsWith('/')) {
+                const optimizer = this.getTokenOptimizer();
+                if (optimizer) {
+                    try {
+                        const optimizationResult = await optimizer.optimizePrompt(trimmed);
+                        optimizedInput = optimizationResult.content;
+                        if (optimizationResult.tokensSaved > 5) {
+                            performance_optimizer_1.QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
+                        }
+                    }
+                    catch (error) {
+                        console.debug('Token optimization failed:', error);
+                    }
+                }
+            }
             if (this.assistantProcessing && input_queue_1.inputQueue.shouldQueue(trimmed)) {
                 let priority = 'normal';
                 if (trimmed.startsWith('/') || trimmed.startsWith('@')) {
@@ -1047,7 +1136,7 @@ class NikCLI {
                     await this.dispatchStar(trimmed);
                 }
                 else {
-                    await this.handleChatInput(trimmed);
+                    await this.handleChatInput(optimizedInput);
                 }
             }
             finally {
@@ -1917,16 +2006,19 @@ class NikCLI {
     }
     async handleChatInput(input) {
         try {
+            const projectContext = await this.loadProjectContext();
+            const enhancedInput = projectContext ? `${input}\n\nProject Context: ${projectContext}` : input;
             switch (this.currentMode) {
                 case 'plan':
-                    await this.handlePlanMode(input);
+                    await this.handlePlanMode(enhancedInput);
                     break;
                 case 'auto':
-                    await this.handleAutoMode(input);
+                    await this.handleAutoMode(enhancedInput);
                     break;
                 default:
-                    await this.handleDefaultMode(input);
+                    await this.handleDefaultMode(enhancedInput);
             }
+            await this.updateProjectContext(input);
         }
         catch (error) {
             console.log(chalk_1.default.red(`Error: ${error.message}`));

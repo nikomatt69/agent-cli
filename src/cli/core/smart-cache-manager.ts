@@ -1,6 +1,7 @@
 import { CoreMessage } from 'ai';
 import chalk from 'chalk';
 import { randomBytes } from 'crypto';
+import { QuietCacheLogger } from './performance-optimizer';
 
 export interface CacheStrategy {
     name: string;
@@ -280,7 +281,7 @@ export class SmartCacheManager {
                 // Determina se è un match esatto
                 entry.exactMatch = overallSimilarity >= 0.99;
 
-                console.log(chalk.blue(`🎯 `));
+                QuietCacheLogger.logCacheSave(entry.metadata.tokensSaved);
                 return entry;
             }
         }
@@ -331,7 +332,7 @@ export class SmartCacheManager {
         this.cache.set(entry.id, entry);
         this.accessPatterns.set(content, (this.accessPatterns.get(content) || 0) + 1);
 
-        console.log(chalk.green(`💾 Cached (${strategy.name}): ${content.substring(0, 50)}...`));
+        QuietCacheLogger.logCacheSave(entry.metadata.tokensSaved);
     }
 
     /**
@@ -408,9 +409,7 @@ export class SmartCacheManager {
             }
         }
 
-        if (removed > 0) {
-            console.log(chalk.yellow(`🧹 Cleaned up ${removed} old cache entries`));
-        }
+        // Silent cleanup - no logging needed
     }
 
     /**
@@ -420,7 +419,7 @@ export class SmartCacheManager {
         const strategy = this.strategies.get(strategyId);
         if (strategy) {
             strategy.enabled = enabled;
-            console.log(chalk.blue(`${enabled ? '✅' : '❌'} ${strategy.name} cache ${enabled ? 'enabled' : 'disabled'}`));
+            // Silent strategy changes
         }
     }
 

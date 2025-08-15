@@ -9,9 +9,163 @@ export interface PerformanceMetrics {
     responseQuality: number;
 }
 
+// Quiet logging utility for cache operations
+export class QuietCacheLogger {
+    private static readonly CACHE_ICON = '💾';
+    private static totalSavings: number = 0;
+    
+    static logCacheSave(tokensSaved?: number): void {
+        if (tokensSaved && tokensSaved > 0) {
+            this.totalSavings += tokensSaved;
+            process.stdout.write(this.CACHE_ICON);
+        }
+    }
+    
+    static getTotalSavings(): number {
+        return this.totalSavings;
+    }
+    
+    static resetSavings(): void {
+        this.totalSavings = 0;
+    }
+}
+
+// Token optimization interface
+export interface TokenOptimizationResult {
+    content: string;
+    originalTokens: number;
+    optimizedTokens: number;
+    tokensSaved: number;
+    compressionRatio: number;
+}
+
+export interface TokenOptimizationConfig {
+    level: 'conservative' | 'balanced' | 'aggressive';
+    enablePredictive: boolean;
+    enableMicroCache: boolean;
+    maxCompressionRatio: number;
+}
+
+// Main token optimizer class
+export class TokenOptimizer {
+    private config: TokenOptimizationConfig;
+    private compressionDictionary: Map<string, string> = new Map();
+    private usagePatterns: Map<string, number> = new Map();
+    
+    constructor(config: TokenOptimizationConfig = {
+        level: 'balanced',
+        enablePredictive: true,
+        enableMicroCache: true,
+        maxCompressionRatio: 0.6
+    }) {
+        this.config = config;
+        this.initializeCompressionDictionary();
+    }
+    
+    private initializeCompressionDictionary(): void {
+        // Common programming terms compression
+        this.compressionDictionary.set('function', 'fn');
+        this.compressionDictionary.set('implement', 'impl');
+        this.compressionDictionary.set('configuration', 'config');
+        this.compressionDictionary.set('component', 'comp');
+        this.compressionDictionary.set('interface', 'intfc');
+        this.compressionDictionary.set('performance', 'perf');
+        this.compressionDictionary.set('optimization', 'opt');
+        this.compressionDictionary.set('application', 'app');
+        this.compressionDictionary.set('development', 'dev');
+        this.compressionDictionary.set('management', 'mgmt');
+    }
+    
+    async optimizePrompt(input: string): Promise<TokenOptimizationResult> {
+        const originalTokens = this.estimateTokens(input);
+        let optimized = input;
+        
+        switch (this.config.level) {
+            case 'conservative':
+                optimized = this.conservativeOptimization(input);
+                break;
+            case 'balanced':
+                optimized = this.balancedOptimization(input);
+                break;
+            case 'aggressive':
+                optimized = this.aggressiveOptimization(input);
+                break;
+        }
+        
+        const optimizedTokens = this.estimateTokens(optimized);
+        const tokensSaved = originalTokens - optimizedTokens;
+        const compressionRatio = optimizedTokens / originalTokens;
+        
+        // Log cache save if significant savings
+        if (tokensSaved > 5) {
+            QuietCacheLogger.logCacheSave(tokensSaved);
+        }
+        
+        return {
+            content: optimized,
+            originalTokens,
+            optimizedTokens,
+            tokensSaved,
+            compressionRatio
+        };
+    }
+    
+    private conservativeOptimization(text: string): string {
+        return text
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .replace(/\b(um|uh|well)\b/gi, '') // Remove obvious filler
+            .trim();
+    }
+    
+    private balancedOptimization(text: string): string {
+        let optimized = this.conservativeOptimization(text);
+        
+        // Apply compression dictionary
+        this.compressionDictionary.forEach((short, full) => {
+            const regex = new RegExp(`\\b${full}\\b`, 'gi');
+            optimized = optimized.replace(regex, short);
+        });
+        
+        // Remove redundant phrases
+        optimized = optimized
+            .replace(/\b(please note that|it should be noted)\b/gi, '')
+            .replace(/\b(in my opinion|I think|I believe)\b/gi, '')
+            .replace(/\bfor example\b/gi, 'e.g.')
+            .replace(/\bthat is\b/gi, 'i.e.');
+        
+        return optimized.replace(/\s+/g, ' ').trim();
+    }
+    
+    private aggressiveOptimization(text: string): string {
+        let optimized = this.balancedOptimization(text);
+        
+        // More aggressive compression
+        optimized = optimized
+            .replace(/\b(very|really|quite|extremely)\s+/gi, '')
+            .replace(/\b(basically|essentially|fundamentally)\b/gi, '')
+            .replace(/\b(you should|you must|you need to)\b/gi, '')
+            .replace(/\bin order to\b/gi, 'to')
+            .replace(/\band so on\b/gi, 'etc.');
+        
+        return optimized.replace(/\s+/g, ' ').trim();
+    }
+    
+    private estimateTokens(text: string): number {
+        if (!text) return 0;
+        const words = text.split(/\s+/).filter(word => word.length > 0);
+        const specialChars = (text.match(/[{}[\](),.;:!?'"]/g) || []).length;
+        return Math.ceil((words.length + specialChars * 0.5) * 1.3);
+    }
+}
+
 export class PerformanceOptimizer {
     private metrics: Map<string, PerformanceMetrics> = new Map();
     private startTime: number = 0;
+    private tokenOptimizer: TokenOptimizer;
+
+    constructor(optimizationConfig?: TokenOptimizationConfig) {
+        this.tokenOptimizer = new TokenOptimizer(optimizationConfig);
+    }
 
     // Start performance monitoring
     startMonitoring(): void {
@@ -34,8 +188,8 @@ export class PerformanceOptimizer {
         return fullMetrics;
     }
 
-    // Optimize messages for better performance
-    optimizeMessages(messages: CoreMessage[]): CoreMessage[] {
+    // Optimize messages for better performance with token optimization
+    async optimizeMessages(messages: CoreMessage[]): Promise<CoreMessage[]> {
         const optimized = [...messages];
 
         // Remove redundant system messages
@@ -48,14 +202,25 @@ export class PerformanceOptimizer {
             });
         }
 
-        // Truncate very long messages
-        optimized.forEach(msg => {
-            if (typeof msg.content === 'string' && msg.content.length > 5000) {
-                msg.content = msg.content.substring(0, 5000) + '... [truncated]';
+        // Apply token optimization to each message
+        for (let i = 0; i < optimized.length; i++) {
+            if (typeof optimized[i].content === 'string') {
+                const result = await this.tokenOptimizer.optimizePrompt(optimized[i].content as string);
+                (optimized[i] as any).content = result.content;
             }
-        });
+        }
 
         return optimized;
+    }
+
+    // Get token optimizer instance
+    getTokenOptimizer(): TokenOptimizer {
+        return this.tokenOptimizer;
+    }
+
+    // Optimize single text content
+    async optimizeText(text: string): Promise<TokenOptimizationResult> {
+        return this.tokenOptimizer.optimizePrompt(text);
     }
 
     // Get performance recommendations

@@ -42,6 +42,7 @@ import { ExecutionPlan } from './planning/types';
 import { registerAgents } from './register-agents';
 import { advancedUI } from './ui/advanced-cli-ui';
 import { inputQueue } from './core/input-queue';
+import { TokenOptimizer, QuietCacheLogger, TokenOptimizationConfig } from './core/performance-optimizer';
 
 // Configure marked for terminal rendering
 marked.setOptions({
@@ -145,6 +146,7 @@ export class NikCLI {
     private activeSpinner: any = null;
     private aiOperationStart: Date | null = null;
     private modelPricing: Map<string, { input: number; output: number }> = new Map();
+    private tokenOptimizer?: TokenOptimizer;
 
     constructor() {
         this.workingDirectory = process.cwd();
@@ -156,6 +158,8 @@ export class NikCLI {
         this.planningManager = new PlanningManager(this.workingDirectory);
         this.slashHandler = new SlashCommandHandler();
         this.advancedUI = advancedUI;
+        
+        // Token optimizer will be initialized lazily when needed
 
         // Register agents
         registerAgents(this.agentManager);
@@ -174,6 +178,101 @@ export class NikCLI {
 
         // Initialize token cache system
         this.initializeTokenCache();
+    }
+
+    /**
+     * Get token optimizer instance safely
+     */
+    private getTokenOptimizer(): TokenOptimizer | null {
+        if (!this.tokenOptimizer) {
+            try {
+                this.tokenOptimizer = new TokenOptimizer({
+                    level: 'conservative',
+                    enablePredictive: false,
+                    enableMicroCache: false,
+                    maxCompressionRatio: 0.9
+                });
+            } catch (error) {
+                console.debug('Failed to create token optimizer:', error);
+                return null;
+            }
+        }
+        return this.tokenOptimizer;
+    }
+
+    /**
+     * Load project context from NIKOCLI.md file
+     */
+    private async loadProjectContext(): Promise<string> {
+        try {
+            const context = await fs.readFile(this.projectContextFile, 'utf8');
+            const optimizer = this.getTokenOptimizer();
+            if (optimizer) {
+                const optimized = await optimizer.optimizePrompt(context);
+                if (optimized.tokensSaved > 10) {
+                    QuietCacheLogger.logCacheSave(optimized.tokensSaved);
+                }
+                return optimized.content;
+            }
+            return context;
+        } catch (error) {
+            return ''; // No project context file
+        }
+    }
+
+    /**
+     * Save project context to NIKOCLI.md file
+     */
+    private async saveProjectContext(context: string): Promise<void> {
+        try {
+            await fs.writeFile(this.projectContextFile, context, 'utf8');
+        } catch (error) {
+            console.debug('Failed to save project context:', error);
+        }
+    }
+
+    /**
+     * Update project context based on user interaction
+     */
+    private async updateProjectContext(userInput: string): Promise<void> {
+        try {
+            const currentContext = await this.loadProjectContext();
+            const timestamp = new Date().toISOString();
+            
+            // Extract key information from user input
+            const keyInfo = this.extractKeyInformation(userInput);
+            if (keyInfo) {
+                const updatedContext = `${currentContext}\n\n## Update ${timestamp}\n${keyInfo}`;
+                await this.saveProjectContext(updatedContext);
+            }
+        } catch (error) {
+            console.debug('Failed to update project context:', error);
+        }
+    }
+
+    /**
+     * Extract key information from user input for context
+     */
+    private extractKeyInformation(input: string): string | null {
+        const lowercaseInput = input.toLowerCase();
+        
+        // Extract project-relevant information
+        if (lowercaseInput.includes('project') || lowercaseInput.includes('goal') || 
+            lowercaseInput.includes('objective') || lowercaseInput.includes('requirement')) {
+            return `User goal/requirement: ${input}`;
+        }
+        
+        if (lowercaseInput.includes('error') || lowercaseInput.includes('issue') || 
+            lowercaseInput.includes('problem')) {
+            return `Issue reported: ${input}`;
+        }
+        
+        if (lowercaseInput.includes('feature') || lowercaseInput.includes('add') || 
+            lowercaseInput.includes('implement')) {
+            return `Feature request: ${input}`;
+        }
+        
+        return null;
     }
 
     private async initializeTokenCache(): Promise<void> {
@@ -1397,6 +1496,25 @@ export class NikCLI {
                 return;
             }
 
+            // Apply token optimization to user input
+            let optimizedInput = trimmed;
+            if (trimmed.length > 20 && !trimmed.startsWith('/')) { // Don't optimize commands
+                const optimizer = this.getTokenOptimizer();
+                if (optimizer) {
+                    try {
+                        const optimizationResult = await optimizer.optimizePrompt(trimmed);
+                        optimizedInput = optimizationResult.content;
+                        
+                        if (optimizationResult.tokensSaved > 5) {
+                            QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
+                        }
+                    } catch (error) {
+                        // Silent fail - use original input
+                        console.debug('Token optimization failed:', error);
+                    }
+                }
+            }
+
             // Se il sistema sta processando, metti in coda
             // ma rispetta il bypass per approval inputs
             if (this.assistantProcessing && inputQueue.shouldQueue(trimmed)) {
@@ -1429,7 +1547,8 @@ export class NikCLI {
                 } else if (trimmed.startsWith('*')) {
                     await this.dispatchStar(trimmed);
                 } else {
-                    await this.handleChatInput(trimmed);
+                    // Use optimized input for chat
+                    await this.handleChatInput(optimizedInput);
                 }
             } finally {
                 // Done processing; return to idle
@@ -2533,18 +2652,25 @@ export class NikCLI {
      */
     private async handleChatInput(input: string): Promise<void> {
         try {
+            // Load project context for enhanced chat responses
+            const projectContext = await this.loadProjectContext();
+            const enhancedInput = projectContext ? `${input}\n\nProject Context: ${projectContext}` : input;
+            
             switch (this.currentMode) {
                 case 'plan':
-                    await this.handlePlanMode(input);
+                    await this.handlePlanMode(enhancedInput);
                     break;
 
                 case 'auto':
-                    await this.handleAutoMode(input);
+                    await this.handleAutoMode(enhancedInput);
                     break;
 
                 default:
-                    await this.handleDefaultMode(input);
+                    await this.handleDefaultMode(enhancedInput);
             }
+            
+            // Update project context based on interaction
+            await this.updateProjectContext(input);
         } catch (error: any) {
             console.log(chalk.red(`Error: ${error.message}`));
         }

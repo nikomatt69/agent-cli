@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import crypto from 'crypto';
 import chalk from 'chalk';
+import { QuietCacheLogger } from './performance-optimizer';
 
 export interface CompletionPattern {
     id: string;
@@ -122,7 +123,7 @@ export class CompletionProtocolCache {
 
         const tokensSaved = this.estimateTokens(prefix + completion);
 
-        console.log(chalk.green(`🔮 Protocol Cache HIT (${Math.round(bestPattern.confidence * 100)}%): saved ~${tokensSaved} tokens`));
+        QuietCacheLogger.logCacheSave(tokensSaved);
 
         const exactMatch = bestPattern.confidence >= 0.99;
         
@@ -408,9 +409,7 @@ export class CompletionProtocolCache {
             }
         }
 
-        if (toRemove.length > 0) {
-            console.log(chalk.yellow(`🧹 Cleaned ${toRemove.length} completion patterns`));
-        }
+        // Silent cleanup
     }
 
     /**
@@ -463,9 +462,9 @@ export class CompletionProtocolCache {
             // Rebuild indexes
             this.rebuildIndexes();
 
-            console.log(chalk.dim(`🔮 Loaded ${this.patterns.size} completion patterns`));
+            // Silent load
         } catch (error) {
-            console.log(chalk.dim('🔮 Starting with empty completion cache'));
+            // Silent start
         }
     }
 
@@ -481,7 +480,7 @@ export class CompletionProtocolCache {
             };
 
             await fs.writeFile(this.cacheFile, JSON.stringify(data, null, 2));
-            console.log(chalk.dim(`🔮 Saved ${this.patterns.size} completion patterns`));
+            // Silent save
         } catch (error: any) {
             console.log(chalk.red(`❌ Failed to save completion cache: ${error.message}`));
         }

@@ -31,6 +31,7 @@ const docs_context_manager_1 = require("../context/docs-context-manager");
 const smart_docs_tool_1 = require("../tools/smart-docs-tool");
 const docs_request_tool_1 = require("../tools/docs-request-tool");
 const validator_manager_1 = require("../core/validator-manager");
+const performance_optimizer_2 = require("../core/performance-optimizer");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
@@ -61,10 +62,11 @@ class AdvancedAIProvider {
         }
         return totalTokens;
     }
-    truncateMessages(messages, maxTokens = 120000) {
-        const currentTokens = this.estimateMessagesTokens(messages);
+    async truncateMessages(messages, maxTokens = 120000) {
+        const optimizedMessages = await this.optimizeMessages(messages);
+        const currentTokens = this.estimateMessagesTokens(optimizedMessages);
         if (currentTokens <= maxTokens) {
-            return messages;
+            return optimizedMessages;
         }
         const truncatedMessages = [];
         const systemMessages = messages.filter(m => m.role === 'system');
@@ -113,7 +115,7 @@ class AdvancedAIProvider {
         const finalTokens = this.estimateMessagesTokens(truncatedMessages);
         return truncatedMessages;
     }
-    constructor() {
+    constructor(optimizationConfig) {
         this.workingDirectory = process.cwd();
         this.executionContext = new Map();
         this.enhancedContext = new Map();
@@ -122,35 +124,84 @@ class AdvancedAIProvider {
         this.toolCallHistory = [];
         this.completedRounds = 0;
         this.maxRounds = 2;
+        this.tokenOptimizer = new performance_optimizer_2.TokenOptimizer(optimizationConfig);
         this.currentModel = config_manager_1.simpleConfigManager.get('currentModel') || 'claude-sonnet-4-20250514';
         this.contextEnhancer = new context_enhancer_1.ContextEnhancer();
-        this.performanceOptimizer = new performance_optimizer_1.PerformanceOptimizer();
+        this.performanceOptimizer = new performance_optimizer_1.PerformanceOptimizer(optimizationConfig);
         this.webSearchProvider = new web_search_provider_1.WebSearchProvider();
         this.ideContextEnricher = new ide_context_enricher_1.IDEContextEnricher();
         this.advancedTools = new advanced_tools_1.AdvancedTools();
         this.toolRouter = new tool_router_1.ToolRouter();
-        this.promptManager = prompt_manager_1.PromptManager.getInstance(process.cwd());
+        this.promptManager = prompt_manager_1.PromptManager.getInstance(process.cwd(), optimizationConfig);
         this.smartCache = smart_cache_manager_1.smartCache;
         this.docLibrary = documentation_library_1.docLibrary;
     }
+    async optimizeMessages(messages) {
+        const optimizedMessages = [];
+        for (const message of messages) {
+            if (typeof message.content === 'string') {
+                const result = await this.tokenOptimizer.optimizePrompt(message.content);
+                optimizedMessages.push({
+                    ...message,
+                    content: result.content
+                });
+            }
+            else if (message.role === 'tool' && Array.isArray(message.content)) {
+                const optimizedContent = await Promise.all(message.content.map(async (part) => {
+                    if (part.type === 'text' && typeof part.text === 'string') {
+                        const result = await this.tokenOptimizer.optimizePrompt(part.text);
+                        return { ...part, text: result.content };
+                    }
+                    return part;
+                }));
+                optimizedMessages.push({
+                    ...message,
+                    content: optimizedContent
+                });
+            }
+            else {
+                optimizedMessages.push(message);
+            }
+        }
+        return optimizedMessages;
+    }
     async enhanceContext(messages) {
+        const contextKey = this.generateContextKey(messages);
+        if (this.enhancedContext.has(contextKey)) {
+            const cached = this.enhancedContext.get(contextKey);
+            performance_optimizer_2.QuietCacheLogger.logCacheSave(cached.tokensSaved || 0);
+            return cached.messages;
+        }
         const enhancedMessages = await this.contextEnhancer.enhance(messages, {
             workingDirectory: this.workingDirectory,
             executionContext: this.executionContext,
             conversationMemory: this.conversationMemory,
             analysisCache: this.analysisCache
         });
-        this.conversationMemory = enhancedMessages.slice(-20);
-        const lastUserMessage = enhancedMessages.filter(m => m.role === 'user').pop();
+        const optimizedMessages = await this.optimizeMessages(enhancedMessages);
+        const originalTokens = this.estimateMessagesTokens(enhancedMessages);
+        const optimizedTokens = this.estimateMessagesTokens(optimizedMessages);
+        const tokensSaved = originalTokens - optimizedTokens;
+        this.enhancedContext.set(contextKey, {
+            messages: optimizedMessages,
+            tokensSaved,
+            timestamp: Date.now()
+        });
+        this.conversationMemory = optimizedMessages.slice(-20);
+        const lastUserMessage = optimizedMessages.filter(m => m.role === 'user').pop();
         if (lastUserMessage) {
             this.toolCallHistory = [];
             this.completedRounds = 0;
         }
-        return enhancedMessages;
+        return optimizedMessages;
+    }
+    generateContextKey(messages) {
+        const content = messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('|');
+        return require('crypto').createHash('md5').update(content).digest('hex').substring(0, 16);
     }
     async getEnhancedSystemPrompt(context = {}) {
         try {
-            const docsContext = this.getDocumentationContext();
+            const docsContext = await this.getDocumentationContext();
             const basePrompt = await this.promptManager.loadPromptForContext({
                 agentId: 'base-agent',
                 parameters: {
@@ -169,7 +220,7 @@ class AdvancedAIProvider {
             const toolDescriptions = this.toolRouter.getAllTools()
                 .map(tool => `${tool.tool}: ${tool.description}`)
                 .join(', ');
-            const docsContext = this.getDocumentationContext();
+            const docsContext = await this.getDocumentationContext();
             const basePrompt = `You are an advanced AI development assistant with enhanced capabilities:
 
 🧠 **Enhanced Intelligence**:
@@ -213,7 +264,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
             return basePrompt;
         }
     }
-    getDocumentationContext() {
+    async getDocumentationContext() {
         try {
             const stats = docs_context_manager_1.docsContextManager.getContextStats();
             if (stats.loadedCount === 0) {
@@ -221,11 +272,20 @@ Respond in a helpful, professional manner with clear explanations and actionable
             }
             const contextSummary = docs_context_manager_1.docsContextManager.getContextSummary();
             const fullContext = docs_context_manager_1.docsContextManager.getFullContext();
-            const maxContextLength = 30000;
-            if (fullContext.length <= maxContextLength) {
-                return fullContext;
+            let optimizedContext = fullContext;
+            if (fullContext.length > 1000) {
+                const optimizationResult = await this.tokenOptimizer.optimizePrompt(fullContext);
+                optimizedContext = optimizationResult.content;
+                if (optimizationResult.tokensSaved > 50) {
+                    performance_optimizer_2.QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
+                }
             }
-            return `# DOCUMENTATION CONTEXT SUMMARY\n\n${contextSummary}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
+            const maxContextLength = 25000;
+            if (optimizedContext.length <= maxContextLength) {
+                return optimizedContext;
+            }
+            const optimizedSummary = await this.tokenOptimizer.optimizePrompt(contextSummary);
+            return `# DOCUMENTATION CONTEXT SUMMARY\n\n${optimizedSummary.content}\n\n[Full documentation context available but truncated due to size limits. ${stats.totalWords.toLocaleString()} words across ${stats.loadedCount} documents loaded.]`;
         }
         catch (error) {
             console.error('Error getting documentation context:', error);
@@ -621,8 +681,8 @@ Respond in a helpful, professional manner with clear explanations and actionable
         const startTime = Date.now();
         this.performanceOptimizer.startMonitoring();
         const enhancedMessages = await this.enhanceContext(messages);
-        const optimizedMessages = this.performanceOptimizer.optimizeMessages(enhancedMessages);
-        const truncatedMessages = this.truncateMessages(optimizedMessages, 100000);
+        const optimizedMessages = await this.performanceOptimizer.optimizeMessages(enhancedMessages);
+        const truncatedMessages = await this.truncateMessages(optimizedMessages, 100000);
         const model = this.getModel();
         const tools = this.getAdvancedTools();
         try {
