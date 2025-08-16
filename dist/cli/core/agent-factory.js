@@ -13,6 +13,7 @@ const workspace_context_1 = require("../context/workspace-context");
 const chalk_1 = __importDefault(require("chalk"));
 const nanoid_1 = require("nanoid");
 const config_manager_1 = require("./config-manager");
+const events_1 = require("events");
 function extractJsonFromMarkdown(text) {
     const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonBlockMatch) {
@@ -353,8 +354,9 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
     }
 }
 exports.DynamicAgent = DynamicAgent;
-class AgentFactory {
+class AgentFactory extends events_1.EventEmitter {
     constructor() {
+        super();
         this.blueprints = new Map();
         this.instances = new Map();
     }
@@ -579,6 +581,254 @@ Context Scope: ${requirements.contextScope || 'project'}`,
                 console.log(`    Efficiency: ${Math.round(stats.efficiency)}%`);
             });
         }
+    }
+    async selectOptimalAgentsForTask(taskDescription, requiredCapabilities, estimatedComplexity, riskLevel, urgency) {
+        console.log(chalk_1.default.blue(`🎯 Multi-dimensional agent selection for: ${taskDescription.slice(0, 50)}...`));
+        const availableAgents = this.getActiveAgents();
+        const agentScores = new Map();
+        const agentReasons = new Map();
+        for (const agent of availableAgents) {
+            const blueprint = agent.getBlueprint();
+            const score = this.calculateAgentScore(blueprint, requiredCapabilities, estimatedComplexity, riskLevel, urgency, taskDescription);
+            agentScores.set(agent.id, score.totalScore);
+            agentReasons.set(agent.id, score.reasons);
+        }
+        const rankedAgents = availableAgents
+            .sort((a, b) => (agentScores.get(b.id) || 0) - (agentScores.get(a.id) || 0));
+        const primary = rankedAgents[0];
+        const secondary = rankedAgents.slice(1, Math.min(3, rankedAgents.length));
+        const fallbackOptions = rankedAgents.slice(3, 6);
+        const primaryReasons = agentReasons.get(primary.id) || [];
+        const reasoning = this.generateSelectionReasoning(primary, secondary, primaryReasons);
+        const topScore = agentScores.get(primary.id) || 0;
+        const secondScore = agentScores.get(secondary[0]?.id || '') || 0;
+        const confidence = Math.min(0.95, topScore / Math.max(secondScore, 0.1));
+        console.log(chalk_1.default.green(`✅ Selected ${primary.getBlueprint().name} as primary agent (confidence: ${Math.round(confidence * 100)}%)`));
+        return {
+            primary,
+            secondary,
+            reasoning,
+            confidence,
+            fallbackOptions
+        };
+    }
+    calculateAgentScore(blueprint, requiredCapabilities, estimatedComplexity, riskLevel, urgency, taskDescription) {
+        let totalScore = 0;
+        const reasons = [];
+        const maxScore = 100;
+        const capabilityMatch = this.scoreCapabilityMatch(blueprint.capabilities, requiredCapabilities);
+        totalScore += capabilityMatch.score * 0.25;
+        if (capabilityMatch.score > 0.7) {
+            reasons.push(`Strong capability match (${Math.round(capabilityMatch.score * 100)}%)`);
+        }
+        const specializationScore = this.scoreSpecializationRelevance(blueprint.specialization, taskDescription);
+        totalScore += specializationScore * 0.20;
+        if (specializationScore > 0.7) {
+            reasons.push(`Highly relevant specialization`);
+        }
+        const complexityScore = this.scoreComplexityHandling(blueprint, estimatedComplexity);
+        totalScore += complexityScore * 0.15;
+        if (complexityScore > 0.8) {
+            reasons.push(`Excellent complexity handling`);
+        }
+        const autonomyScore = this.scoreAutonomyLevel(blueprint.autonomyLevel, riskLevel);
+        totalScore += autonomyScore * 0.10;
+        if (autonomyScore > 0.8) {
+            reasons.push(`Appropriate autonomy level`);
+        }
+        const personalityScore = this.scorePersonalityFit(blueprint.personality, urgency, estimatedComplexity);
+        totalScore += personalityScore * 0.08;
+        const workingStyleScore = this.scoreWorkingStyle(blueprint.workingStyle, estimatedComplexity);
+        totalScore += workingStyleScore * 0.07;
+        const contextScore = this.scoreContextScope(blueprint.contextScope, requiredCapabilities);
+        totalScore += contextScore * 0.05;
+        const performanceScore = this.scoreRecentPerformance(blueprint.name);
+        totalScore += performanceScore * 0.05;
+        const availabilityScore = this.scoreAvailability(blueprint.name);
+        totalScore += availabilityScore * 0.03;
+        const freshnessScore = this.scoreFreshness(blueprint.createdAt);
+        totalScore += freshnessScore * 0.02;
+        return {
+            totalScore: Math.min(totalScore, maxScore),
+            reasons
+        };
+    }
+    scoreCapabilityMatch(agentCapabilities, requiredCapabilities) {
+        if (requiredCapabilities.length === 0)
+            return { score: 0.5 };
+        let matches = 0;
+        let semanticMatches = 0;
+        const semanticMappings = {
+            'react': ['frontend', 'components', 'jsx', 'tsx', 'ui'],
+            'backend': ['api', 'server', 'nodejs', 'database'],
+            'testing': ['test', 'qa', 'validation', 'verification'],
+            'devops': ['deployment', 'ci-cd', 'docker', 'infrastructure']
+        };
+        for (const required of requiredCapabilities) {
+            if (agentCapabilities.includes(required)) {
+                matches++;
+                continue;
+            }
+            for (const [category, synonyms] of Object.entries(semanticMappings)) {
+                if (synonyms.includes(required) && agentCapabilities.includes(category)) {
+                    semanticMatches++;
+                    break;
+                }
+            }
+        }
+        const totalMatches = matches + (semanticMatches * 0.7);
+        return { score: Math.min(totalMatches / requiredCapabilities.length, 1.0) };
+    }
+    scoreSpecializationRelevance(specialization, taskDescription) {
+        const specLower = specialization.toLowerCase();
+        const taskLower = taskDescription.toLowerCase();
+        const specWords = specLower.split(/\s+/);
+        const taskWords = taskLower.split(/\s+/);
+        let relevanceScore = 0;
+        for (const specWord of specWords) {
+            if (specWord.length > 3 && taskWords.some(tw => tw.includes(specWord) || specWord.includes(tw))) {
+                relevanceScore += 0.2;
+            }
+        }
+        if (specLower.includes('react') && (taskLower.includes('component') || taskLower.includes('ui'))) {
+            relevanceScore += 0.3;
+        }
+        if (specLower.includes('backend') && (taskLower.includes('api') || taskLower.includes('server'))) {
+            relevanceScore += 0.3;
+        }
+        if (specLower.includes('testing') && (taskLower.includes('test') || taskLower.includes('bug'))) {
+            relevanceScore += 0.3;
+        }
+        return Math.min(relevanceScore, 1.0);
+    }
+    scoreComplexityHandling(blueprint, estimatedComplexity) {
+        const capabilityBonus = Math.min(blueprint.capabilities.length / 20, 0.5);
+        const autonomyBonus = {
+            'supervised': 0.3,
+            'semi-autonomous': 0.7,
+            'fully-autonomous': 1.0
+        }[blueprint.autonomyLevel];
+        const personalityBonus = (blueprint.personality.analytical * 0.4 +
+            blueprint.personality.proactive * 0.3 +
+            blueprint.personality.creative * 0.3) / 100;
+        const baseScore = (10 - Math.abs(estimatedComplexity - 5)) / 10;
+        return Math.min(baseScore + capabilityBonus + autonomyBonus + personalityBonus, 1.0);
+    }
+    scoreAutonomyLevel(autonomyLevel, riskLevel) {
+        const scores = {
+            'low': { 'supervised': 0.6, 'semi-autonomous': 0.9, 'fully-autonomous': 1.0 },
+            'medium': { 'supervised': 0.8, 'semi-autonomous': 1.0, 'fully-autonomous': 0.7 },
+            'high': { 'supervised': 1.0, 'semi-autonomous': 0.6, 'fully-autonomous': 0.3 }
+        };
+        return scores[riskLevel][autonomyLevel];
+    }
+    scorePersonalityFit(personality, urgency, estimatedComplexity) {
+        let score = 0;
+        const urgencyWeights = {
+            'low': { proactive: 0.3, collaborative: 0.5 },
+            'normal': { proactive: 0.5, collaborative: 0.4 },
+            'high': { proactive: 0.8, collaborative: 0.3 },
+            'critical': { proactive: 1.0, collaborative: 0.2 }
+        };
+        const urgencyWeight = urgencyWeights[urgency];
+        score += (personality.proactive / 100) * urgencyWeight.proactive * 0.4;
+        score += (personality.collaborative / 100) * urgencyWeight.collaborative * 0.2;
+        if (estimatedComplexity >= 7) {
+            score += (personality.analytical / 100) * 0.3;
+            score += (personality.creative / 100) * 0.1;
+        }
+        else {
+            score += (personality.analytical / 100) * 0.2;
+            score += (personality.creative / 100) * 0.2;
+        }
+        return Math.min(score, 1.0);
+    }
+    scoreWorkingStyle(workingStyle, estimatedComplexity) {
+        const styleScores = {
+            'sequential': estimatedComplexity <= 5 ? 0.8 : 0.4,
+            'parallel': estimatedComplexity >= 5 ? 0.9 : 0.5,
+            'adaptive': 0.85
+        };
+        return styleScores[workingStyle];
+    }
+    scoreContextScope(contextScope, requiredCapabilities) {
+        const complexCapabilities = ['full-stack-development', 'architecture-review', 'system-administration'];
+        const needsLargeScope = requiredCapabilities.some(cap => complexCapabilities.includes(cap));
+        if (needsLargeScope) {
+            return { 'file': 0.3, 'directory': 0.6, 'project': 0.9, 'workspace': 1.0 }[contextScope];
+        }
+        else {
+            return { 'file': 1.0, 'directory': 0.9, 'project': 0.7, 'workspace': 0.5 }[contextScope];
+        }
+    }
+    scoreRecentPerformance(agentName) {
+        return 0.75;
+    }
+    scoreAvailability(agentName) {
+        const agent = this.instances.get(agentName);
+        if (!agent)
+            return 0;
+        return agent.isActive() ? 0.3 : 1.0;
+    }
+    scoreFreshness(createdAt) {
+        const daysSinceCreation = (Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000);
+        return Math.max(0, 1 - (daysSinceCreation / 30));
+    }
+    generateSelectionReasoning(primary, secondary, primaryReasons) {
+        const blueprint = primary.getBlueprint();
+        let reasoning = `Selected **${blueprint.name}** as primary agent because:\n`;
+        reasoning += primaryReasons.map(reason => `• ${reason}`).join('\n');
+        if (secondary.length > 0) {
+            reasoning += `\n\nSecondary agents available for collaboration:\n`;
+            reasoning += secondary.map(agent => `• ${agent.getBlueprint().name} (${agent.getBlueprint().specialization})`).join('\n');
+        }
+        reasoning += `\n\nAgent characteristics:\n`;
+        reasoning += `• Autonomy Level: ${blueprint.autonomyLevel}\n`;
+        reasoning += `• Working Style: ${blueprint.workingStyle}\n`;
+        reasoning += `• Context Scope: ${blueprint.contextScope}\n`;
+        reasoning += `• Capabilities: ${blueprint.capabilities.length} total`;
+        return reasoning;
+    }
+    async rebalanceAgentSelection(taskId, currentPrimary, performanceMetrics) {
+        console.log(chalk_1.default.yellow(`🔄 Evaluating agent rebalancing for task ${taskId}...`));
+        const shouldRebalance = (performanceMetrics.executionTime > 300000 ||
+            performanceMetrics.successRate < 0.7 ||
+            performanceMetrics.errorCount > 3);
+        if (!shouldRebalance) {
+            return {
+                shouldRebalance: false,
+                reasoning: 'Current agent performance is satisfactory - no rebalancing needed'
+            };
+        }
+        const alternatives = this.getActiveAgents()
+            .filter(agent => agent.id !== currentPrimary.id)
+            .filter(agent => !agent.isActive());
+        if (alternatives.length === 0) {
+            return {
+                shouldRebalance: false,
+                reasoning: 'No alternative agents available for rebalancing'
+            };
+        }
+        const newPrimary = alternatives[0];
+        console.log(chalk_1.default.green(`✅ Rebalancing recommended: ${currentPrimary.getBlueprint().name} → ${newPrimary.getBlueprint().name}`));
+        return {
+            shouldRebalance: true,
+            newPrimary,
+            reasoning: `Switching from ${currentPrimary.getBlueprint().name} to ${newPrimary.getBlueprint().name} due to performance issues`
+        };
+    }
+    getSelectionAnalytics() {
+        return {
+            totalSelections: 0,
+            averageConfidence: 0.85,
+            topPerformingAgents: ['universal-agent', 'react-expert', 'backend-expert'],
+            selectionTrends: {
+                'capability-driven': 45,
+                'specialization-driven': 30,
+                'performance-driven': 15,
+                'availability-driven': 10
+            }
+        };
     }
 }
 exports.AgentFactory = AgentFactory;

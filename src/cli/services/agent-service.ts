@@ -115,7 +115,7 @@ export class AgentService extends EventEmitter {
     console.log(chalk.dim(`🤖 Registered agent: ${agent.name}`));
   }
 
-  async executeTask(agentType: string, task: string): Promise<string> {
+  async executeTask(agentType: string, task: string, _enhancedOptions?: any): Promise<string> {
     const agent = this.agents.get(agentType);
     if (!agent) {
       throw new Error(`Agent '${agentType}' not found`);
@@ -156,7 +156,7 @@ export class AgentService extends EventEmitter {
       // Create secure tool wrapper based on current security mode
       const config = simpleConfigManager.getAll();
       const secureTools = this.createSecureToolWrapper(toolService, config.securityMode);
-      
+
       const context = {
         taskId: agentTask.id,
         workingDirectory: process.cwd(),
@@ -367,14 +367,14 @@ export class AgentService extends EventEmitter {
     return {
       // Pass through all original methods
       ...originalToolService,
-      
+
       // Override executeTool to add security logic
       async executeTool(toolName: string, args: any): Promise<any> {
         const operation = this.inferOperationFromArgs(toolName, args);
-        
+
         // Determine if we should use secure execution
         const shouldUseSecure = this.shouldUseSecureExecution(toolName, securityMode);
-        
+
         if (shouldUseSecure) {
           console.log(chalk.yellow(`🛡️ Security check: ${toolName}`));
           return await originalToolService.executeToolSafely(toolName, operation, args);
@@ -394,17 +394,17 @@ export class AgentService extends EventEmitter {
     if (securityMode === 'safe') {
       return !this.isReadOnlyTool(toolName);
     }
-    
+
     // Use secure execution for risky operations in default mode
     if (securityMode === 'default') {
       return this.isRiskyTool(toolName);
     }
-    
+
     // Developer mode - only secure for high-risk operations
     if (securityMode === 'developer') {
       return this.isHighRiskTool(toolName);
     }
-    
+
     return false; // Fallback
   }
 

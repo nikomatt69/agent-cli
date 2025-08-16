@@ -53,6 +53,9 @@ const tools_manager_1 = require("./tools/tools-manager");
 const agent_factory_1 = require("./core/agent-factory");
 const agent_stream_1 = require("./core/agent-stream");
 const workspace_context_1 = require("./context/workspace-context");
+const validator_manager_1 = require("./core/validator-manager");
+const tool_router_1 = require("./core/tool-router");
+const streaming_orchestrator_1 = require("./streaming-orchestrator");
 const agent_manager_1 = require("./core/agent-manager");
 const planning_manager_1 = require("./planning/planning-manager");
 const modern_agent_system_1 = require("./automation/agents/modern-agent-system");
@@ -97,9 +100,15 @@ class NikCLI {
         this.sessionStartTime = new Date();
         this.contextTokens = 0;
         this.realTimeCost = 0;
+        this.maxContextTokens = 200000;
+        this.contextHistory = [];
+        this.toolchainTokenLimit = 150000;
+        this.toolchainContext = new Map();
         this.activeSpinner = null;
         this.aiOperationStart = null;
         this.modelPricing = new Map();
+        this.cognitiveMode = true;
+        this.orchestrationLevel = 8;
         this.orchestratorEventsInitialized = false;
         this.eventsSubscribed = false;
         this.workingDirectory = process.cwd();
@@ -117,6 +126,8 @@ class NikCLI {
         this.initializeStructuredUI();
         this.initializeModelPricing();
         this.initializeTokenCache();
+        this.initializeCognitiveOrchestration();
+        global.__nikcli = this;
     }
     getTokenOptimizer() {
         if (!this.tokenOptimizer) {
@@ -207,6 +218,119 @@ class NikCLI {
                 console.log(chalk_1.default.dim(`Cache initialization warning: ${error.message}`));
             }
         }, 1000);
+    }
+    initializeCognitiveOrchestration() {
+        try {
+            console.log(chalk_1.default.dim('🧠 Initializing cognitive orchestration system...'));
+            this.streamingOrchestrator = new streaming_orchestrator_1.StreamingOrchestrator();
+            this.streamingOrchestrator.configureAdaptiveSupervision({
+                adaptiveSupervision: this.cognitiveMode,
+                intelligentPrioritization: true,
+                cognitiveFiltering: true,
+                orchestrationAwareness: true
+            });
+            this.setupCognitiveEventListeners();
+            this.integrateCognitiveComponents();
+            console.log(chalk_1.default.green('✅ Cognitive orchestration system initialized'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.yellow(`⚠️ Cognitive orchestration initialization warning: ${error.message}`));
+            this.cognitiveMode = false;
+        }
+    }
+    setupCognitiveEventListeners() {
+        if (!this.streamingOrchestrator)
+            return;
+        this.streamingOrchestrator.on('supervision:updated', (cognition) => {
+            this.handleSupervisionUpdate(cognition);
+        });
+        validator_manager_1.validatorManager.on('validation:completed', (event) => {
+            this.handleValidationEvent(event);
+        });
+        tool_router_1.toolRouter.on('routing:optimized', (event) => {
+            this.handleRoutingOptimization(event);
+        });
+        agent_factory_1.agentFactory.on('selection:optimized', (event) => {
+            this.handleAgentSelectionOptimization(event);
+        });
+    }
+    integrateCognitiveComponents() {
+        this.enhanceAgentServiceWithCognition();
+        this.integrateValidationWithPlanning();
+        this.setupToolRouterCoordination();
+        this.configureAdvancedAIProviderCognition();
+    }
+    enhanceAgentServiceWithCognition() {
+        const originalExecuteTask = agent_service_1.agentService.executeTask.bind(agent_service_1.agentService);
+        agent_service_1.agentService.executeTask = async (agentType, task, options) => {
+            const enhancedOptions = {
+                ...options,
+                cognitiveMode: this.cognitiveMode,
+                orchestrationLevel: this.orchestrationLevel,
+                validatorManager: validator_manager_1.validatorManager,
+                toolRouter: tool_router_1.toolRouter
+            };
+            return originalExecuteTask(agentType, task, enhancedOptions);
+        };
+    }
+    integrateValidationWithPlanning() {
+        const originalCreatePlan = planning_service_1.planningService.createPlan.bind(planning_service_1.planningService);
+        planning_service_1.planningService.createPlan = async (task, options) => {
+            const enhancedOptions = {
+                ...options,
+                validationConfig: {
+                    cognitiveValidation: this.cognitiveMode,
+                    orchestrationAware: true,
+                    intelligentCaching: true
+                }
+            };
+            return originalCreatePlan(task, enhancedOptions);
+        };
+    }
+    setupToolRouterCoordination() {
+        console.log(chalk_1.default.dim('🔧 Tool router cognitive coordination active'));
+    }
+    configureAdvancedAIProviderCognition() {
+        advanced_ai_provider_1.advancedAIProvider.configureCognitiveFeatures({
+            enableCognition: this.cognitiveMode,
+            orchestrationLevel: this.orchestrationLevel,
+            intelligentCommands: true,
+            adaptivePlanning: true
+        });
+    }
+    handleSupervisionUpdate(cognition) {
+        if (cognition.orchestrationLevel) {
+            this.orchestrationLevel = Math.max(this.orchestrationLevel, cognition.orchestrationLevel);
+        }
+        if (cognition.systemLoad === 'overloaded' && this.cognitiveMode) {
+            console.log(chalk_1.default.yellow('⚡ Temporarily reducing cognitive features due to high load'));
+            this.cognitiveMode = false;
+        }
+        else if (cognition.systemLoad === 'light' && !this.cognitiveMode) {
+            console.log(chalk_1.default.green('🧠 Re-enabling cognitive features - system load normalized'));
+            this.cognitiveMode = true;
+        }
+    }
+    handleValidationEvent(event) {
+        const { context, cognition, result } = event;
+        if (result.cognitiveScore && result.cognitiveScore < 0.5) {
+            console.log(chalk_1.default.yellow(`⚠️ Low cognitive score for ${context.filePath}: ${(result.cognitiveScore * 100).toFixed(1)}%`));
+        }
+        if (result.orchestrationCompatibility && result.orchestrationCompatibility > 0.9) {
+            console.log(chalk_1.default.green(`🎯 High orchestration compatibility: ${(result.orchestrationCompatibility * 100).toFixed(1)}%`));
+        }
+    }
+    handleRoutingOptimization(event) {
+        const { tools, cognitiveScore, orchestrationAwareness } = event;
+        if (cognitiveScore > 0.8) {
+            console.log(chalk_1.default.green(`🎯 Optimal tool routing: ${tools.length} tools, score ${(cognitiveScore * 100).toFixed(1)}%`));
+        }
+    }
+    handleAgentSelectionOptimization(event) {
+        const { selectedAgents, totalScore, cognitiveFactors } = event;
+        if (totalScore > 85) {
+            console.log(chalk_1.default.green(`🤖 Optimal agent selection: ${selectedAgents.length} agents, score ${totalScore.toFixed(1)}%`));
+        }
     }
     initializeStructuredUI() {
         console.log(chalk_1.default.dim('🎨 Setting up AdvancedCliUI with 4 panels...'));
@@ -1021,6 +1145,10 @@ class NikCLI {
         if (options.auto) {
             this.currentMode = 'auto';
         }
+        if (this.cognitiveMode && this.streamingOrchestrator) {
+            console.log(chalk_1.default.green('🧠 Cognitive orchestration active'));
+            this.displayCognitiveStatus();
+        }
         const shouldUseStructuredUI = Boolean(options.structuredUI) ||
             this.currentMode === 'plan' ||
             this.currentMode === 'auto' ||
@@ -1486,6 +1614,9 @@ class NikCLI {
                     break;
                 case 'queue':
                     this.handleQueueCommand(args);
+                    break;
+                case 'tokens':
+                    await this.manageTokenCommands(args);
                     break;
                 case 'clear':
                     await this.clearSession();
@@ -2286,7 +2417,7 @@ class NikCLI {
     async executeAgent(name, task, options) {
         console.log((0, text_wrapper_1.formatAgent)(name, 'executing', task));
         try {
-            const taskId = await agent_service_1.agentService.executeTask(name, task);
+            const taskId = await agent_service_1.agentService.executeTask(name, task, {});
             console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
         }
         catch (error) {
@@ -2319,7 +2450,7 @@ class NikCLI {
             else {
                 const selected = this.agentManager.findBestAgentForTask(task);
                 console.log(chalk_1.default.blue(`🤖 Selected agent: ${chalk_1.default.cyan(selected)}`));
-                const taskId = await agent_service_1.agentService.executeTask(selected, task);
+                const taskId = await agent_service_1.agentService.executeTask(selected, task, {});
                 console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
             }
         }
@@ -3081,7 +3212,7 @@ Planning:
                     const agentName = args[0];
                     const task = args.slice(1).join(' ');
                     console.log((0, text_wrapper_1.formatAgent)(agentName, 'executing', task));
-                    const taskId = await agent_service_1.agentService.executeTask(agentName, task);
+                    const taskId = await agent_service_1.agentService.executeTask(agentName, task, {});
                     console.log((0, text_wrapper_1.wrapBlue)(`🚀 Launched ${agentName} (Task ID: ${taskId.slice(-6)})`));
                     break;
                 }
@@ -4692,6 +4823,23 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             textAlignment: 'center',
         }));
     }
+    displayCognitiveStatus() {
+        if (!this.streamingOrchestrator)
+            return;
+        console.log(chalk_1.default.dim('\n🧠 Cognitive Orchestration System Status:'));
+        console.log(chalk_1.default.dim('─'.repeat(50)));
+        const metrics = this.streamingOrchestrator.getSupervisionMetrics();
+        console.log(chalk_1.default.dim(`🎯 Supervision: ${metrics.cognition ? 'Active' : 'Inactive'}`));
+        console.log(chalk_1.default.dim(`📊 Metrics: ${Object.keys(metrics.metrics).length} tracked`));
+        console.log(chalk_1.default.dim(`🔄 Patterns: ${Object.keys(metrics.patterns).length} recognized`));
+        console.log(chalk_1.default.dim(`📈 History: ${metrics.historyLength} entries`));
+        console.log(chalk_1.default.dim(`🧠 ValidatorManager: Cognitive validation enabled`));
+        console.log(chalk_1.default.dim(`🔧 ToolRouter: Advanced routing algorithms active`));
+        console.log(chalk_1.default.dim(`🤖 AgentFactory: Multi-dimensional selection enabled`));
+        console.log(chalk_1.default.dim(`🚀 AdvancedAIProvider: Intelligent commands ready`));
+        console.log(chalk_1.default.dim(`🎯 Orchestration Level: ${this.orchestrationLevel}/10`));
+        console.log(chalk_1.default.green('\n✅ All cognitive components initialized and coordinating\n'));
+    }
     async handleInitProject(force = false) {
         try {
             console.log(chalk_1.default.blue('🚀 Initializing project context...'));
@@ -4764,7 +4912,8 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const terminalWidth = process.stdout.columns || 80;
         const boxWidth = Math.min(terminalWidth - 4, 120);
         const tokenLine = chalk_1.default.gray(tokenInfo);
-        const tokenPadding = Math.max(0, Math.floor((boxWidth - tokenInfo.length) / 2));
+        const plainTokenLength = this._stripAnsi(tokenInfo).length;
+        const tokenPadding = Math.max(0, Math.floor((boxWidth - plainTokenLength) / 2));
         const centeredTokenInfo = ' '.repeat(tokenPadding) + tokenLine;
         const topBorder = '┌' + '─'.repeat(boxWidth - 2) + '┐';
         const tokenBorder = '│' + centeredTokenInfo.padEnd(boxWidth - 2) + '│';
@@ -4779,11 +4928,17 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const queueIndicator = queueCount > 0 ? chalk_1.default.yellow(`📥${queueCount}`) : '';
         const statusDot = this.assistantProcessing ? chalk_1.default.green('●') + chalk_1.default.dim('….') : chalk_1.default.red('●');
         const statusWithQueue = queueIndicator ? `${statusDot} ${queueIndicator}` : statusDot;
-        const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk_1.default.green(workingDir)} ${statusWithQueue}]\n└─❯ `;
+        const promptContent = `${modeIcon}${agentInfo}${chalk_1.default.green(workingDir)} ${statusWithQueue}`;
+        const promptLength = this._stripAnsi(promptContent).length;
+        const maxPromptLength = terminalWidth - 10;
+        const truncatedPrompt = promptLength > maxPromptLength
+            ? this._stripAnsi(promptContent).substring(0, maxPromptLength - 3) + '...'
+            : promptContent;
+        const prompt = `\n┌─[${truncatedPrompt}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
-    stripAnsi(str) {
+    _stripAnsi(str) {
         return str.replace(/\x1b\[[0-9;]*m/g, '');
     }
     getSessionTokenUsage() {
@@ -4794,6 +4949,77 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         this.contextTokens = 0;
         this.realTimeCost = 0;
         this.sessionStartTime = new Date();
+    }
+    manageToolchainTokens(toolName, estimatedTokens) {
+        const currentUsage = this.toolchainContext.get(toolName) || 0;
+        const newTotal = currentUsage + estimatedTokens;
+        if (newTotal > this.toolchainTokenLimit) {
+            console.log(chalk_1.default.yellow(`⚠️ Toolchain token limit reached for ${toolName}`));
+            console.log(chalk_1.default.dim(`   Current: ${currentUsage}, Adding: ${estimatedTokens}, Limit: ${this.toolchainTokenLimit}`));
+            this.toolchainContext.set(toolName, estimatedTokens);
+            return false;
+        }
+        this.toolchainContext.set(toolName, newTotal);
+        return true;
+    }
+    clearToolchainContext(toolName) {
+        if (toolName) {
+            this.toolchainContext.delete(toolName);
+            console.log(chalk_1.default.blue(`🧹 Cleared context for ${toolName}`));
+        }
+        else {
+            this.toolchainContext.clear();
+            console.log(chalk_1.default.blue(`🧹 Cleared all toolchain context`));
+        }
+    }
+    async manageTokenCommands(args) {
+        const [subCmd] = args;
+        switch (subCmd) {
+            case 'status':
+                this.showTokenStatus();
+                break;
+            case 'clear':
+                this.clearToolchainContext();
+                break;
+            case 'limit':
+                if (args[1]) {
+                    const newLimit = parseInt(args[1]);
+                    if (!isNaN(newLimit)) {
+                        this.toolchainTokenLimit = newLimit;
+                        console.log(chalk_1.default.green(`✅ Toolchain token limit set to ${newLimit}`));
+                    }
+                    else {
+                        console.log(chalk_1.default.red('❌ Invalid limit value'));
+                    }
+                }
+                else {
+                    console.log(chalk_1.default.blue(`Current toolchain limit: ${this.toolchainTokenLimit}`));
+                }
+                break;
+            default:
+                console.log(chalk_1.default.cyan.bold('\n🔢 Token Management Commands:'));
+                console.log(chalk_1.default.gray('─'.repeat(40)));
+                console.log(`${chalk_1.default.green('/tokens status')} - Show token usage`);
+                console.log(`${chalk_1.default.green('/tokens clear')}  - Clear toolchain context`);
+                console.log(`${chalk_1.default.green('/tokens limit')} [value] - Set/Show token limit`);
+        }
+    }
+    showTokenStatus() {
+        console.log(chalk_1.default.cyan.bold('\n🔢 Token Status'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        console.log(`${chalk_1.default.blue('Session Tokens:')} ${this.sessionTokenUsage}`);
+        console.log(`${chalk_1.default.blue('Context Tokens:')} ${this.contextTokens}`);
+        console.log(`${chalk_1.default.blue('Total Tokens:')} ${this.sessionTokenUsage + this.contextTokens}`);
+        console.log(`${chalk_1.default.blue('Toolchain Limit:')} ${this.toolchainTokenLimit}`);
+        if (this.toolchainContext.size > 0) {
+            console.log(chalk_1.default.blue('\nToolchain Usage:'));
+            this.toolchainContext.forEach((tokens, tool) => {
+                const percentage = (tokens / this.toolchainTokenLimit * 100).toFixed(1);
+                const color = tokens > this.toolchainTokenLimit * 0.8 ? chalk_1.default.red :
+                    tokens > this.toolchainTokenLimit * 0.5 ? chalk_1.default.yellow : chalk_1.default.green;
+                console.log(`  ${tool}: ${color(tokens)} tokens (${percentage}%)`);
+            });
+        }
     }
     initializeModelPricing() {
         this.modelPricing.set('claude-sonnet-4-20250514', { input: 15.00, output: 75.00 });

@@ -12,6 +12,9 @@ class Logger {
     static setLogLevel(level) {
         Logger.logLevel = level;
     }
+    static setConsoleOutput(enabled) {
+        Logger.consoleOutputEnabled = enabled;
+    }
     static getLogLevel() {
         return Logger.logLevel;
     }
@@ -72,25 +75,25 @@ class Logger {
     }
     debug(message, data) {
         this.addLogEntry('debug', message, data);
-        if (this.shouldLog('debug')) {
+        if (this.shouldLog('debug') && Logger.consoleOutputEnabled) {
             console.log(this.formatMessage('debug', message, data));
         }
     }
     info(message, data) {
         this.addLogEntry('info', message, data);
-        if (this.shouldLog('info')) {
+        if (this.shouldLog('info') && Logger.consoleOutputEnabled) {
             console.log(this.formatMessage('info', message, data));
         }
     }
     warn(message, data) {
         this.addLogEntry('warn', message, data);
-        if (this.shouldLog('warn')) {
+        if (this.shouldLog('warn') && Logger.consoleOutputEnabled) {
             console.warn(this.formatMessage('warn', message, data));
         }
     }
     error(message, data) {
         this.addLogEntry('error', message, data);
-        if (this.shouldLog('error')) {
+        if (this.shouldLog('error') && Logger.consoleOutputEnabled) {
             console.error(this.formatMessage('error', message, data));
         }
     }
@@ -105,5 +108,6 @@ exports.Logger = Logger;
 Logger.logLevel = 'info';
 Logger.logs = [];
 Logger.maxLogs = 1000;
+Logger.consoleOutputEnabled = true;
 exports.logger = new Logger('CLI');
 exports.LOG_LEVELS = ['debug', 'info', 'warn', 'error'];

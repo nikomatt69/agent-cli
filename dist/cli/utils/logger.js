@@ -81,6 +81,9 @@ class Logger {
         this.ensureDirectories();
         await this.info('Logger configured', { config: this.config });
     }
+    setConsoleOutput(enabled) {
+        this.config.enableConsole = enabled;
+    }
     async error(message, context, error) {
         await this.log('error', message, context, error);
     }

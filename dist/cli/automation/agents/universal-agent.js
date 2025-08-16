@@ -39,12 +39,14 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const util_1 = require("util");
+const events_1 = require("events");
 const logger_1 = require("../../utils/logger");
 const lsp_manager_1 = require("../../lsp/lsp-manager");
 const context_aware_rag_1 = require("../../context/context-aware-rag");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
-class UniversalAgent {
+class UniversalAgent extends events_1.EventEmitter {
     constructor(workingDirectory = process.cwd()) {
+        super();
         this.name = 'Universal Agent';
         this.description = 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities';
         this.specialization = 'universal';
@@ -114,6 +116,11 @@ class UniversalAgent {
             productivity: 0,
             accuracy: 0
         };
+        this.cognitiveMemory = [];
+        this.agentPerformanceMetrics = new Map();
+        this.activeOrchestrations = new Map();
+        this.learningDatabase = new Map();
+        this.orchestrationHistory = [];
         this.id = (0, nanoid_1.nanoid)();
         this.workingDirectory = workingDirectory;
         this.contextSystem = new context_aware_rag_1.ContextAwareRAGSystem(workingDirectory);
@@ -169,6 +176,106 @@ class UniversalAgent {
             status: this.status,
             guidanceLoaded: this.guidance.length > 0
         });
+    }
+    async parseTaskWithCognition(taskDescription) {
+        this.emit('cognitive_parsing_started', { task: taskDescription });
+        try {
+            const normalizedTask = this.normalizeTask(taskDescription);
+            const intent = this.identifyIntent(normalizedTask);
+            const entities = this.extractEntities(normalizedTask, intent);
+            const dependencies = this.analyzeDependencies(normalizedTask, entities);
+            const contexts = this.determineContexts(normalizedTask, entities, intent);
+            const estimatedComplexity = this.estimateComplexity(intent, entities, dependencies);
+            const requiredCapabilities = this.inferRequiredCapabilities(intent, entities);
+            const suggestedAgents = this.suggestOptimalAgents(intent, entities, requiredCapabilities);
+            const riskLevel = this.assessRiskLevel(intent, entities, dependencies);
+            const cognition = {
+                id: `cognition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                originalTask: taskDescription,
+                normalizedTask,
+                intent,
+                entities,
+                dependencies,
+                contexts,
+                estimatedComplexity,
+                requiredCapabilities,
+                suggestedAgents,
+                riskLevel
+            };
+            this.updateCognitiveMemory(cognition);
+            this.emit('cognitive_parsing_completed', { cognition });
+            return cognition;
+        }
+        catch (error) {
+            this.emit('cognitive_parsing_error', { task: taskDescription, error: error.message });
+            throw new Error(`Cognitive parsing failed: ${error.message}`);
+        }
+    }
+    async createOrchestrationPlan(cognition) {
+        this.emit('orchestration_planning_started', { cognition });
+        try {
+            const resourceRequirements = this.calculateResourceRequirements(cognition);
+            const strategy = this.selectOrchestrationStrategy(cognition, resourceRequirements);
+            const phases = this.createExecutionPhases(cognition, strategy);
+            const estimatedDuration = this.estimateExecutionDuration(cognition, phases);
+            const fallbackStrategies = this.createFallbackStrategies(cognition, strategy);
+            const monitoringPoints = this.defineMonitoringPoints(phases);
+            const plan = {
+                id: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                strategy,
+                phases,
+                estimatedDuration,
+                resourceRequirements,
+                fallbackStrategies,
+                monitoringPoints
+            };
+            this.activeOrchestrations.set(plan.id, plan);
+            this.emit('orchestration_planning_completed', { cognition, plan });
+            return plan;
+        }
+        catch (error) {
+            this.emit('orchestration_planning_error', { cognition, error: error.message });
+            throw new Error(`Orchestration planning failed: ${error.message}`);
+        }
+    }
+    async executeTaskWithCognition(task) {
+        const startTime = Date.now();
+        this.currentTasks++;
+        this.status = 'busy';
+        this.emit('task_execution_started', { task });
+        try {
+            await logger_1.logger.logTask('info', task.id, this.id, '🧠 Starting cognitive analysis...');
+            const cognition = await this.parseTaskWithCognition(task.description || task.title);
+            await logger_1.logger.logTask('info', task.id, this.id, '🎯 Creating orchestration plan...');
+            const plan = await this.createOrchestrationPlan(cognition);
+            await logger_1.logger.logTask('info', task.id, this.id, '🚀 Starting adaptive execution...');
+            const result = await this.executeWithAdaptiveSupervision(task, cognition, plan);
+            await this.recordOrchestrationOutcome(cognition, plan, result, Date.now() - startTime);
+            this.emit('task_execution_completed', { task, cognition, plan, result });
+            return result;
+        }
+        catch (error) {
+            const errorResult = {
+                taskId: task.id,
+                agentId: this.id,
+                status: 'failed',
+                startTime: new Date(startTime),
+                endTime: new Date(),
+                error: error.message,
+                errorDetails: error
+            };
+            this.emit('task_execution_error', { task, error: error.message });
+            await logger_1.logger.logTask('error', task.id, this.id, 'Task execution failed', {
+                error: error.message
+            });
+            return errorResult;
+        }
+        finally {
+            this.currentTasks--;
+            if (this.currentTasks === 0) {
+                this.status = 'ready';
+            }
+        }
     }
     async executeTask(task) {
         const startTime = Date.now();
@@ -902,6 +1009,365 @@ class UniversalAgent {
         catch (error) {
             await logger_1.logger.logTask('warn', task.id, this.id, `LSP/Context analysis failed: ${error.message}`);
         }
+    }
+    normalizeTask(task) {
+        return task
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[^\w\s\-\.\/]/g, ' ')
+            .replace(/\s+/g, ' ');
+    }
+    identifyIntent(task) {
+        const intentPatterns = [
+            { pattern: /\b(create|crea|build|genera|make|add|aggiungi)\b/i, intent: 'create', confidence: 0.9 },
+            { pattern: /\b(read|leggi|analyze|analizza|examine|esamina|review|rivedi|check|controlla)\b/i, intent: 'analyze', confidence: 0.9 },
+            { pattern: /\b(update|aggiorna|modify|modifica|change|cambia|edit|modifica)\b/i, intent: 'update', confidence: 0.9 },
+            { pattern: /\b(delete|elimina|remove|rimuovi|clean|pulisci)\b/i, intent: 'delete', confidence: 0.9 },
+            { pattern: /\b(test|testa|testing|verify|verifica|validate|valida)\b/i, intent: 'test', confidence: 0.9 },
+            { pattern: /\b(deploy|distribuisci|publish|pubblica|release|rilascia)\b/i, intent: 'deploy', confidence: 0.9 },
+            { pattern: /\b(debug|debugga|fix|sistema|repair|ripara)\b/i, intent: 'debug', confidence: 0.9 },
+            { pattern: /\b(refactor|refactoring|improve|migliora|optimize|ottimizza)\b/i, intent: 'refactor', confidence: 0.9 }
+        ];
+        let bestMatch = { intent: 'analyze', confidence: 0.5, complexity: 'medium' };
+        for (const pattern of intentPatterns) {
+            if (pattern.pattern.test(task)) {
+                if (pattern.confidence > bestMatch.confidence) {
+                    bestMatch = {
+                        intent: pattern.intent,
+                        confidence: pattern.confidence,
+                        complexity: this.determineComplexityFromIntent(pattern.intent)
+                    };
+                }
+            }
+        }
+        const urgency = this.determineUrgency(task);
+        return {
+            primary: bestMatch.intent,
+            secondary: this.extractSecondaryIntents(task, bestMatch.intent),
+            confidence: bestMatch.confidence,
+            complexity: bestMatch.complexity,
+            urgency
+        };
+    }
+    extractEntities(task, intent) {
+        const entities = [];
+        const fileMatches = [...task.matchAll(/(\w+\.(ts|js|tsx|jsx|py|java|cpp|h|css|html|json|yaml|yml|md|txt))/gi)];
+        fileMatches.forEach(match => {
+            entities.push({
+                type: 'file',
+                name: match[0],
+                confidence: 0.9,
+                location: match[0]
+            });
+        });
+        const componentMatches = [...task.matchAll(/(component|hook|context|provider)/gi)];
+        componentMatches.forEach(match => {
+            entities.push({
+                type: 'component',
+                name: match[0],
+                confidence: 0.7
+            });
+        });
+        const apiMatches = [...task.matchAll(/(api|endpoint|route|controller|service)/gi)];
+        apiMatches.forEach(match => {
+            entities.push({
+                type: 'api',
+                name: match[0],
+                confidence: 0.7
+            });
+        });
+        return entities;
+    }
+    analyzeDependencies(task, entities) {
+        const dependencies = [];
+        if (task.includes('react') || task.includes('component')) {
+            dependencies.push('react', 'typescript');
+        }
+        if (task.includes('next') || task.includes('nextjs')) {
+            dependencies.push('next', 'react', 'typescript');
+        }
+        if (task.includes('api') || task.includes('backend')) {
+            dependencies.push('node', 'express');
+        }
+        if (task.includes('test') || task.includes('testing')) {
+            dependencies.push('jest', 'testing-library');
+        }
+        return [...new Set(dependencies)];
+    }
+    determineContexts(task, entities, intent) {
+        const contexts = [];
+        if (entities.some(e => e.type === 'file' || e.type === 'directory')) {
+            contexts.push('filesystem');
+        }
+        if (intent.primary === 'create' || intent.primary === 'update') {
+            contexts.push('development');
+        }
+        if (task.includes('test')) {
+            contexts.push('testing');
+        }
+        if (task.includes('deploy') || task.includes('docker')) {
+            contexts.push('deployment');
+        }
+        return contexts;
+    }
+    estimateComplexity(intent, entities, dependencies) {
+        let complexity = 3;
+        switch (intent.primary) {
+            case 'create':
+                complexity += 2;
+                break;
+            case 'deploy':
+                complexity += 3;
+                break;
+            case 'refactor':
+                complexity += 2;
+                break;
+            default:
+                complexity += 1;
+                break;
+        }
+        complexity += entities.length * 0.5;
+        complexity += dependencies.length * 0.3;
+        return Math.min(Math.max(Math.round(complexity), 1), 10);
+    }
+    inferRequiredCapabilities(intent, entities) {
+        const capabilities = [];
+        switch (intent.primary) {
+            case 'create':
+                capabilities.push('code-generation', 'file-operations');
+                break;
+            case 'analyze':
+                capabilities.push('code-analysis', 'static-analysis');
+                break;
+            case 'test':
+                capabilities.push('testing', 'test-generation');
+                break;
+            case 'deploy':
+                capabilities.push('deployment', 'devops');
+                break;
+        }
+        entities.forEach(entity => {
+            switch (entity.type) {
+                case 'component':
+                    capabilities.push('react', 'frontend');
+                    break;
+                case 'api':
+                    capabilities.push('backend', 'api-development');
+                    break;
+            }
+        });
+        return [...new Set(capabilities)];
+    }
+    suggestOptimalAgents(intent, entities, capabilities) {
+        const suggestedAgents = ['universal-agent'];
+        if (capabilities.includes('react') || capabilities.includes('frontend')) {
+            suggestedAgents.push('react-expert', 'frontend-expert');
+        }
+        if (capabilities.includes('backend')) {
+            suggestedAgents.push('backend-expert');
+        }
+        if (capabilities.includes('testing')) {
+            suggestedAgents.push('testing-expert');
+        }
+        if (capabilities.includes('devops')) {
+            suggestedAgents.push('devops-expert');
+        }
+        return [...new Set(suggestedAgents)];
+    }
+    assessRiskLevel(intent, entities, dependencies) {
+        let riskScore = 0;
+        if (intent.primary === 'delete')
+            riskScore += 3;
+        if (intent.primary === 'deploy')
+            riskScore += 2;
+        if (entities.some(e => e.name?.includes('config') || e.name?.includes('.env'))) {
+            riskScore += 2;
+        }
+        if (riskScore >= 4)
+            return 'high';
+        if (riskScore >= 2)
+            return 'medium';
+        return 'low';
+    }
+    updateCognitiveMemory(cognition) {
+        this.cognitiveMemory.push(cognition);
+        if (this.cognitiveMemory.length > 100) {
+            this.cognitiveMemory = this.cognitiveMemory.slice(-100);
+        }
+        const key = `${cognition.intent.primary}_${cognition.entities.length}_${cognition.dependencies.length}`;
+        this.learningDatabase.set(key, (this.learningDatabase.get(key) || 0) + 1);
+    }
+    calculateResourceRequirements(cognition) {
+        return {
+            agents: Math.min(cognition.estimatedComplexity, 3),
+            tools: cognition.requiredCapabilities.map(cap => this.mapCapabilityToTool(cap)),
+            memory: cognition.estimatedComplexity * 100,
+            complexity: cognition.estimatedComplexity
+        };
+    }
+    selectOrchestrationStrategy(cognition, requirements) {
+        if (cognition.estimatedComplexity <= 3)
+            return 'sequential';
+        if (cognition.estimatedComplexity <= 6)
+            return 'parallel';
+        if (cognition.estimatedComplexity <= 8)
+            return 'hybrid';
+        return 'adaptive';
+    }
+    createExecutionPhases(cognition, strategy) {
+        const phases = [];
+        phases.push({
+            id: `prep_${Date.now()}`,
+            name: 'Preparation',
+            type: 'preparation',
+            agents: ['universal-agent'],
+            tools: ['Read', 'LS'],
+            dependencies: [],
+            estimatedDuration: 30,
+            successCriteria: ['context_loaded', 'workspace_analyzed'],
+            fallbackActions: ['retry_context_load']
+        });
+        phases.push({
+            id: `exec_${Date.now()}`,
+            name: 'Execution',
+            type: 'execution',
+            agents: cognition.suggestedAgents,
+            tools: cognition.requiredCapabilities.map(cap => this.mapCapabilityToTool(cap)),
+            dependencies: cognition.dependencies,
+            estimatedDuration: cognition.estimatedComplexity * 60,
+            successCriteria: ['task_completed', 'no_errors'],
+            fallbackActions: ['retry_with_different_agent', 'simplify_approach']
+        });
+        if (cognition.riskLevel !== 'low') {
+            phases.push({
+                id: `val_${Date.now()}`,
+                name: 'Validation',
+                type: 'validation',
+                agents: ['universal-agent'],
+                tools: ['Bash', 'Read'],
+                dependencies: [],
+                estimatedDuration: 30,
+                successCriteria: ['validation_passed', 'tests_passing'],
+                fallbackActions: ['rollback_changes', 'fix_issues']
+            });
+        }
+        return phases;
+    }
+    estimateExecutionDuration(cognition, phases) {
+        return phases.reduce((total, phase) => total + phase.estimatedDuration, 0);
+    }
+    createFallbackStrategies(cognition, strategy) {
+        const strategies = ['retry_with_simplified_approach', 'break_into_smaller_tasks'];
+        if (strategy === 'parallel') {
+            strategies.push('fallback_to_sequential');
+        }
+        if (cognition.riskLevel === 'high') {
+            strategies.push('request_human_approval');
+        }
+        return strategies;
+    }
+    defineMonitoringPoints(phases) {
+        return phases.map(phase => `${phase.name}_completion`);
+    }
+    async executeWithAdaptiveSupervision(task, cognition, plan) {
+        await logger_1.logger.logTask('info', task.id, this.id, '🧠 Using cognitive orchestration', {
+            cognition: cognition.id,
+            plan: plan.id,
+            strategy: plan.strategy,
+            estimatedDuration: plan.estimatedDuration
+        });
+        const originalMethod = Object.getPrototypeOf(this).executeTask;
+        return await originalMethod.call(this, task);
+    }
+    async recordOrchestrationOutcome(cognition, plan, result, duration) {
+        const outcome = {
+            id: plan.id,
+            cognition,
+            plan,
+            result,
+            duration,
+            success: result.status === 'completed'
+        };
+        this.orchestrationHistory.push(outcome);
+        if (this.orchestrationHistory.length > 50) {
+            this.orchestrationHistory = this.orchestrationHistory.slice(-50);
+        }
+        this.activeOrchestrations.delete(plan.id);
+        await logger_1.logger.logTask('info', result.taskId, this.id, '📊 Orchestration outcome recorded', {
+            success: outcome.success,
+            duration: outcome.duration,
+            strategy: plan.strategy
+        });
+    }
+    determineComplexityFromIntent(intent) {
+        switch (intent) {
+            case 'create':
+            case 'deploy':
+            case 'refactor': return 'high';
+            case 'update':
+            case 'debug':
+            case 'test': return 'medium';
+            default: return 'low';
+        }
+    }
+    determineUrgency(task) {
+        if (/\b(urgent|asap|immediately|critical|emergency)\b/i.test(task))
+            return 'critical';
+        if (/\b(quickly|fast|soon|priority)\b/i.test(task))
+            return 'high';
+        if (/\b(when possible|eventually)\b/i.test(task))
+            return 'low';
+        return 'normal';
+    }
+    extractSecondaryIntents(task, primaryIntent) {
+        const secondary = [];
+        switch (primaryIntent) {
+            case 'create':
+                if (task.includes('test'))
+                    secondary.push('test');
+                if (task.includes('document'))
+                    secondary.push('document');
+                break;
+            case 'update':
+                if (task.includes('test'))
+                    secondary.push('test');
+                if (task.includes('optimize'))
+                    secondary.push('optimize');
+                break;
+        }
+        return secondary;
+    }
+    mapCapabilityToTool(capability) {
+        const mapping = {
+            'file-operations': 'Write',
+            'code-analysis': 'Read',
+            'testing': 'Bash',
+            'deployment': 'Bash',
+            'code-generation': 'Write'
+        };
+        return mapping[capability] || 'Read';
+    }
+    getCognitiveStats() {
+        const totalParsed = this.cognitiveMemory.length;
+        const sortedPatterns = [...this.learningDatabase.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([pattern]) => pattern);
+        return {
+            totalParsed,
+            commonPatterns: sortedPatterns,
+            activeOrchestrations: this.activeOrchestrations.size
+        };
+    }
+    getOrchestrationHistory() {
+        return [...this.orchestrationHistory];
+    }
+    clearCognitiveMemory() {
+        this.cognitiveMemory = [];
+        this.learningDatabase.clear();
+        this.orchestrationHistory = [];
+        this.activeOrchestrations.clear();
     }
 }
 exports.UniversalAgent = UniversalAgent;

@@ -20,6 +20,7 @@ export class Logger {
   private static logLevel: LogLevel = 'info';
   private static logs: LogEntry[] = [];
   private static maxLogs: number = 1000;
+  private static consoleOutputEnabled: boolean = true;
 
   constructor(source: string) {
     this.source = source;
@@ -30,6 +31,13 @@ export class Logger {
    */
   static setLogLevel(level: LogLevel): void {
     Logger.logLevel = level;
+  }
+
+  /**
+   * Enable/disable console output
+   */
+  static setConsoleOutput(enabled: boolean): void {
+    Logger.consoleOutputEnabled = enabled;
   }
 
   /**
@@ -130,7 +138,7 @@ export class Logger {
    */
   debug(message: string, data?: any): void {
     this.addLogEntry('debug', message, data);
-    if (this.shouldLog('debug')) {
+    if (this.shouldLog('debug') && Logger.consoleOutputEnabled) {
       console.log(this.formatMessage('debug', message, data));
     }
   }
@@ -140,7 +148,7 @@ export class Logger {
    */
   info(message: string, data?: any): void {
     this.addLogEntry('info', message, data);
-    if (this.shouldLog('info')) {
+    if (this.shouldLog('info') && Logger.consoleOutputEnabled) {
       console.log(this.formatMessage('info', message, data));
     }
   }
@@ -150,7 +158,7 @@ export class Logger {
    */
   warn(message: string, data?: any): void {
     this.addLogEntry('warn', message, data);
-    if (this.shouldLog('warn')) {
+    if (this.shouldLog('warn') && Logger.consoleOutputEnabled) {
       console.warn(this.formatMessage('warn', message, data));
     }
   }
@@ -160,7 +168,7 @@ export class Logger {
    */
   error(message: string, data?: any): void {
     this.addLogEntry('error', message, data);
-    if (this.shouldLog('error')) {
+    if (this.shouldLog('error') && Logger.consoleOutputEnabled) {
       console.error(this.formatMessage('error', message, data));
     }
   }

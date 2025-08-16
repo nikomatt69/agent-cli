@@ -242,7 +242,7 @@ export class OrchestratorService extends EventEmitter {
     console.log(chalk.gray(`Task: ${task}\\n`));
 
     try {
-      const taskId = await agentService.executeTask(agentName, task);
+      const taskId = await agentService.executeTask(agentName, task, {});
       console.log(chalk.dim(`Task ID: ${taskId}`));
     } catch (error: any) {
       console.log(chalk.red(`❌ Failed to launch agent: ${error.message}`));

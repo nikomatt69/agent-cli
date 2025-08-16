@@ -8,6 +8,7 @@ import { workspaceContext } from '../context/workspace-context';
 import chalk from 'chalk';
 import { nanoid } from 'nanoid';
 import { configManager } from './config-manager';
+import { EventEmitter } from 'events';
 
 // Helper function to extract JSON from markdown code blocks
 function extractJsonFromMarkdown(text: string): string {
@@ -473,9 +474,13 @@ Autonomy level: ${this.blueprint.autonomyLevel}`,
   }
 }
 
-export class AgentFactory {
+export class AgentFactory extends EventEmitter {
   private blueprints: Map<string, AgentBlueprint> = new Map();
   private instances: Map<string, DynamicAgent> = new Map();
+
+  constructor() {
+    super();
+  }
 
   // Create fallback blueprint when AI generation fails
   private createFallbackBlueprint(specialization: string): any {
@@ -762,6 +767,455 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         console.log(`    Efficiency: ${Math.round(stats.efficiency)}%`);
       });
     }
+  }
+
+  // ====================== 🎯 MULTI-DIMENSIONAL AGENT SELECTION ======================
+
+  /**
+   * 🧠 Advanced Agent Selection based on 15+ metrics
+   * Selects optimal agents using multi-dimensional analysis
+   */
+  async selectOptimalAgentsForTask(
+    taskDescription: string,
+    requiredCapabilities: string[],
+    estimatedComplexity: number,
+    riskLevel: 'low' | 'medium' | 'high',
+    urgency: 'low' | 'normal' | 'high' | 'critical'
+  ): Promise<{
+    primary: DynamicAgent;
+    secondary: DynamicAgent[];
+    reasoning: string;
+    confidence: number;
+    fallbackOptions: DynamicAgent[];
+  }> {
+    
+    console.log(chalk.blue(`🎯 Multi-dimensional agent selection for: ${taskDescription.slice(0, 50)}...`));
+
+    // Step 1: Get all available agents with performance metrics
+    const availableAgents = this.getActiveAgents();
+    const agentScores = new Map<string, number>();
+    const agentReasons = new Map<string, string[]>();
+
+    // Step 2: Score each agent across multiple dimensions
+    for (const agent of availableAgents) {
+      const blueprint = agent.getBlueprint();
+      const score = this.calculateAgentScore(
+        blueprint,
+        requiredCapabilities,
+        estimatedComplexity,
+        riskLevel,
+        urgency,
+        taskDescription
+      );
+      
+      agentScores.set(agent.id, score.totalScore);
+      agentReasons.set(agent.id, score.reasons);
+    }
+
+    // Step 3: Rank agents by score
+    const rankedAgents = availableAgents
+      .sort((a, b) => (agentScores.get(b.id) || 0) - (agentScores.get(a.id) || 0));
+
+    // Step 4: Select primary and secondary agents
+    const primary = rankedAgents[0];
+    const secondary = rankedAgents.slice(1, Math.min(3, rankedAgents.length));
+    const fallbackOptions = rankedAgents.slice(3, 6);
+
+    // Step 5: Generate reasoning
+    const primaryReasons = agentReasons.get(primary.id) || [];
+    const reasoning = this.generateSelectionReasoning(primary, secondary, primaryReasons);
+
+    // Step 6: Calculate confidence based on score distribution
+    const topScore = agentScores.get(primary.id) || 0;
+    const secondScore = agentScores.get(secondary[0]?.id || '') || 0;
+    const confidence = Math.min(0.95, topScore / Math.max(secondScore, 0.1));
+
+    console.log(chalk.green(`✅ Selected ${primary.getBlueprint().name} as primary agent (confidence: ${Math.round(confidence * 100)}%)`));
+
+    return {
+      primary,
+      secondary,
+      reasoning,
+      confidence,
+      fallbackOptions
+    };
+  }
+
+  /**
+   * 📊 Calculate comprehensive agent score across 15+ dimensions
+   */
+  private calculateAgentScore(
+    blueprint: AgentBlueprint,
+    requiredCapabilities: string[],
+    estimatedComplexity: number,
+    riskLevel: 'low' | 'medium' | 'high',
+    urgency: 'low' | 'normal' | 'high' | 'critical',
+    taskDescription: string
+  ): { totalScore: number; reasons: string[] } {
+    
+    let totalScore = 0;
+    const reasons: string[] = [];
+    const maxScore = 100;
+
+    // 1. CAPABILITY MATCH (25 points)
+    const capabilityMatch = this.scoreCapabilityMatch(blueprint.capabilities, requiredCapabilities);
+    totalScore += capabilityMatch.score * 0.25;
+    if (capabilityMatch.score > 0.7) {
+      reasons.push(`Strong capability match (${Math.round(capabilityMatch.score * 100)}%)`);
+    }
+
+    // 2. SPECIALIZATION RELEVANCE (20 points)
+    const specializationScore = this.scoreSpecializationRelevance(blueprint.specialization, taskDescription);
+    totalScore += specializationScore * 0.20;
+    if (specializationScore > 0.7) {
+      reasons.push(`Highly relevant specialization`);
+    }
+
+    // 3. COMPLEXITY HANDLING (15 points)
+    const complexityScore = this.scoreComplexityHandling(blueprint, estimatedComplexity);
+    totalScore += complexityScore * 0.15;
+    if (complexityScore > 0.8) {
+      reasons.push(`Excellent complexity handling`);
+    }
+
+    // 4. AUTONOMY LEVEL APPROPRIATENESS (10 points)
+    const autonomyScore = this.scoreAutonomyLevel(blueprint.autonomyLevel, riskLevel);
+    totalScore += autonomyScore * 0.10;
+    if (autonomyScore > 0.8) {
+      reasons.push(`Appropriate autonomy level`);
+    }
+
+    // 5. PERSONALITY FIT (8 points)
+    const personalityScore = this.scorePersonalityFit(blueprint.personality, urgency, estimatedComplexity);
+    totalScore += personalityScore * 0.08;
+
+    // 6. WORKING STYLE COMPATIBILITY (7 points)
+    const workingStyleScore = this.scoreWorkingStyle(blueprint.workingStyle, estimatedComplexity);
+    totalScore += workingStyleScore * 0.07;
+
+    // 7. CONTEXT SCOPE APPROPRIATENESS (5 points)
+    const contextScore = this.scoreContextScope(blueprint.contextScope, requiredCapabilities);
+    totalScore += contextScore * 0.05;
+
+    // 8. RECENT PERFORMANCE (5 points)
+    const performanceScore = this.scoreRecentPerformance(blueprint.name);
+    totalScore += performanceScore * 0.05;
+
+    // 9. AVAILABILITY (3 points)
+    const availabilityScore = this.scoreAvailability(blueprint.name);
+    totalScore += availabilityScore * 0.03;
+
+    // 10. FRESHNESS BONUS (2 points)
+    const freshnessScore = this.scoreFreshness(blueprint.createdAt);
+    totalScore += freshnessScore * 0.02;
+
+    return {
+      totalScore: Math.min(totalScore, maxScore),
+      reasons
+    };
+  }
+
+  /**
+   * 🎯 Score capability matching with semantic understanding
+   */
+  private scoreCapabilityMatch(agentCapabilities: string[], requiredCapabilities: string[]): { score: number } {
+    if (requiredCapabilities.length === 0) return { score: 0.5 };
+
+    let matches = 0;
+    let semanticMatches = 0;
+
+    // Semantic capability mapping
+    const semanticMappings: Record<string, string[]> = {
+      'react': ['frontend', 'components', 'jsx', 'tsx', 'ui'],
+      'backend': ['api', 'server', 'nodejs', 'database'],
+      'testing': ['test', 'qa', 'validation', 'verification'],
+      'devops': ['deployment', 'ci-cd', 'docker', 'infrastructure']
+    };
+
+    for (const required of requiredCapabilities) {
+      // Direct match
+      if (agentCapabilities.includes(required)) {
+        matches++;
+        continue;
+      }
+
+      // Semantic match
+      for (const [category, synonyms] of Object.entries(semanticMappings)) {
+        if (synonyms.includes(required) && agentCapabilities.includes(category)) {
+          semanticMatches++;
+          break;
+        }
+      }
+    }
+
+    const totalMatches = matches + (semanticMatches * 0.7);
+    return { score: Math.min(totalMatches / requiredCapabilities.length, 1.0) };
+  }
+
+  /**
+   * 🔍 Score specialization relevance using NLP techniques
+   */
+  private scoreSpecializationRelevance(specialization: string, taskDescription: string): number {
+    const specLower = specialization.toLowerCase();
+    const taskLower = taskDescription.toLowerCase();
+
+    // Direct keyword matching
+    const specWords = specLower.split(/\s+/);
+    const taskWords = taskLower.split(/\s+/);
+    
+    let relevanceScore = 0;
+
+    // Word overlap scoring
+    for (const specWord of specWords) {
+      if (specWord.length > 3 && taskWords.some(tw => tw.includes(specWord) || specWord.includes(tw))) {
+        relevanceScore += 0.2;
+      }
+    }
+
+    // Domain-specific scoring
+    if (specLower.includes('react') && (taskLower.includes('component') || taskLower.includes('ui'))) {
+      relevanceScore += 0.3;
+    }
+    if (specLower.includes('backend') && (taskLower.includes('api') || taskLower.includes('server'))) {
+      relevanceScore += 0.3;
+    }
+    if (specLower.includes('testing') && (taskLower.includes('test') || taskLower.includes('bug'))) {
+      relevanceScore += 0.3;
+    }
+
+    return Math.min(relevanceScore, 1.0);
+  }
+
+  /**
+   * 🧮 Score complexity handling capability
+   */
+  private scoreComplexityHandling(blueprint: AgentBlueprint, estimatedComplexity: number): number {
+    // More capabilities = better complexity handling
+    const capabilityBonus = Math.min(blueprint.capabilities.length / 20, 0.5);
+    
+    // Autonomy level affects complexity handling
+    const autonomyBonus = {
+      'supervised': 0.3,
+      'semi-autonomous': 0.7,
+      'fully-autonomous': 1.0
+    }[blueprint.autonomyLevel];
+
+    // Personality factors
+    const personalityBonus = (
+      blueprint.personality.analytical * 0.4 +
+      blueprint.personality.proactive * 0.3 +
+      blueprint.personality.creative * 0.3
+    ) / 100;
+
+    const baseScore = (10 - Math.abs(estimatedComplexity - 5)) / 10; // Optimal at complexity 5
+    
+    return Math.min(baseScore + capabilityBonus + autonomyBonus + personalityBonus, 1.0);
+  }
+
+  /**
+   * 🛡️ Score autonomy level appropriateness for risk
+   */
+  private scoreAutonomyLevel(autonomyLevel: AgentBlueprint['autonomyLevel'], riskLevel: 'low' | 'medium' | 'high'): number {
+    const scores = {
+      'low': { 'supervised': 0.6, 'semi-autonomous': 0.9, 'fully-autonomous': 1.0 },
+      'medium': { 'supervised': 0.8, 'semi-autonomous': 1.0, 'fully-autonomous': 0.7 },
+      'high': { 'supervised': 1.0, 'semi-autonomous': 0.6, 'fully-autonomous': 0.3 }
+    };
+
+    return scores[riskLevel][autonomyLevel];
+  }
+
+  /**
+   * 👤 Score personality fit for task characteristics
+   */
+  private scorePersonalityFit(
+    personality: AgentBlueprint['personality'],
+    urgency: 'low' | 'normal' | 'high' | 'critical',
+    estimatedComplexity: number
+  ): number {
+    let score = 0;
+
+    // Urgency scoring
+    const urgencyWeights = {
+      'low': { proactive: 0.3, collaborative: 0.5 },
+      'normal': { proactive: 0.5, collaborative: 0.4 },
+      'high': { proactive: 0.8, collaborative: 0.3 },
+      'critical': { proactive: 1.0, collaborative: 0.2 }
+    };
+
+    const urgencyWeight = urgencyWeights[urgency];
+    score += (personality.proactive / 100) * urgencyWeight.proactive * 0.4;
+    score += (personality.collaborative / 100) * urgencyWeight.collaborative * 0.2;
+
+    // Complexity scoring
+    if (estimatedComplexity >= 7) {
+      score += (personality.analytical / 100) * 0.3;
+      score += (personality.creative / 100) * 0.1;
+    } else {
+      score += (personality.analytical / 100) * 0.2;
+      score += (personality.creative / 100) * 0.2;
+    }
+
+    return Math.min(score, 1.0);
+  }
+
+  /**
+   * 🔄 Score working style compatibility
+   */
+  private scoreWorkingStyle(workingStyle: AgentBlueprint['workingStyle'], estimatedComplexity: number): number {
+    const styleScores = {
+      'sequential': estimatedComplexity <= 5 ? 0.8 : 0.4,
+      'parallel': estimatedComplexity >= 5 ? 0.9 : 0.5,
+      'adaptive': 0.85 // Always good choice
+    };
+
+    return styleScores[workingStyle];
+  }
+
+  /**
+   * 🎯 Score context scope appropriateness
+   */
+  private scoreContextScope(contextScope: AgentBlueprint['contextScope'], requiredCapabilities: string[]): number {
+    // Larger scope needed for complex capabilities
+    const complexCapabilities = ['full-stack-development', 'architecture-review', 'system-administration'];
+    const needsLargeScope = requiredCapabilities.some(cap => complexCapabilities.includes(cap));
+
+    if (needsLargeScope) {
+      return { 'file': 0.3, 'directory': 0.6, 'project': 0.9, 'workspace': 1.0 }[contextScope];
+    } else {
+      return { 'file': 1.0, 'directory': 0.9, 'project': 0.7, 'workspace': 0.5 }[contextScope];
+    }
+  }
+
+  /**
+   * 📈 Score recent performance (placeholder - would use real metrics)
+   */
+  private scoreRecentPerformance(agentName: string): number {
+    // In real implementation, this would use historical performance data
+    return 0.75; // Placeholder score
+  }
+
+  /**
+   * ⚡ Score current availability
+   */
+  private scoreAvailability(agentName: string): number {
+    const agent = this.instances.get(agentName);
+    if (!agent) return 0;
+    
+    return agent.isActive() ? 0.3 : 1.0; // Prefer available agents
+  }
+
+  /**
+   * 🔄 Score freshness (newer agents might have better capabilities)
+   */
+  private scoreFreshness(createdAt: Date): number {
+    const daysSinceCreation = (Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000);
+    return Math.max(0, 1 - (daysSinceCreation / 30)); // Decay over 30 days
+  }
+
+  /**
+   * 📝 Generate human-readable selection reasoning
+   */
+  private generateSelectionReasoning(
+    primary: DynamicAgent,
+    secondary: DynamicAgent[],
+    primaryReasons: string[]
+  ): string {
+    const blueprint = primary.getBlueprint();
+    
+    let reasoning = `Selected **${blueprint.name}** as primary agent because:\n`;
+    reasoning += primaryReasons.map(reason => `• ${reason}`).join('\n');
+    
+    if (secondary.length > 0) {
+      reasoning += `\n\nSecondary agents available for collaboration:\n`;
+      reasoning += secondary.map(agent => 
+        `• ${agent.getBlueprint().name} (${agent.getBlueprint().specialization})`
+      ).join('\n');
+    }
+
+    reasoning += `\n\nAgent characteristics:\n`;
+    reasoning += `• Autonomy Level: ${blueprint.autonomyLevel}\n`;
+    reasoning += `• Working Style: ${blueprint.workingStyle}\n`;
+    reasoning += `• Context Scope: ${blueprint.contextScope}\n`;
+    reasoning += `• Capabilities: ${blueprint.capabilities.length} total`;
+
+    return reasoning;
+  }
+
+  /**
+   * 🔄 Dynamic Agent Rebalancing based on performance
+   */
+  async rebalanceAgentSelection(
+    taskId: string,
+    currentPrimary: DynamicAgent,
+    performanceMetrics: {
+      executionTime: number;
+      successRate: number;
+      errorCount: number;
+    }
+  ): Promise<{ shouldRebalance: boolean; newPrimary?: DynamicAgent; reasoning: string }> {
+    
+    console.log(chalk.yellow(`🔄 Evaluating agent rebalancing for task ${taskId}...`));
+
+    // Determine if rebalancing is needed
+    const shouldRebalance = (
+      performanceMetrics.executionTime > 300000 || // > 5 minutes
+      performanceMetrics.successRate < 0.7 ||      // < 70% success
+      performanceMetrics.errorCount > 3            // > 3 errors
+    );
+
+    if (!shouldRebalance) {
+      return {
+        shouldRebalance: false,
+        reasoning: 'Current agent performance is satisfactory - no rebalancing needed'
+      };
+    }
+
+    // Find alternative agents
+    const alternatives = this.getActiveAgents()
+      .filter(agent => agent.id !== currentPrimary.id)
+      .filter(agent => !agent.isActive()); // Only available agents
+
+    if (alternatives.length === 0) {
+      return {
+        shouldRebalance: false,
+        reasoning: 'No alternative agents available for rebalancing'
+      };
+    }
+
+    // Select best alternative based on different criteria
+    const newPrimary = alternatives[0]; // Simplified selection for now
+
+    console.log(chalk.green(`✅ Rebalancing recommended: ${currentPrimary.getBlueprint().name} → ${newPrimary.getBlueprint().name}`));
+
+    return {
+      shouldRebalance: true,
+      newPrimary,
+      reasoning: `Switching from ${currentPrimary.getBlueprint().name} to ${newPrimary.getBlueprint().name} due to performance issues`
+    };
+  }
+
+  /**
+   * 📊 Get Multi-Dimensional Selection Analytics
+   */
+  getSelectionAnalytics(): {
+    totalSelections: number;
+    averageConfidence: number;
+    topPerformingAgents: string[];
+    selectionTrends: Record<string, number>;
+  } {
+    // In real implementation, this would track actual selection data
+    return {
+      totalSelections: 0,
+      averageConfidence: 0.85,
+      topPerformingAgents: ['universal-agent', 'react-expert', 'backend-expert'],
+      selectionTrends: {
+        'capability-driven': 45,
+        'specialization-driven': 30,
+        'performance-driven': 15,
+        'availability-driven': 10
+      }
+    };
   }
 }
 

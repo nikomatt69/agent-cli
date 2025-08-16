@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
+import { z } from 'zod';
+import { EventEmitter } from 'events';
 
 import {
   Agent,
@@ -20,13 +22,83 @@ import { lspManager } from '../../lsp/lsp-manager';
 import { ContextAwareRAGSystem } from '../../context/context-aware-rag';
 import { AgentTaskSchema, AgentTaskResultSchema } from '../../schemas/core-schemas';
 
+// 🧠 COGNITIVE ORCHESTRATION INTERFACES
+export interface TaskCognition {
+  id: string;
+  originalTask: string;
+  normalizedTask: string;
+  intent: {
+    primary: 'create' | 'read' | 'update' | 'delete' | 'analyze' | 'optimize' | 'deploy' | 'test' | 'debug' | 'refactor';
+    secondary: string[];
+    confidence: number;
+    complexity: 'low' | 'medium' | 'high' | 'extreme';
+    urgency: 'low' | 'normal' | 'high' | 'critical';
+  };
+  entities: Array<{
+    type: 'file' | 'directory' | 'function' | 'class' | 'component' | 'api' | 'database';
+    name: string;
+    confidence: number;
+    location?: string;
+  }>;
+  dependencies: string[];
+  contexts: string[];
+  estimatedComplexity: number;
+  requiredCapabilities: string[];
+  suggestedAgents: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  orchestrationPlan?: OrchestrationPlan;
+}
+
+export interface OrchestrationPlan {
+  id: string;
+  strategy: 'sequential' | 'parallel' | 'hybrid' | 'adaptive';
+  phases: OrchestrationPhase[];
+  estimatedDuration: number;
+  resourceRequirements: {
+    agents: number;
+    tools: string[];
+    memory: number;
+    complexity: number;
+  };
+  fallbackStrategies: string[];
+  monitoringPoints: string[];
+}
+
+export interface OrchestrationPhase {
+  id: string;
+  name: string;
+  type: 'preparation' | 'analysis' | 'execution' | 'validation' | 'cleanup';
+  agents: string[];
+  tools: string[];
+  dependencies: string[];
+  estimatedDuration: number;
+  successCriteria: string[];
+  fallbackActions: string[];
+}
+
+export interface AgentPerformanceMetrics {
+  agentId: string;
+  taskCount: number;
+  successRate: number;
+  averageDuration: number;
+  complexityHandled: number;
+  resourceEfficiency: number;
+  userSatisfaction: number;
+  lastActive: Date;
+  specializations: string[];
+  strengths: string[];
+  weaknesses: string[];
+}
+
 const execAsync = promisify(exec);
 
 /**
- * Universal Agent - All-in-one enterprise agent with complete functionality
+ * 🧠 Universal Agent - Advanced Cognitive Orchestrator
+ * All-in-one enterprise agent with complete functionality + Intelligent Orchestration
  * Combines analysis, generation, review, optimization, React, backend, DevOps, and autonomous capabilities
+ * Now featuring: Cognitive Task Understanding, Multi-Dimensional Agent Selection, Adaptive Supervision
  */
-export class UniversalAgent implements Agent {
+export class UniversalAgent extends EventEmitter implements Agent {
   public readonly id: string;
   public readonly name: string = 'Universal Agent';
   public readonly description: string = 'All-in-one enterprise agent with complete coding, analysis, and autonomous capabilities';
@@ -115,7 +187,22 @@ export class UniversalAgent implements Agent {
     accuracy: 0
   };
 
+  // 🧠 COGNITIVE ORCHESTRATION PROPERTIES
+  private cognitiveMemory: TaskCognition[] = [];
+  private agentPerformanceMetrics: Map<string, AgentPerformanceMetrics> = new Map();
+  private activeOrchestrations: Map<string, OrchestrationPlan> = new Map();
+  private learningDatabase: Map<string, number> = new Map();
+  private orchestrationHistory: Array<{
+    id: string;
+    cognition: TaskCognition;
+    plan: OrchestrationPlan;
+    result: AgentTaskResult;
+    duration: number;
+    success: boolean;
+  }> = [];
+
   constructor(workingDirectory: string = process.cwd()) {
+    super(); // Call EventEmitter constructor
     this.id = nanoid();
     this.workingDirectory = workingDirectory;
     this.contextSystem = new ContextAwareRAGSystem(workingDirectory);
@@ -181,6 +268,175 @@ export class UniversalAgent implements Agent {
       status: this.status,
       guidanceLoaded: this.guidance.length > 0
     });
+  }
+
+  // ====================== 🧠 COGNITIVE ORCHESTRATION METHODS ======================
+
+  /**
+   * 🧠 COGNITIVE TASK PARSING - Advanced NLP Understanding
+   * Converts natural language task into structured cognitive understanding
+   */
+  async parseTaskWithCognition(taskDescription: string): Promise<TaskCognition> {
+    this.emit('cognitive_parsing_started', { task: taskDescription });
+
+    try {
+      // Step 1: Normalize and preprocess
+      const normalizedTask = this.normalizeTask(taskDescription);
+      
+      // Step 2: Extract intent with confidence scoring
+      const intent = this.identifyIntent(normalizedTask);
+      
+      // Step 3: Extract entities with NER
+      const entities = this.extractEntities(normalizedTask, intent);
+      
+      // Step 4: Analyze dependencies
+      const dependencies = this.analyzeDependencies(normalizedTask, entities);
+      
+      // Step 5: Determine contexts
+      const contexts = this.determineContexts(normalizedTask, entities, intent);
+      
+      // Step 6: Estimate complexity
+      const estimatedComplexity = this.estimateComplexity(intent, entities, dependencies);
+      
+      // Step 7: Suggest capabilities and agents
+      const requiredCapabilities = this.inferRequiredCapabilities(intent, entities);
+      const suggestedAgents = this.suggestOptimalAgents(intent, entities, requiredCapabilities);
+      
+      // Step 8: Assess risk level
+      const riskLevel = this.assessRiskLevel(intent, entities, dependencies);
+
+      const cognition: TaskCognition = {
+        id: `cognition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        originalTask: taskDescription,
+        normalizedTask,
+        intent,
+        entities,
+        dependencies,
+        contexts,
+        estimatedComplexity,
+        requiredCapabilities,
+        suggestedAgents,
+        riskLevel
+      };
+
+      // Store in cognitive memory for learning
+      this.updateCognitiveMemory(cognition);
+      
+      this.emit('cognitive_parsing_completed', { cognition });
+      
+      return cognition;
+
+    } catch (error: any) {
+      this.emit('cognitive_parsing_error', { task: taskDescription, error: error.message });
+      throw new Error(`Cognitive parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🎯 STRATEGIC ORCHESTRATION PLANNING - Multi-Dimensional Agent Selection
+   * Creates optimal orchestration plan based on task cognition
+   */
+  async createOrchestrationPlan(cognition: TaskCognition): Promise<OrchestrationPlan> {
+    this.emit('orchestration_planning_started', { cognition });
+
+    try {
+      // Analyze task complexity and resource requirements
+      const resourceRequirements = this.calculateResourceRequirements(cognition);
+      
+      // Select optimal strategy based on task characteristics
+      const strategy = this.selectOrchestrationStrategy(cognition, resourceRequirements);
+      
+      // Create execution phases
+      const phases = this.createExecutionPhases(cognition, strategy);
+      
+      // Estimate duration based on historical data
+      const estimatedDuration = this.estimateExecutionDuration(cognition, phases);
+      
+      // Define fallback strategies
+      const fallbackStrategies = this.createFallbackStrategies(cognition, strategy);
+      
+      // Set monitoring points
+      const monitoringPoints = this.defineMonitoringPoints(phases);
+
+      const plan: OrchestrationPlan = {
+        id: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        strategy,
+        phases,
+        estimatedDuration,
+        resourceRequirements,
+        fallbackStrategies,
+        monitoringPoints
+      };
+
+      // Store active orchestration
+      this.activeOrchestrations.set(plan.id, plan);
+      
+      this.emit('orchestration_planning_completed', { cognition, plan });
+      
+      return plan;
+
+    } catch (error: any) {
+      this.emit('orchestration_planning_error', { cognition, error: error.message });
+      throw new Error(`Orchestration planning failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🚀 ENHANCED TASK EXECUTION with Cognitive Orchestration
+   * Main enhanced executeTask method with full cognitive capabilities
+   */
+  async executeTaskWithCognition(task: AgentTask): Promise<AgentTaskResult> {
+    const startTime = Date.now();
+    this.currentTasks++;
+    this.status = 'busy';
+
+    this.emit('task_execution_started', { task });
+
+    try {
+      // Step 1: 🧠 Cognitive Understanding
+      await logger.logTask('info', task.id, this.id, '🧠 Starting cognitive analysis...');
+      const cognition = await this.parseTaskWithCognition(task.description || task.title);
+
+      // Step 2: 🎯 Strategic Planning
+      await logger.logTask('info', task.id, this.id, '🎯 Creating orchestration plan...');
+      const plan = await this.createOrchestrationPlan(cognition);
+
+      // Step 3: 🚀 Adaptive Execution
+      await logger.logTask('info', task.id, this.id, '🚀 Starting adaptive execution...');
+      const result = await this.executeWithAdaptiveSupervision(task, cognition, plan);
+
+      // Step 4: 📊 Learning & Optimization
+      await this.recordOrchestrationOutcome(cognition, plan, result, Date.now() - startTime);
+
+      this.emit('task_execution_completed', { task, cognition, plan, result });
+
+      return result;
+
+    } catch (error: any) {
+      const errorResult: AgentTaskResult = {
+        taskId: task.id,
+        agentId: this.id,
+        status: 'failed',
+        startTime: new Date(startTime),
+        endTime: new Date(),
+        error: error.message,
+        errorDetails: error
+      };
+
+      this.emit('task_execution_error', { task, error: error.message });
+
+      await logger.logTask('error', task.id, this.id, 'Task execution failed', {
+        error: error.message
+      });
+
+      return errorResult;
+
+    } finally {
+      this.currentTasks--;
+      if (this.currentTasks === 0) {
+        this.status = 'ready';
+      }
+    }
   }
 
   async executeTask(task: AgentTask): Promise<AgentTaskResult> {
@@ -1006,5 +1262,442 @@ export class UniversalAgent implements Agent {
       await logger.logTask('warn', task.id, this.id, 
         `LSP/Context analysis failed: ${error.message}`);
     }
+  }
+
+  // ====================== 🧠 COGNITIVE HELPER METHODS ======================
+
+  private normalizeTask(task: string): string {
+    return task
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\w\s\-\.\/]/g, ' ')
+      .replace(/\s+/g, ' ');
+  }
+
+  private identifyIntent(task: string): TaskCognition['intent'] {
+    // Action word mapping with confidence scoring
+    const intentPatterns = [
+      { pattern: /\b(create|crea|build|genera|make|add|aggiungi)\b/i, intent: 'create', confidence: 0.9 },
+      { pattern: /\b(read|leggi|analyze|analizza|examine|esamina|review|rivedi|check|controlla)\b/i, intent: 'analyze', confidence: 0.9 },
+      { pattern: /\b(update|aggiorna|modify|modifica|change|cambia|edit|modifica)\b/i, intent: 'update', confidence: 0.9 },
+      { pattern: /\b(delete|elimina|remove|rimuovi|clean|pulisci)\b/i, intent: 'delete', confidence: 0.9 },
+      { pattern: /\b(test|testa|testing|verify|verifica|validate|valida)\b/i, intent: 'test', confidence: 0.9 },
+      { pattern: /\b(deploy|distribuisci|publish|pubblica|release|rilascia)\b/i, intent: 'deploy', confidence: 0.9 },
+      { pattern: /\b(debug|debugga|fix|sistema|repair|ripara)\b/i, intent: 'debug', confidence: 0.9 },
+      { pattern: /\b(refactor|refactoring|improve|migliora|optimize|ottimizza)\b/i, intent: 'refactor', confidence: 0.9 }
+    ];
+
+    let bestMatch = { intent: 'analyze', confidence: 0.5, complexity: 'medium' };
+
+    for (const pattern of intentPatterns) {
+      if (pattern.pattern.test(task)) {
+        if (pattern.confidence > bestMatch.confidence) {
+          bestMatch = {
+            intent: pattern.intent,
+            confidence: pattern.confidence,
+            complexity: this.determineComplexityFromIntent(pattern.intent)
+          };
+        }
+      }
+    }
+
+    // Determine urgency from task language
+    const urgency = this.determineUrgency(task);
+
+    return {
+      primary: bestMatch.intent as any,
+      secondary: this.extractSecondaryIntents(task, bestMatch.intent),
+      confidence: bestMatch.confidence,
+      complexity: bestMatch.complexity as any,
+      urgency
+    };
+  }
+
+  private extractEntities(task: string, intent: TaskCognition['intent']): TaskCognition['entities'] {
+    const entities: TaskCognition['entities'] = [];
+    
+    // File patterns
+    const fileMatches = [...task.matchAll(/(\w+\.(ts|js|tsx|jsx|py|java|cpp|h|css|html|json|yaml|yml|md|txt))/gi)];
+    fileMatches.forEach(match => {
+      entities.push({
+        type: 'file',
+        name: match[0],
+        confidence: 0.9,
+        location: match[0]
+      });
+    });
+
+    // Component patterns
+    const componentMatches = [...task.matchAll(/(component|hook|context|provider)/gi)];
+    componentMatches.forEach(match => {
+      entities.push({
+        type: 'component',
+        name: match[0],
+        confidence: 0.7
+      });
+    });
+
+    // API patterns
+    const apiMatches = [...task.matchAll(/(api|endpoint|route|controller|service)/gi)];
+    apiMatches.forEach(match => {
+      entities.push({
+        type: 'api',
+        name: match[0],
+        confidence: 0.7
+      });
+    });
+
+    return entities;
+  }
+
+  private analyzeDependencies(task: string, entities: TaskCognition['entities']): string[] {
+    const dependencies: string[] = [];
+    
+    // Framework dependencies
+    if (task.includes('react') || task.includes('component')) {
+      dependencies.push('react', 'typescript');
+    }
+    if (task.includes('next') || task.includes('nextjs')) {
+      dependencies.push('next', 'react', 'typescript');
+    }
+    if (task.includes('api') || task.includes('backend')) {
+      dependencies.push('node', 'express');
+    }
+    if (task.includes('test') || task.includes('testing')) {
+      dependencies.push('jest', 'testing-library');
+    }
+
+    return [...new Set(dependencies)];
+  }
+
+  private determineContexts(task: string, entities: TaskCognition['entities'], intent: TaskCognition['intent']): string[] {
+    const contexts: string[] = [];
+    
+    if (entities.some(e => e.type === 'file' || e.type === 'directory')) {
+      contexts.push('filesystem');
+    }
+    if (intent.primary === 'create' || intent.primary === 'update') {
+      contexts.push('development');
+    }
+    if (task.includes('test')) {
+      contexts.push('testing');
+    }
+    if (task.includes('deploy') || task.includes('docker')) {
+      contexts.push('deployment');
+    }
+
+    return contexts;
+  }
+
+  private estimateComplexity(intent: TaskCognition['intent'], entities: TaskCognition['entities'], dependencies: string[]): number {
+    let complexity = 3; // Base complexity
+    
+    // Intent complexity
+    switch (intent.primary) {
+      case 'create': complexity += 2; break;
+      case 'deploy': complexity += 3; break;
+      case 'refactor': complexity += 2; break;
+      default: complexity += 1; break;
+    }
+    
+    // Entity and dependency complexity
+    complexity += entities.length * 0.5;
+    complexity += dependencies.length * 0.3;
+    
+    return Math.min(Math.max(Math.round(complexity), 1), 10);
+  }
+
+  private inferRequiredCapabilities(intent: TaskCognition['intent'], entities: TaskCognition['entities']): string[] {
+    const capabilities: string[] = [];
+    
+    // Intent-based capabilities
+    switch (intent.primary) {
+      case 'create':
+        capabilities.push('code-generation', 'file-operations');
+        break;
+      case 'analyze':
+        capabilities.push('code-analysis', 'static-analysis');
+        break;
+      case 'test':
+        capabilities.push('testing', 'test-generation');
+        break;
+      case 'deploy':
+        capabilities.push('deployment', 'devops');
+        break;
+    }
+    
+    // Entity-based capabilities
+    entities.forEach(entity => {
+      switch (entity.type) {
+        case 'component':
+          capabilities.push('react', 'frontend');
+          break;
+        case 'api':
+          capabilities.push('backend', 'api-development');
+          break;
+      }
+    });
+    
+    return [...new Set(capabilities)];
+  }
+
+  private suggestOptimalAgents(intent: TaskCognition['intent'], entities: TaskCognition['entities'], capabilities: string[]): string[] {
+    const suggestedAgents: string[] = ['universal-agent']; // Always include self
+    
+    // Specialized agent suggestions
+    if (capabilities.includes('react') || capabilities.includes('frontend')) {
+      suggestedAgents.push('react-expert', 'frontend-expert');
+    }
+    if (capabilities.includes('backend')) {
+      suggestedAgents.push('backend-expert');
+    }
+    if (capabilities.includes('testing')) {
+      suggestedAgents.push('testing-expert');
+    }
+    if (capabilities.includes('devops')) {
+      suggestedAgents.push('devops-expert');
+    }
+    
+    return [...new Set(suggestedAgents)];
+  }
+
+  private assessRiskLevel(intent: TaskCognition['intent'], entities: TaskCognition['entities'], dependencies: string[]): 'low' | 'medium' | 'high' {
+    let riskScore = 0;
+    
+    // Intent risk
+    if (intent.primary === 'delete') riskScore += 3;
+    if (intent.primary === 'deploy') riskScore += 2;
+    
+    // Entity risk
+    if (entities.some(e => e.name?.includes('config') || e.name?.includes('.env'))) {
+      riskScore += 2;
+    }
+    
+    if (riskScore >= 4) return 'high';
+    if (riskScore >= 2) return 'medium';
+    return 'low';
+  }
+
+  private updateCognitiveMemory(cognition: TaskCognition): void {
+    this.cognitiveMemory.push(cognition);
+    
+    // Keep only last 100 cognitions for memory efficiency
+    if (this.cognitiveMemory.length > 100) {
+      this.cognitiveMemory = this.cognitiveMemory.slice(-100);
+    }
+    
+    // Update learning database
+    const key = `${cognition.intent.primary}_${cognition.entities.length}_${cognition.dependencies.length}`;
+    this.learningDatabase.set(key, (this.learningDatabase.get(key) || 0) + 1);
+  }
+
+  // ====================== 🎯 ORCHESTRATION HELPER METHODS ======================
+
+  private calculateResourceRequirements(cognition: TaskCognition): OrchestrationPlan['resourceRequirements'] {
+    return {
+      agents: Math.min(cognition.estimatedComplexity, 3),
+      tools: cognition.requiredCapabilities.map(cap => this.mapCapabilityToTool(cap)),
+      memory: cognition.estimatedComplexity * 100,
+      complexity: cognition.estimatedComplexity
+    };
+  }
+
+  private selectOrchestrationStrategy(cognition: TaskCognition, requirements: OrchestrationPlan['resourceRequirements']): OrchestrationPlan['strategy'] {
+    if (cognition.estimatedComplexity <= 3) return 'sequential';
+    if (cognition.estimatedComplexity <= 6) return 'parallel';
+    if (cognition.estimatedComplexity <= 8) return 'hybrid';
+    return 'adaptive';
+  }
+
+  private createExecutionPhases(cognition: TaskCognition, strategy: OrchestrationPlan['strategy']): OrchestrationPhase[] {
+    const phases: OrchestrationPhase[] = [];
+    
+    // Always start with preparation
+    phases.push({
+      id: `prep_${Date.now()}`,
+      name: 'Preparation',
+      type: 'preparation',
+      agents: ['universal-agent'],
+      tools: ['Read', 'LS'],
+      dependencies: [],
+      estimatedDuration: 30,
+      successCriteria: ['context_loaded', 'workspace_analyzed'],
+      fallbackActions: ['retry_context_load']
+    });
+
+    // Add execution phase based on intent
+    phases.push({
+      id: `exec_${Date.now()}`,
+      name: 'Execution',
+      type: 'execution',
+      agents: cognition.suggestedAgents,
+      tools: cognition.requiredCapabilities.map(cap => this.mapCapabilityToTool(cap)),
+      dependencies: cognition.dependencies,
+      estimatedDuration: cognition.estimatedComplexity * 60,
+      successCriteria: ['task_completed', 'no_errors'],
+      fallbackActions: ['retry_with_different_agent', 'simplify_approach']
+    });
+
+    // Add validation phase if needed
+    if (cognition.riskLevel !== 'low') {
+      phases.push({
+        id: `val_${Date.now()}`,
+        name: 'Validation',
+        type: 'validation',
+        agents: ['universal-agent'],
+        tools: ['Bash', 'Read'],
+        dependencies: [],
+        estimatedDuration: 30,
+        successCriteria: ['validation_passed', 'tests_passing'],
+        fallbackActions: ['rollback_changes', 'fix_issues']
+      });
+    }
+
+    return phases;
+  }
+
+  private estimateExecutionDuration(cognition: TaskCognition, phases: OrchestrationPhase[]): number {
+    return phases.reduce((total, phase) => total + phase.estimatedDuration, 0);
+  }
+
+  private createFallbackStrategies(cognition: TaskCognition, strategy: OrchestrationPlan['strategy']): string[] {
+    const strategies = ['retry_with_simplified_approach', 'break_into_smaller_tasks'];
+    
+    if (strategy === 'parallel') {
+      strategies.push('fallback_to_sequential');
+    }
+    if (cognition.riskLevel === 'high') {
+      strategies.push('request_human_approval');
+    }
+    
+    return strategies;
+  }
+
+  private defineMonitoringPoints(phases: OrchestrationPhase[]): string[] {
+    return phases.map(phase => `${phase.name}_completion`);
+  }
+
+  private async executeWithAdaptiveSupervision(task: AgentTask, cognition: TaskCognition, plan: OrchestrationPlan): Promise<AgentTaskResult> {
+    // For now, delegate to existing executeTask logic but with enhanced logging
+    await logger.logTask('info', task.id, this.id, '🧠 Using cognitive orchestration', {
+      cognition: cognition.id,
+      plan: plan.id,
+      strategy: plan.strategy,
+      estimatedDuration: plan.estimatedDuration
+    });
+
+    // Use the original executeTask but with enhanced context
+    const originalMethod = Object.getPrototypeOf(this).executeTask;
+    return await originalMethod.call(this, task);
+  }
+
+  private async recordOrchestrationOutcome(cognition: TaskCognition, plan: OrchestrationPlan, result: AgentTaskResult, duration: number): Promise<void> {
+    const outcome = {
+      id: plan.id,
+      cognition,
+      plan,
+      result,
+      duration,
+      success: result.status === 'completed'
+    };
+
+    this.orchestrationHistory.push(outcome);
+    
+    // Keep only last 50 orchestrations
+    if (this.orchestrationHistory.length > 50) {
+      this.orchestrationHistory = this.orchestrationHistory.slice(-50);
+    }
+
+    // Remove from active orchestrations
+    this.activeOrchestrations.delete(plan.id);
+
+    await logger.logTask('info', result.taskId, this.id, '📊 Orchestration outcome recorded', {
+      success: outcome.success,
+      duration: outcome.duration,
+      strategy: plan.strategy
+    });
+  }
+
+  // ====================== 🔧 UTILITY HELPER METHODS ======================
+
+  private determineComplexityFromIntent(intent: string): string {
+    switch (intent) {
+      case 'create': case 'deploy': case 'refactor': return 'high';
+      case 'update': case 'debug': case 'test': return 'medium';
+      default: return 'low';
+    }
+  }
+
+  private determineUrgency(task: string): 'low' | 'normal' | 'high' | 'critical' {
+    if (/\b(urgent|asap|immediately|critical|emergency)\b/i.test(task)) return 'critical';
+    if (/\b(quickly|fast|soon|priority)\b/i.test(task)) return 'high';
+    if (/\b(when possible|eventually)\b/i.test(task)) return 'low';
+    return 'normal';
+  }
+
+  private extractSecondaryIntents(task: string, primaryIntent: string): string[] {
+    const secondary: string[] = [];
+    
+    switch (primaryIntent) {
+      case 'create':
+        if (task.includes('test')) secondary.push('test');
+        if (task.includes('document')) secondary.push('document');
+        break;
+      case 'update':
+        if (task.includes('test')) secondary.push('test');
+        if (task.includes('optimize')) secondary.push('optimize');
+        break;
+    }
+    
+    return secondary;
+  }
+
+  private mapCapabilityToTool(capability: string): string {
+    const mapping: Record<string, string> = {
+      'file-operations': 'Write',
+      'code-analysis': 'Read',
+      'testing': 'Bash',
+      'deployment': 'Bash',
+      'code-generation': 'Write'
+    };
+    
+    return mapping[capability] || 'Read';
+  }
+
+  // ====================== 📊 PUBLIC COGNITIVE API ======================
+
+  /**
+   * Get cognitive learning statistics
+   */
+  public getCognitiveStats(): { totalParsed: number; commonPatterns: string[]; activeOrchestrations: number } {
+    const totalParsed = this.cognitiveMemory.length;
+    const sortedPatterns = [...this.learningDatabase.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([pattern]) => pattern);
+    
+    return {
+      totalParsed,
+      commonPatterns: sortedPatterns,
+      activeOrchestrations: this.activeOrchestrations.size
+    };
+  }
+
+  /**
+   * Get orchestration history for analysis
+   */
+  public getOrchestrationHistory(): typeof this.orchestrationHistory {
+    return [...this.orchestrationHistory];
+  }
+
+  /**
+   * Clear cognitive memory and learning data
+   */
+  public clearCognitiveMemory(): void {
+    this.cognitiveMemory = [];
+    this.learningDatabase.clear();
+    this.orchestrationHistory = [];
+    this.activeOrchestrations.clear();
   }
 }

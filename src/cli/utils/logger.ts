@@ -92,6 +92,13 @@ export class Logger {
   }
 
   /**
+   * Enable/disable console output
+   */
+  setConsoleOutput(enabled: boolean): void {
+    this.config.enableConsole = enabled;
+  }
+
+  /**
    * Log an error message
    */
   async error(message: string, context?: Record<string, any>, error?: Error): Promise<void> {

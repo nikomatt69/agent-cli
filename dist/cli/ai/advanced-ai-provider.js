@@ -32,6 +32,41 @@ const smart_docs_tool_1 = require("../tools/smart-docs-tool");
 const docs_request_tool_1 = require("../tools/docs-request-tool");
 const validator_manager_1 = require("../core/validator-manager");
 const performance_optimizer_2 = require("../core/performance-optimizer");
+const CommandSchema = zod_1.z.object({
+    type: zod_1.z.enum(['npm', 'bash', 'git', 'docker', 'node', 'build', 'test', 'lint']),
+    command: zod_1.z.string().min(1).max(500),
+    args: zod_1.z.array(zod_1.z.string()).optional(),
+    workingDir: zod_1.z.string().optional(),
+    description: zod_1.z.string().min(5).max(200),
+    safety: zod_1.z.enum(['safe', 'moderate', 'risky']),
+    requiresApproval: zod_1.z.boolean().default(false),
+    estimatedDuration: zod_1.z.number().min(1).max(3600).optional(),
+    dependencies: zod_1.z.array(zod_1.z.string()).optional(),
+    expectedOutputPattern: zod_1.z.string().optional()
+});
+const PackageSearchResult = zod_1.z.object({
+    name: zod_1.z.string(),
+    version: zod_1.z.string(),
+    description: zod_1.z.string(),
+    downloads: zod_1.z.number().optional(),
+    verified: zod_1.z.boolean().default(false),
+    lastUpdated: zod_1.z.string().optional(),
+    repository: zod_1.z.string().optional(),
+    confidence: zod_1.z.number().min(0).max(1)
+});
+const CommandExecutionResult = zod_1.z.object({
+    success: zod_1.z.boolean(),
+    output: zod_1.z.string(),
+    error: zod_1.z.string().optional(),
+    duration: zod_1.z.number(),
+    command: CommandSchema,
+    timestamp: zod_1.z.date(),
+    workspaceState: zod_1.z.object({
+        filesCreated: zod_1.z.array(zod_1.z.string()).optional(),
+        filesModified: zod_1.z.array(zod_1.z.string()).optional(),
+        packagesInstalled: zod_1.z.array(zod_1.z.string()).optional()
+    }).optional()
+});
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class AdvancedAIProvider {
     generateWithTools(planningMessages) {
@@ -112,10 +147,19 @@ class AdvancedAIProvider {
                 content: `[Conversation truncated: ${skippedCount} older messages removed to fit context limit. Total original: ${currentTokens} tokens, truncated to: ~${this.estimateMessagesTokens(truncatedMessages)} tokens]`
             });
         }
-        const finalTokens = this.estimateMessagesTokens(truncatedMessages);
         return truncatedMessages;
     }
+    estimateToolCallTokens(toolCall) {
+        const toolName = toolCall.name || 'unknown';
+        const args = toolCall.args || {};
+        const argsStr = JSON.stringify(args);
+        return Math.ceil((toolName.length + argsStr.length) / 4) + 100;
+    }
     constructor(optimizationConfig) {
+        this.commandHistory = [];
+        this.packageCache = new Map();
+        this.commandTemplates = new Map();
+        this.streamSilentMode = false;
         this.workingDirectory = process.cwd();
         this.executionContext = new Map();
         this.enhancedContext = new Map();
@@ -726,6 +770,15 @@ Respond in a helpful, professional manner with clear explanations and actionable
             yield { type: 'start', content: 'Initializing autonomous AI assistant...' };
             const originalTokens = this.estimateMessagesTokens(messages);
             const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
+            const globalNikCLI = global.__nikcli;
+            if (globalNikCLI && globalNikCLI.manageToolchainTokens) {
+                const estimatedToolchainTokens = Math.max(originalTokens, truncatedTokens) * 2;
+                const canProceed = globalNikCLI.manageToolchainTokens('streamChat', estimatedToolchainTokens);
+                if (!canProceed) {
+                    yield { type: 'thinking', content: '🛡️ Token limit reached - clearing context and continuing...' };
+                    globalNikCLI.clearToolchainContext('streamChat');
+                }
+            }
             const tokenLimit = 150000;
             const isAnalysisRequest = lastUserMessage && typeof lastUserMessage.content === 'string' &&
                 (lastUserMessage.content.toLowerCase().includes('analizza') ||
@@ -803,6 +856,15 @@ Respond in a helpful, professional manner with clear explanations and actionable
                         case 'tool-call':
                             toolCallCount++;
                             currentToolCalls.push(delta);
+                            const globalNikCLI = global.__nikcli;
+                            if (globalNikCLI && globalNikCLI.manageToolchainTokens) {
+                                const toolTokens = this.estimateToolCallTokens(delta);
+                                const canProceed = globalNikCLI.manageToolchainTokens(delta.toolName, toolTokens);
+                                if (!canProceed) {
+                                    yield { type: 'thinking', content: `🛡️ Token limit for ${delta.toolName} - clearing context...` };
+                                    globalNikCLI.clearToolchainContext(delta.toolName);
+                                }
+                            }
                             this.toolCallHistory.push({
                                 toolName: delta.toolName,
                                 args: delta.args,
@@ -1730,6 +1792,577 @@ Requirements:
         summary += `- Try alternative approaches or tools not yet used\n`;
         summary += `\n💡 **How to Continue:** Please provide more specific guidance, narrow the scope, or try a different approach based on the recommendations above. Consider breaking your request into smaller, more focused tasks.`;
         return this.truncateForPrompt(summary, 800);
+    }
+    async *generateWithCognition(messages, cognition) {
+        try {
+            yield {
+                type: 'start',
+                metadata: {
+                    method: 'generateWithCognition',
+                    hasCognition: !!cognition,
+                    cognitionId: cognition?.id
+                }
+            };
+            const optimizedMessages = cognition
+                ? this.optimizePromptWithCognition(messages, cognition)
+                : messages;
+            yield {
+                type: 'thinking',
+                content: cognition
+                    ? `🧠 Using cognitive understanding: ${cognition.intent.primary} task with ${cognition.estimatedComplexity}/10 complexity`
+                    : '🧠 Processing without cognitive context'
+            };
+            const streamGen = this.streamChatWithFullAutonomy(optimizedMessages);
+            for await (const event of streamGen) {
+                if (event.type === 'text_delta' && event.content && cognition) {
+                    event.content = this.adaptResponseToCognition(event.content, cognition);
+                }
+                if (event.type === 'tool_call' && cognition) {
+                    event.metadata = {
+                        ...event.metadata,
+                        cognition: {
+                            intent: cognition.intent.primary,
+                            complexity: cognition.estimatedComplexity,
+                            riskLevel: cognition.riskLevel
+                        }
+                    };
+                }
+                yield event;
+            }
+            yield {
+                type: 'complete',
+                metadata: {
+                    method: 'generateWithCognition',
+                    cognitionApplied: !!cognition
+                }
+            };
+        }
+        catch (error) {
+            yield {
+                type: 'error',
+                error: `Cognitive generation failed: ${error.message}`,
+                metadata: { method: 'generateWithCognition' }
+            };
+        }
+    }
+    optimizePromptWithPlan(messages, plan) {
+        if (!plan)
+            return messages;
+        const optimizedMessages = [...messages];
+        let systemMessage = optimizedMessages.find(m => m.role === 'system');
+        if (!systemMessage) {
+            systemMessage = { role: 'system', content: '' };
+            optimizedMessages.unshift(systemMessage);
+        }
+        const orchestrationContext = `
+
+🎯 ORCHESTRATION CONTEXT:
+- Strategy: ${plan.strategy}
+- Estimated Duration: ${plan.estimatedDuration}s
+- Phases: ${plan.phases.length} (${plan.phases.map(p => p.name).join(' → ')})
+- Required Tools: ${plan.phases.flatMap(p => p.tools).join(', ')}
+- Risk Level: Based on ${plan.fallbackStrategies.length} fallback strategies
+
+Focus on the current execution phase and use the orchestration strategy for optimal results.`;
+        systemMessage.content += orchestrationContext;
+        return optimizedMessages;
+    }
+    adaptResponseToCognition(response, cognition) {
+        if (!cognition)
+            return response;
+        let adaptedResponse = response;
+        switch (cognition.intent.primary) {
+            case 'create':
+                adaptedResponse = adaptedResponse.replace(/analyze|review|check/gi, 'create');
+                break;
+            case 'analyze':
+                adaptedResponse = adaptedResponse.replace(/create|build|make/gi, 'analyze');
+                break;
+            case 'debug':
+                adaptedResponse = adaptedResponse.replace(/create|analyze/gi, 'fix');
+                break;
+        }
+        if (cognition.intent.urgency === 'critical') {
+            adaptedResponse = '🚨 URGENT: ' + adaptedResponse;
+        }
+        else if (cognition.intent.urgency === 'high') {
+            adaptedResponse = '⚡ HIGH PRIORITY: ' + adaptedResponse;
+        }
+        if (cognition.estimatedComplexity >= 8) {
+            adaptedResponse = '🔥 COMPLEX TASK: ' + adaptedResponse;
+        }
+        if (cognition.riskLevel === 'high') {
+            adaptedResponse = '⚠️ HIGH RISK - ' + adaptedResponse;
+        }
+        return adaptedResponse;
+    }
+    optimizePromptWithCognition(messages, cognition) {
+        const optimizedMessages = [...messages];
+        let systemMessage = optimizedMessages.find(m => m.role === 'system');
+        if (!systemMessage) {
+            systemMessage = { role: 'system', content: '' };
+            optimizedMessages.unshift(systemMessage);
+        }
+        const cognitiveContext = `
+
+🧠 COGNITIVE UNDERSTANDING:
+- Primary Intent: ${cognition.intent.primary} (confidence: ${Math.round(cognition.intent.confidence * 100)}%)
+- Complexity Level: ${cognition.estimatedComplexity}/10
+- Risk Assessment: ${cognition.riskLevel}
+- Urgency: ${cognition.intent.urgency}
+- Required Capabilities: ${cognition.requiredCapabilities.join(', ')}
+- Detected Entities: ${cognition.entities.map(e => `${e.type}:${e.name}`).join(', ')}
+- Dependencies: ${cognition.dependencies.join(', ')}
+- Contexts: ${cognition.contexts.join(', ')}
+
+Use this cognitive understanding to provide more targeted and effective responses.`;
+        systemMessage.content += cognitiveContext;
+        const lastUserMessage = optimizedMessages.filter(m => m.role === 'user').pop();
+        if (lastUserMessage && cognition.entities.length > 0) {
+            const entityContext = `\n\n[Detected entities: ${cognition.entities.map(e => e.name).join(', ')}]`;
+            lastUserMessage.content += entityContext;
+        }
+        return optimizedMessages;
+    }
+    getCognitiveStats() {
+        return {
+            totalCognitiveRequests: 0,
+            averageComplexity: 5.0,
+            commonIntents: ['analyze', 'create', 'update'],
+            riskDistribution: { low: 60, medium: 30, high: 10 }
+        };
+    }
+    configureCognition(config) {
+        console.log('🧠 Cognitive configuration updated:', config);
+    }
+    async searchPackagesIntelligently(query, context = 'general') {
+        const cacheKey = `${query}_${context}`;
+        if (this.packageCache.has(cacheKey)) {
+            return this.packageCache.get(cacheKey);
+        }
+        try {
+            if (!this.streamSilentMode) {
+                console.log(chalk_1.default.blue(`🔍 Searching packages for: ${query} (context: ${context})`));
+            }
+            const searchCommand = `npm search ${query} --json --long`;
+            const { stdout } = await execAsync(searchCommand);
+            let rawResults = [];
+            try {
+                rawResults = JSON.parse(stdout);
+            }
+            catch {
+                rawResults = [];
+            }
+            const processedResults = rawResults
+                .slice(0, 10)
+                .map(pkg => this.scorePackageRelevance(pkg, query, context))
+                .filter(pkg => pkg.confidence > 0.3)
+                .sort((a, b) => b.confidence - a.confidence);
+            const validatedResults = processedResults.map(result => {
+                try {
+                    return PackageSearchResult.parse(result);
+                }
+                catch {
+                    return null;
+                }
+            }).filter(Boolean);
+            this.packageCache.set(cacheKey, validatedResults);
+            if (!this.streamSilentMode) {
+                console.log(chalk_1.default.green(`✅ Found ${validatedResults.length} relevant packages`));
+            }
+            return validatedResults;
+        }
+        catch (error) {
+            if (!this.streamSilentMode) {
+                console.log(chalk_1.default.red(`❌ Package search failed: ${error.message}`));
+            }
+            return [];
+        }
+    }
+    buildIntelligentCommand(intent, context = {}) {
+        let command = {
+            workingDir: process.cwd(),
+            safety: 'safe',
+            requiresApproval: false
+        };
+        switch (intent) {
+            case 'install':
+                command = this.buildInstallCommand(context);
+                break;
+            case 'build':
+                command = this.buildBuildCommand(context);
+                break;
+            case 'test':
+                command = this.buildTestCommand(context);
+                break;
+            case 'lint':
+                command = this.buildLintCommand(context);
+                break;
+            case 'deploy':
+                command = this.buildDeployCommand(context);
+                break;
+            case 'analyze':
+                command = this.buildAnalyzeCommand(context);
+                break;
+        }
+        try {
+            return CommandSchema.parse(command);
+        }
+        catch (error) {
+            return CommandSchema.parse({
+                type: 'bash',
+                command: 'echo "Command validation failed"',
+                description: 'Fallback safe command',
+                safety: 'safe',
+                requiresApproval: true
+            });
+        }
+    }
+    async executeCommandSafely(command) {
+        const startTime = Date.now();
+        if (!this.streamSilentMode) {
+            console.log(chalk_1.default.blue(`⚡ Executing: ${command.description}`));
+        }
+        try {
+            const safetyCheck = this.validateCommandSafety(command);
+            if (!safetyCheck.safe) {
+                throw new Error(`Safety check failed: ${safetyCheck.reason}`);
+            }
+            const timeout = command.estimatedDuration ? command.estimatedDuration * 1000 : 30000;
+            const fullCommand = command.args
+                ? `${command.command} ${command.args.join(' ')}`
+                : command.command;
+            const { stdout, stderr } = await Promise.race([
+                execAsync(fullCommand, {
+                    cwd: command.workingDir || process.cwd(),
+                    timeout
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Command timeout')), timeout))
+            ]);
+            const duration = Date.now() - startTime;
+            const workspaceState = await this.analyzeWorkspaceChanges(command);
+            const result = {
+                success: true,
+                output: stdout || '',
+                error: stderr || undefined,
+                duration,
+                command,
+                timestamp: new Date(),
+                workspaceState
+            };
+            const validatedResult = CommandExecutionResult.parse(result);
+            this.commandHistory.push(validatedResult);
+            if (!this.streamSilentMode) {
+                console.log(chalk_1.default.green(`✅ Command completed in ${duration}ms`));
+            }
+            return validatedResult;
+        }
+        catch (error) {
+            const duration = Date.now() - startTime;
+            const errorResult = {
+                success: false,
+                output: '',
+                error: error.message,
+                duration,
+                command,
+                timestamp: new Date()
+            };
+            const validatedErrorResult = CommandExecutionResult.parse(errorResult);
+            this.commandHistory.push(validatedErrorResult);
+            if (!this.streamSilentMode) {
+                console.log(chalk_1.default.red(`❌ Command failed: ${error.message}`));
+            }
+            return validatedErrorResult;
+        }
+    }
+    async *streamCommandExecution(command) {
+        try {
+            this.streamSilentMode = true;
+            yield {
+                type: 'start',
+                content: `🔧 Preparing: ${command.description}`,
+                metadata: {
+                    command: command.command,
+                    safety: command.safety,
+                    estimatedDuration: command.estimatedDuration
+                }
+            };
+            if (command.type === 'npm' && command.command.includes('install')) {
+                yield {
+                    type: 'thinking',
+                    content: '📦 Verifying package integrity and compatibility...'
+                };
+            }
+            const result = await this.executeCommandSafely(command);
+            if (result.success) {
+                yield {
+                    type: 'tool_result',
+                    content: `✅ ${command.description} completed successfully`,
+                    toolName: command.type,
+                    toolResult: {
+                        success: true,
+                        duration: `${result.duration}ms`,
+                        output: result.output ? this.cleanCommandOutput(result.output) : undefined
+                    }
+                };
+                if (result.workspaceState) {
+                    const changes = this.summarizeWorkspaceChanges(result.workspaceState);
+                    if (changes) {
+                        yield {
+                            type: 'text_delta',
+                            content: `\n📁 Workspace changes: ${changes}`
+                        };
+                    }
+                }
+            }
+            else {
+                yield {
+                    type: 'tool_result',
+                    content: `❌ ${command.description} failed`,
+                    toolName: command.type,
+                    toolResult: {
+                        success: false,
+                        error: result.error,
+                        duration: `${result.duration}ms`
+                    }
+                };
+            }
+            yield {
+                type: 'complete',
+                metadata: { commandExecuted: true, success: result.success }
+            };
+        }
+        catch (error) {
+            yield {
+                type: 'error',
+                error: `Command execution failed: ${error.message}`,
+                metadata: { command: command.command }
+            };
+        }
+        finally {
+            this.streamSilentMode = false;
+        }
+    }
+    async suggestCommands(projectContext, userIntent) {
+        const suggestions = [];
+        const lowerIntent = userIntent.toLowerCase();
+        if (projectContext.frameworks?.includes('react') || lowerIntent.includes('react')) {
+            if (lowerIntent.includes('component') || lowerIntent.includes('ui')) {
+                suggestions.push(this.buildIntelligentCommand('install', {
+                    packages: ['@types/react', 'prop-types'],
+                    framework: 'react'
+                }));
+            }
+        }
+        if (lowerIntent.includes('test') || projectContext.currentIssue?.includes('test')) {
+            if (!projectContext.hasTests) {
+                suggestions.push(this.buildIntelligentCommand('install', {
+                    packages: ['jest', '@testing-library/react', '@testing-library/jest-dom'],
+                    environment: 'testing'
+                }));
+            }
+            suggestions.push(this.buildIntelligentCommand('test', {}));
+        }
+        if (lowerIntent.includes('build') || lowerIntent.includes('compile')) {
+            suggestions.push(this.buildIntelligentCommand('build', {
+                environment: 'production'
+            }));
+        }
+        if (lowerIntent.includes('install') || lowerIntent.includes('add')) {
+            const packages = await this.extractPackageNames(userIntent);
+            if (packages.length > 0) {
+                suggestions.push(this.buildIntelligentCommand('install', { packages }));
+            }
+        }
+        return suggestions.slice(0, 3);
+    }
+    buildInstallCommand(context) {
+        const packages = context.packages || [];
+        const devFlag = context.environment === 'development' ? ' --save-dev' : '';
+        return {
+            type: 'npm',
+            command: `npm install${devFlag} ${packages.join(' ')}`,
+            description: `Install ${packages.length} package(s)${devFlag ? ' as dev dependencies' : ''}`,
+            safety: 'safe',
+            estimatedDuration: 30,
+            dependencies: packages
+        };
+    }
+    buildBuildCommand(context) {
+        const framework = context.framework || 'generic';
+        const env = context.environment || 'production';
+        return {
+            type: 'npm',
+            command: 'npm run build',
+            description: `Build ${framework} project for ${env}`,
+            safety: 'safe',
+            estimatedDuration: 60
+        };
+    }
+    buildTestCommand(context) {
+        return {
+            type: 'npm',
+            command: 'npm test',
+            description: 'Run project tests',
+            safety: 'safe',
+            estimatedDuration: 45
+        };
+    }
+    buildLintCommand(context) {
+        return {
+            type: 'npm',
+            command: 'npm run lint',
+            description: 'Run code linting',
+            safety: 'safe',
+            estimatedDuration: 15
+        };
+    }
+    buildDeployCommand(context) {
+        return {
+            type: 'npm',
+            command: 'npm run deploy',
+            description: 'Deploy application',
+            safety: 'risky',
+            requiresApproval: true,
+            estimatedDuration: 120
+        };
+    }
+    buildAnalyzeCommand(context) {
+        return {
+            type: 'bash',
+            command: 'npm audit',
+            description: 'Analyze project dependencies for vulnerabilities',
+            safety: 'safe',
+            estimatedDuration: 20
+        };
+    }
+    validateCommandSafety(command) {
+        const dangerousPatterns = [
+            /rm\s+-rf\s+\//,
+            /sudo\s+rm/,
+            /dd\s+if=/,
+            /:\(\)\{.*\}:/,
+            /wget.*\|\s*sh/,
+            /curl.*\|\s*sh/
+        ];
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(command.command)) {
+                return { safe: false, reason: 'Command contains dangerous pattern' };
+            }
+        }
+        if (command.safety === 'risky' && !command.requiresApproval) {
+            return { safe: false, reason: 'Risky command requires approval' };
+        }
+        return { safe: true };
+    }
+    scorePackageRelevance(pkg, query, context) {
+        let confidence = 0;
+        if (pkg.name.includes(query))
+            confidence += 0.4;
+        if (pkg.name.startsWith(query))
+            confidence += 0.2;
+        if (pkg.description?.toLowerCase().includes(query.toLowerCase()))
+            confidence += 0.2;
+        const contextKeywords = {
+            'frontend': ['react', 'vue', 'angular', 'ui', 'component', 'css'],
+            'backend': ['express', 'fastify', 'node', 'server', 'api', 'database'],
+            'testing': ['test', 'jest', 'mocha', 'cypress', 'spec'],
+            'devops': ['docker', 'kubernetes', 'deploy', 'ci', 'cd']
+        };
+        const keywords = contextKeywords[context] || [];
+        for (const keyword of keywords) {
+            if (pkg.description?.toLowerCase().includes(keyword)) {
+                confidence += 0.1;
+            }
+        }
+        if (pkg.name.startsWith('@types/'))
+            confidence += 0.1;
+        return {
+            name: pkg.name,
+            version: pkg.version || 'latest',
+            description: pkg.description || '',
+            confidence: Math.min(confidence, 1.0),
+            verified: pkg.publisher?.username === 'types' || confidence > 0.8,
+            lastUpdated: pkg.date
+        };
+    }
+    async analyzeWorkspaceChanges(command) {
+        if (command.type === 'npm' && command.command.includes('install')) {
+            return {
+                packagesInstalled: command.dependencies || []
+            };
+        }
+        return undefined;
+    }
+    cleanCommandOutput(output) {
+        return output
+            .split('\n')
+            .filter(line => !line.includes('npm WARN') && line.trim().length > 0)
+            .slice(0, 5)
+            .join('\n');
+    }
+    summarizeWorkspaceChanges(workspaceState) {
+        const parts = [];
+        if (workspaceState.filesCreated?.length) {
+            parts.push(`${workspaceState.filesCreated.length} files created`);
+        }
+        if (workspaceState.packagesInstalled?.length) {
+            parts.push(`${workspaceState.packagesInstalled.length} packages installed`);
+        }
+        return parts.join(', ');
+    }
+    async extractPackageNames(text) {
+        const npmPackagePattern = /(?:npm install |add |install )([a-z0-9\-@\/\s]+)/gi;
+        const matches = [...text.matchAll(npmPackagePattern)];
+        return matches
+            .flatMap(match => match[1].trim().split(/\s+/))
+            .filter(pkg => pkg.length > 1 && !pkg.startsWith('-'));
+    }
+    getCommandStats() {
+        const totalExecuted = this.commandHistory.length;
+        const successful = this.commandHistory.filter(cmd => cmd.success).length;
+        const successRate = totalExecuted > 0 ? successful / totalExecuted : 0;
+        const durations = this.commandHistory.map(cmd => cmd.duration);
+        const averageDuration = durations.length > 0
+            ? durations.reduce((a, b) => a + b, 0) / durations.length
+            : 0;
+        const commandCounts = new Map();
+        this.commandHistory.forEach(cmd => {
+            const key = cmd.command.command.split(' ')[0];
+            commandCounts.set(key, (commandCounts.get(key) || 0) + 1);
+        });
+        const topCommands = [...commandCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([cmd]) => cmd);
+        const recentFailures = this.commandHistory
+            .filter(cmd => !cmd.success)
+            .slice(-3)
+            .map(cmd => cmd.error || 'Unknown error');
+        return {
+            totalExecuted,
+            successRate,
+            averageDuration,
+            topCommands,
+            recentFailures
+        };
+    }
+    clearCommandData() {
+        this.commandHistory = [];
+        this.packageCache.clear();
+        this.commandTemplates.clear();
+    }
+    configureCognitiveFeatures(config) {
+        console.log(chalk_1.default.cyan(`🧠 AdvancedAIProvider cognitive features configured`));
+        if (config.enableCognition) {
+            console.log(chalk_1.default.cyan(`🎯 Cognitive features enabled (level: ${config.orchestrationLevel})`));
+        }
+        if (config.intelligentCommands) {
+            console.log(chalk_1.default.cyan(`⚡ Intelligent commands active`));
+        }
+        if (config.adaptivePlanning) {
+            console.log(chalk_1.default.cyan(`📋 Adaptive planning enabled`));
+        }
     }
 }
 exports.AdvancedAIProvider = AdvancedAIProvider;

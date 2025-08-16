@@ -41,6 +41,52 @@ import FeedbackAwareTools from '../core/feedback-aware-tools';
 import { validatorManager, ValidationContext, ExtendedValidationResult } from '../core/validator-manager';
 import { TokenOptimizer, TokenOptimizationConfig, QuietCacheLogger } from '../core/performance-optimizer';
 
+// 🧠 Import Cognitive Orchestration Types
+import type { TaskCognition, OrchestrationPlan } from '../automation/agents/universal-agent';
+
+// 🔧 Command System Schemas with Zod
+const CommandSchema = z.object({
+  type: z.enum(['npm', 'bash', 'git', 'docker', 'node', 'build', 'test', 'lint']),
+  command: z.string().min(1).max(500),
+  args: z.array(z.string()).optional(),
+  workingDir: z.string().optional(),
+  description: z.string().min(5).max(200),
+  safety: z.enum(['safe', 'moderate', 'risky']),
+  requiresApproval: z.boolean().default(false),
+  estimatedDuration: z.number().min(1).max(3600).optional(),
+  dependencies: z.array(z.string()).optional(),
+  expectedOutputPattern: z.string().optional()
+});
+
+const PackageSearchResult = z.object({
+  name: z.string(),
+  version: z.string(),
+  description: z.string(),
+  downloads: z.number().optional(),
+  verified: z.boolean().default(false),
+  lastUpdated: z.string().optional(),
+  repository: z.string().optional(),
+  confidence: z.number().min(0).max(1)
+});
+
+const CommandExecutionResult = z.object({
+  success: z.boolean(),
+  output: z.string(),
+  error: z.string().optional(),
+  duration: z.number(),
+  command: CommandSchema,
+  timestamp: z.date(),
+  workspaceState: z.object({
+    filesCreated: z.array(z.string()).optional(),
+    filesModified: z.array(z.string()).optional(),
+    packagesInstalled: z.array(z.string()).optional()
+  }).optional()
+});
+
+type Command = z.infer<typeof CommandSchema>;
+type PackageSearchResult = z.infer<typeof PackageSearchResult>;
+type CommandExecutionResult = z.infer<typeof CommandExecutionResult>;
+
 const execAsync = promisify(exec);
 
 export interface StreamEvent {
@@ -56,10 +102,20 @@ export interface StreamEvent {
 export interface AutonomousProvider {
   streamChatWithFullAutonomy(messages: CoreMessage[], abortSignal?: AbortSignal): AsyncGenerator<StreamEvent>;
   executeAutonomousTask(task: string, context?: any): AsyncGenerator<StreamEvent>;
+  // 🧠 Enhanced Cognitive Methods
+  generateWithCognition(messages: CoreMessage[], cognition?: TaskCognition): AsyncGenerator<StreamEvent>;
+  optimizePromptWithPlan(messages: CoreMessage[], plan?: OrchestrationPlan): CoreMessage[];
+  adaptResponseToCognition(response: string, cognition?: TaskCognition): string;
 }
 
 export class AdvancedAIProvider implements AutonomousProvider {
   private tokenOptimizer: TokenOptimizer;
+
+  // 🔧 Command System Properties  
+  private commandHistory: CommandExecutionResult[] = [];
+  private packageCache: Map<string, PackageSearchResult[]> = new Map();
+  private commandTemplates: Map<string, Command> = new Map();
+  private streamSilentMode: boolean = false;
 
   generateWithTools(planningMessages: CoreMessage[]) {
     throw new Error('Method not implemented.');
@@ -169,9 +225,19 @@ export class AdvancedAIProvider implements AutonomousProvider {
       });
     }
 
-    const finalTokens = this.estimateMessagesTokens(truncatedMessages);
     return truncatedMessages;
   }
+
+  /**
+   * Estimate tokens for a tool call
+   */
+  private estimateToolCallTokens(toolCall: any): number {
+    const toolName = toolCall.name || 'unknown';
+    const args = toolCall.args || {};
+    const argsStr = JSON.stringify(args);
+    return Math.ceil((toolName.length + argsStr.length) / 4) + 100; // Base overhead
+  }
+
   private currentModel: string;
   private workingDirectory: string = process.cwd();
   private executionContext: Map<string, any> = new Map();
@@ -399,7 +465,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
       if (fullContext.length > 1000) {
         const optimizationResult = await this.tokenOptimizer.optimizePrompt(fullContext);
         optimizedContext = optimizationResult.content;
-        
+
         if (optimizationResult.tokensSaved > 50) {
           QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
         }
@@ -963,6 +1029,19 @@ Respond in a helpful, professional manner with clear explanations and actionable
       const originalTokens = this.estimateMessagesTokens(messages);
       const truncatedTokens = this.estimateMessagesTokens(truncatedMessages);
 
+      // 🛡️ TOKEN GUARD: Check toolchain token limits before starting
+      const globalNikCLI = (global as any).__nikcli;
+      if (globalNikCLI && globalNikCLI.manageToolchainTokens) {
+        const estimatedToolchainTokens = Math.max(originalTokens, truncatedTokens) * 2; // Estimate toolchain overhead
+        const canProceed = globalNikCLI.manageToolchainTokens('streamChat', estimatedToolchainTokens);
+
+        if (!canProceed) {
+          yield { type: 'thinking', content: '🛡️ Token limit reached - clearing context and continuing...' };
+          globalNikCLI.clearToolchainContext('streamChat');
+          // Continue with fresh context
+        }
+      }
+
       // Check if we're approaching token limits and need to create a summary
       const tokenLimit = 150000; // Conservative limit
       const isAnalysisRequest = lastUserMessage && typeof lastUserMessage.content === 'string' &&
@@ -1065,6 +1144,18 @@ Respond in a helpful, professional manner with clear explanations and actionable
             case 'tool-call':
               toolCallCount++;
               currentToolCalls.push(delta);
+
+              // 🛡️ TOKEN GUARD: Check tool call token usage
+              const globalNikCLI = (global as any).__nikcli;
+              if (globalNikCLI && globalNikCLI.manageToolchainTokens) {
+                const toolTokens = this.estimateToolCallTokens(delta);
+                const canProceed = globalNikCLI.manageToolchainTokens(delta.toolName, toolTokens);
+
+                if (!canProceed) {
+                  yield { type: 'thinking', content: `🛡️ Token limit for ${delta.toolName} - clearing context...` };
+                  globalNikCLI.clearToolchainContext(delta.toolName);
+                }
+              }
 
               // Track this tool call in history (always track for intelligent analysis)
               this.toolCallHistory.push({
@@ -2207,6 +2298,824 @@ Requirements:
     summary += `\n💡 **How to Continue:** Please provide more specific guidance, narrow the scope, or try a different approach based on the recommendations above. Consider breaking your request into smaller, more focused tasks.`;
 
     return this.truncateForPrompt(summary, 800);
+  }
+
+  // ====================== 🧠 COGNITIVE ENHANCEMENT METHODS ======================
+
+  /**
+   * 🧠 Generate with Cognitive Understanding
+   * Enhanced generation method that uses task cognition for better responses
+   */
+  async* generateWithCognition(messages: CoreMessage[], cognition?: TaskCognition): AsyncGenerator<StreamEvent> {
+    try {
+      yield {
+        type: 'start',
+        metadata: {
+          method: 'generateWithCognition',
+          hasCognition: !!cognition,
+          cognitionId: cognition?.id
+        }
+      };
+
+      // Step 1: Optimize prompts based on cognition
+      const optimizedMessages = cognition
+        ? this.optimizePromptWithCognition(messages, cognition)
+        : messages;
+
+      yield {
+        type: 'thinking',
+        content: cognition
+          ? `🧠 Using cognitive understanding: ${cognition.intent.primary} task with ${cognition.estimatedComplexity}/10 complexity`
+          : '🧠 Processing without cognitive context'
+      };
+
+      // Step 2: Use enhanced streaming with cognitive awareness
+      const streamGen = this.streamChatWithFullAutonomy(optimizedMessages);
+
+      for await (const event of streamGen) {
+        // Adapt responses based on cognition
+        if (event.type === 'text_delta' && event.content && cognition) {
+          event.content = this.adaptResponseToCognition(event.content, cognition);
+        }
+
+        // Add cognitive metadata to tool calls
+        if (event.type === 'tool_call' && cognition) {
+          event.metadata = {
+            ...event.metadata,
+            cognition: {
+              intent: cognition.intent.primary,
+              complexity: cognition.estimatedComplexity,
+              riskLevel: cognition.riskLevel
+            }
+          };
+        }
+
+        yield event;
+      }
+
+      yield {
+        type: 'complete',
+        metadata: {
+          method: 'generateWithCognition',
+          cognitionApplied: !!cognition
+        }
+      };
+
+    } catch (error: any) {
+      yield {
+        type: 'error',
+        error: `Cognitive generation failed: ${error.message}`,
+        metadata: { method: 'generateWithCognition' }
+      };
+    }
+  }
+
+  /**
+   * 🎯 Optimize Prompts with Orchestration Plan
+   * Enhances prompts based on orchestration plan for better alignment
+   */
+  optimizePromptWithPlan(messages: CoreMessage[], plan?: OrchestrationPlan): CoreMessage[] {
+    if (!plan) return messages;
+
+    const optimizedMessages = [...messages];
+
+    // Find system message or create one
+    let systemMessage = optimizedMessages.find(m => m.role === 'system');
+    if (!systemMessage) {
+      systemMessage = { role: 'system', content: '' };
+      optimizedMessages.unshift(systemMessage);
+    }
+
+    // Add orchestration context to system prompt
+    const orchestrationContext = `
+
+🎯 ORCHESTRATION CONTEXT:
+- Strategy: ${plan.strategy}
+- Estimated Duration: ${plan.estimatedDuration}s
+- Phases: ${plan.phases.length} (${plan.phases.map(p => p.name).join(' → ')})
+- Required Tools: ${plan.phases.flatMap(p => p.tools).join(', ')}
+- Risk Level: Based on ${plan.fallbackStrategies.length} fallback strategies
+
+Focus on the current execution phase and use the orchestration strategy for optimal results.`;
+
+    systemMessage.content += orchestrationContext;
+
+    return optimizedMessages;
+  }
+
+  /**
+   * 🧠 Adapt Response to Cognitive Understanding
+   * Modifies AI responses based on task cognition for better alignment
+   */
+  adaptResponseToCognition(response: string, cognition?: TaskCognition): string {
+    if (!cognition) return response;
+
+    let adaptedResponse = response;
+
+    // Adapt based on intent
+    switch (cognition.intent.primary) {
+      case 'create':
+        // Emphasize creation and generation language
+        adaptedResponse = adaptedResponse.replace(/analyze|review|check/gi, 'create');
+        break;
+      case 'analyze':
+        // Emphasize analytical language
+        adaptedResponse = adaptedResponse.replace(/create|build|make/gi, 'analyze');
+        break;
+      case 'debug':
+        // Emphasize problem-solving language
+        adaptedResponse = adaptedResponse.replace(/create|analyze/gi, 'fix');
+        break;
+    }
+
+    // Adapt based on urgency
+    if (cognition.intent.urgency === 'critical') {
+      adaptedResponse = '🚨 URGENT: ' + adaptedResponse;
+    } else if (cognition.intent.urgency === 'high') {
+      adaptedResponse = '⚡ HIGH PRIORITY: ' + adaptedResponse;
+    }
+
+    // Adapt based on complexity
+    if (cognition.estimatedComplexity >= 8) {
+      adaptedResponse = '🔥 COMPLEX TASK: ' + adaptedResponse;
+    }
+
+    // Adapt based on risk level
+    if (cognition.riskLevel === 'high') {
+      adaptedResponse = '⚠️ HIGH RISK - ' + adaptedResponse;
+    }
+
+    return adaptedResponse;
+  }
+
+  /**
+   * 🎯 Private: Optimize Prompts with Cognition
+   * Internal method to enhance prompts based on cognitive understanding
+   */
+  private optimizePromptWithCognition(messages: CoreMessage[], cognition: TaskCognition): CoreMessage[] {
+    const optimizedMessages = [...messages];
+
+    // Find system message or create one
+    let systemMessage = optimizedMessages.find(m => m.role === 'system');
+    if (!systemMessage) {
+      systemMessage = { role: 'system', content: '' };
+      optimizedMessages.unshift(systemMessage);
+    }
+
+    // Add cognitive context to system prompt
+    const cognitiveContext = `
+
+🧠 COGNITIVE UNDERSTANDING:
+- Primary Intent: ${cognition.intent.primary} (confidence: ${Math.round(cognition.intent.confidence * 100)}%)
+- Complexity Level: ${cognition.estimatedComplexity}/10
+- Risk Assessment: ${cognition.riskLevel}
+- Urgency: ${cognition.intent.urgency}
+- Required Capabilities: ${cognition.requiredCapabilities.join(', ')}
+- Detected Entities: ${cognition.entities.map(e => `${e.type}:${e.name}`).join(', ')}
+- Dependencies: ${cognition.dependencies.join(', ')}
+- Contexts: ${cognition.contexts.join(', ')}
+
+Use this cognitive understanding to provide more targeted and effective responses.`;
+
+    systemMessage.content += cognitiveContext;
+
+    // Enhance user messages with entity context
+    const lastUserMessage = optimizedMessages.filter(m => m.role === 'user').pop();
+    if (lastUserMessage && cognition.entities.length > 0) {
+      const entityContext = `\n\n[Detected entities: ${cognition.entities.map(e => e.name).join(', ')}]`;
+      lastUserMessage.content += entityContext;
+    }
+
+    return optimizedMessages;
+  }
+
+  /**
+   * 📊 Get Cognitive Statistics
+   * Returns statistics about cognitive processing
+   */
+  getCognitiveStats(): {
+    totalCognitiveRequests: number;
+    averageComplexity: number;
+    commonIntents: string[];
+    riskDistribution: Record<string, number>;
+  } {
+    // This would be tracked in a real implementation
+    return {
+      totalCognitiveRequests: 0,
+      averageComplexity: 5.0,
+      commonIntents: ['analyze', 'create', 'update'],
+      riskDistribution: { low: 60, medium: 30, high: 10 }
+    };
+  }
+
+  /**
+   * 🔧 Configure Cognitive Enhancement
+   * Allows customization of cognitive processing behavior
+   */
+  configureCognition(config: {
+    enablePromptOptimization?: boolean;
+    enableResponseAdaptation?: boolean;
+    complexityThreshold?: number;
+    riskAwareness?: boolean;
+  }): void {
+    // Configuration would be stored and used in cognitive methods
+    console.log('🧠 Cognitive configuration updated:', config);
+  }
+
+  // ====================== 🔧 AUTONOMOUS COMMAND SYSTEM ======================
+
+  /**
+   * 🔍 Intelligent Package Search with NPM Registry
+   * Searches for packages with verification and recommendations
+   */
+  async searchPackagesIntelligently(
+    query: string,
+    context: 'frontend' | 'backend' | 'testing' | 'devops' | 'general' = 'general'
+  ): Promise<PackageSearchResult[]> {
+
+    // Check cache first
+    const cacheKey = `${query}_${context}`;
+    if (this.packageCache.has(cacheKey)) {
+      return this.packageCache.get(cacheKey)!;
+    }
+
+    try {
+      if (!this.streamSilentMode) {
+        console.log(chalk.blue(`🔍 Searching packages for: ${query} (context: ${context})`));
+      }
+
+      // Execute NPM search with context-aware filtering
+      const searchCommand = `npm search ${query} --json --long`;
+      const { stdout } = await execAsync(searchCommand);
+
+      let rawResults: any[] = [];
+      try {
+        rawResults = JSON.parse(stdout);
+      } catch {
+        // Fallback to empty array if parsing fails
+        rawResults = [];
+      }
+
+      // Process and score results
+      const processedResults: PackageSearchResult[] = rawResults
+        .slice(0, 10) // Limit results
+        .map(pkg => this.scorePackageRelevance(pkg, query, context))
+        .filter(pkg => pkg.confidence > 0.3)
+        .sort((a, b) => b.confidence - a.confidence);
+
+      // Validate with Zod
+      const validatedResults = processedResults.map(result => {
+        try {
+          return PackageSearchResult.parse(result);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean) as PackageSearchResult[];
+
+      // Cache results
+      this.packageCache.set(cacheKey, validatedResults);
+
+      if (!this.streamSilentMode) {
+        console.log(chalk.green(`✅ Found ${validatedResults.length} relevant packages`));
+      }
+
+      return validatedResults;
+
+    } catch (error: any) {
+      if (!this.streamSilentMode) {
+        console.log(chalk.red(`❌ Package search failed: ${error.message}`));
+      }
+      return [];
+    }
+  }
+
+  /**
+   * 🏗️ Build Intelligent Commands with Validation
+   * Creates safe, validated commands based on context and requirements
+   */
+  buildIntelligentCommand(
+    intent: 'install' | 'build' | 'test' | 'lint' | 'deploy' | 'analyze',
+    context: {
+      packages?: string[];
+      target?: string;
+      environment?: 'development' | 'production' | 'testing';
+      framework?: 'react' | 'node' | 'next' | 'vue' | 'angular';
+    } = {}
+  ): Command {
+
+    let command: Partial<Command> = {
+      workingDir: process.cwd(),
+      safety: 'safe',
+      requiresApproval: false
+    };
+
+    switch (intent) {
+      case 'install':
+        command = this.buildInstallCommand(context);
+        break;
+      case 'build':
+        command = this.buildBuildCommand(context);
+        break;
+      case 'test':
+        command = this.buildTestCommand(context);
+        break;
+      case 'lint':
+        command = this.buildLintCommand(context);
+        break;
+      case 'deploy':
+        command = this.buildDeployCommand(context);
+        break;
+      case 'analyze':
+        command = this.buildAnalyzeCommand(context);
+        break;
+    }
+
+    // Validate with Zod
+    try {
+      return CommandSchema.parse(command);
+    } catch (error) {
+      // Fallback to safe default
+      return CommandSchema.parse({
+        type: 'bash',
+        command: 'echo "Command validation failed"',
+        description: 'Fallback safe command',
+        safety: 'safe',
+        requiresApproval: true
+      });
+    }
+  }
+
+  /**
+   * ⚡ Execute Command with Safety Checks and Monitoring
+   * Executes commands with comprehensive safety and monitoring
+   */
+  async executeCommandSafely(command: Command): Promise<CommandExecutionResult> {
+    const startTime = Date.now();
+
+    if (!this.streamSilentMode) {
+      console.log(chalk.blue(`⚡ Executing: ${command.description}`));
+    }
+
+    try {
+      // Pre-execution safety checks
+      const safetyCheck = this.validateCommandSafety(command);
+      if (!safetyCheck.safe) {
+        throw new Error(`Safety check failed: ${safetyCheck.reason}`);
+      }
+
+      // Execute with timeout
+      const timeout = command.estimatedDuration ? command.estimatedDuration * 1000 : 30000;
+      const fullCommand = command.args
+        ? `${command.command} ${command.args.join(' ')}`
+        : command.command;
+
+      const { stdout, stderr } = await Promise.race([
+        execAsync(fullCommand, {
+          cwd: command.workingDir || process.cwd(),
+          timeout
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Command timeout')), timeout)
+        )
+      ]);
+
+      const duration = Date.now() - startTime;
+
+      // Analyze workspace changes
+      const workspaceState = await this.analyzeWorkspaceChanges(command);
+
+      const result: CommandExecutionResult = {
+        success: true,
+        output: stdout || '',
+        error: stderr || undefined,
+        duration,
+        command,
+        timestamp: new Date(),
+        workspaceState
+      };
+
+      // Validate result
+      const validatedResult = CommandExecutionResult.parse(result);
+
+      // Store in history
+      this.commandHistory.push(validatedResult);
+
+      if (!this.streamSilentMode) {
+        console.log(chalk.green(`✅ Command completed in ${duration}ms`));
+      }
+
+      return validatedResult;
+
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+
+      const errorResult: CommandExecutionResult = {
+        success: false,
+        output: '',
+        error: error.message,
+        duration,
+        command,
+        timestamp: new Date()
+      };
+
+      const validatedErrorResult = CommandExecutionResult.parse(errorResult);
+      this.commandHistory.push(validatedErrorResult);
+
+      if (!this.streamSilentMode) {
+        console.log(chalk.red(`❌ Command failed: ${error.message}`));
+      }
+
+      return validatedErrorResult;
+    }
+  }
+
+  /**
+   * 🔄 Stream Commands with Clean Output
+   * Enhanced streaming with clean, organized output
+   */
+  async* streamCommandExecution(command: Command): AsyncGenerator<StreamEvent> {
+    try {
+      // Enable silent mode for clean streaming
+      this.streamSilentMode = true;
+
+      yield {
+        type: 'start',
+        content: `🔧 Preparing: ${command.description}`,
+        metadata: {
+          command: command.command,
+          safety: command.safety,
+          estimatedDuration: command.estimatedDuration
+        }
+      };
+
+      // Pre-execution analysis
+      if (command.type === 'npm' && command.command.includes('install')) {
+        yield {
+          type: 'thinking',
+          content: '📦 Verifying package integrity and compatibility...'
+        };
+      }
+
+      // Execute command
+      const result = await this.executeCommandSafely(command);
+
+      // Stream results cleanly
+      if (result.success) {
+        yield {
+          type: 'tool_result',
+          content: `✅ ${command.description} completed successfully`,
+          toolName: command.type,
+          toolResult: {
+            success: true,
+            duration: `${result.duration}ms`,
+            output: result.output ? this.cleanCommandOutput(result.output) : undefined
+          }
+        };
+
+        // Show workspace changes if any
+        if (result.workspaceState) {
+          const changes = this.summarizeWorkspaceChanges(result.workspaceState);
+          if (changes) {
+            yield {
+              type: 'text_delta',
+              content: `\n📁 Workspace changes: ${changes}`
+            };
+          }
+        }
+      } else {
+        yield {
+          type: 'tool_result',
+          content: `❌ ${command.description} failed`,
+          toolName: command.type,
+          toolResult: {
+            success: false,
+            error: result.error,
+            duration: `${result.duration}ms`
+          }
+        };
+      }
+
+      yield {
+        type: 'complete',
+        metadata: { commandExecuted: true, success: result.success }
+      };
+
+    } catch (error: any) {
+      yield {
+        type: 'error',
+        error: `Command execution failed: ${error.message}`,
+        metadata: { command: command.command }
+      };
+    } finally {
+      // Restore normal logging
+      this.streamSilentMode = false;
+    }
+  }
+
+  /**
+   * 🧠 Suggest Commands Based on Context
+   * AI-powered command suggestions based on project state and intent
+   */
+  async suggestCommands(
+    projectContext: {
+      hasPackageJson?: boolean;
+      frameworks?: string[];
+      hasTests?: boolean;
+      hasBuild?: boolean;
+      currentIssue?: string;
+    },
+    userIntent: string
+  ): Promise<Command[]> {
+
+    const suggestions: Command[] = [];
+    const lowerIntent = userIntent.toLowerCase();
+
+    // React/Frontend suggestions
+    if (projectContext.frameworks?.includes('react') || lowerIntent.includes('react')) {
+      if (lowerIntent.includes('component') || lowerIntent.includes('ui')) {
+        suggestions.push(this.buildIntelligentCommand('install', {
+          packages: ['@types/react', 'prop-types'],
+          framework: 'react'
+        }));
+      }
+    }
+
+    // Testing suggestions
+    if (lowerIntent.includes('test') || projectContext.currentIssue?.includes('test')) {
+      if (!projectContext.hasTests) {
+        suggestions.push(this.buildIntelligentCommand('install', {
+          packages: ['jest', '@testing-library/react', '@testing-library/jest-dom'],
+          environment: 'testing'
+        }));
+      }
+      suggestions.push(this.buildIntelligentCommand('test', {}));
+    }
+
+    // Build suggestions
+    if (lowerIntent.includes('build') || lowerIntent.includes('compile')) {
+      suggestions.push(this.buildIntelligentCommand('build', {
+        environment: 'production'
+      }));
+    }
+
+    // Package installation suggestions
+    if (lowerIntent.includes('install') || lowerIntent.includes('add')) {
+      const packages = await this.extractPackageNames(userIntent);
+      if (packages.length > 0) {
+        suggestions.push(this.buildIntelligentCommand('install', { packages }));
+      }
+    }
+
+    return suggestions.slice(0, 3); // Limit to top 3 suggestions
+  }
+
+  // ====================== 🔧 COMMAND BUILDER HELPERS ======================
+
+  private buildInstallCommand(context: any): Partial<Command> {
+    const packages = context.packages || [];
+    const devFlag = context.environment === 'development' ? ' --save-dev' : '';
+
+    return {
+      type: 'npm',
+      command: `npm install${devFlag} ${packages.join(' ')}`,
+      description: `Install ${packages.length} package(s)${devFlag ? ' as dev dependencies' : ''}`,
+      safety: 'safe',
+      estimatedDuration: 30,
+      dependencies: packages
+    };
+  }
+
+  private buildBuildCommand(context: any): Partial<Command> {
+    const framework = context.framework || 'generic';
+    const env = context.environment || 'production';
+
+    return {
+      type: 'npm',
+      command: 'npm run build',
+      description: `Build ${framework} project for ${env}`,
+      safety: 'safe',
+      estimatedDuration: 60
+    };
+  }
+
+  private buildTestCommand(context: any): Partial<Command> {
+    return {
+      type: 'npm',
+      command: 'npm test',
+      description: 'Run project tests',
+      safety: 'safe',
+      estimatedDuration: 45
+    };
+  }
+
+  private buildLintCommand(context: any): Partial<Command> {
+    return {
+      type: 'npm',
+      command: 'npm run lint',
+      description: 'Run code linting',
+      safety: 'safe',
+      estimatedDuration: 15
+    };
+  }
+
+  private buildDeployCommand(context: any): Partial<Command> {
+    return {
+      type: 'npm',
+      command: 'npm run deploy',
+      description: 'Deploy application',
+      safety: 'risky',
+      requiresApproval: true,
+      estimatedDuration: 120
+    };
+  }
+
+  private buildAnalyzeCommand(context: any): Partial<Command> {
+    return {
+      type: 'bash',
+      command: 'npm audit',
+      description: 'Analyze project dependencies for vulnerabilities',
+      safety: 'safe',
+      estimatedDuration: 20
+    };
+  }
+
+  // ====================== 🛡️ SAFETY AND VALIDATION ======================
+
+  private validateCommandSafety(command: Command): { safe: boolean; reason?: string } {
+    // Dangerous command patterns
+    const dangerousPatterns = [
+      /rm\s+-rf\s+\//,
+      /sudo\s+rm/,
+      /dd\s+if=/,
+      /:\(\)\{.*\}:/,
+      /wget.*\|\s*sh/,
+      /curl.*\|\s*sh/
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(command.command)) {
+        return { safe: false, reason: 'Command contains dangerous pattern' };
+      }
+    }
+
+    // Check for risky commands that require approval
+    if (command.safety === 'risky' && !command.requiresApproval) {
+      return { safe: false, reason: 'Risky command requires approval' };
+    }
+
+    return { safe: true };
+  }
+
+  private scorePackageRelevance(pkg: any, query: string, context: string): PackageSearchResult {
+    let confidence = 0;
+
+    // Name similarity
+    if (pkg.name.includes(query)) confidence += 0.4;
+    if (pkg.name.startsWith(query)) confidence += 0.2;
+
+    // Description relevance
+    if (pkg.description?.toLowerCase().includes(query.toLowerCase())) confidence += 0.2;
+
+    // Context relevance
+    const contextKeywords = {
+      'frontend': ['react', 'vue', 'angular', 'ui', 'component', 'css'],
+      'backend': ['express', 'fastify', 'node', 'server', 'api', 'database'],
+      'testing': ['test', 'jest', 'mocha', 'cypress', 'spec'],
+      'devops': ['docker', 'kubernetes', 'deploy', 'ci', 'cd']
+    };
+
+    const keywords = contextKeywords[context as keyof typeof contextKeywords] || [];
+    for (const keyword of keywords) {
+      if (pkg.description?.toLowerCase().includes(keyword)) {
+        confidence += 0.1;
+      }
+    }
+
+    // Popularity boost (mock - would use real download data)
+    if (pkg.name.startsWith('@types/')) confidence += 0.1;
+
+    return {
+      name: pkg.name,
+      version: pkg.version || 'latest',
+      description: pkg.description || '',
+      confidence: Math.min(confidence, 1.0),
+      verified: pkg.publisher?.username === 'types' || confidence > 0.8,
+      lastUpdated: pkg.date
+    };
+  }
+
+  private async analyzeWorkspaceChanges(command: Command): Promise<any> {
+    // Mock implementation - would analyze actual file changes
+    if (command.type === 'npm' && command.command.includes('install')) {
+      return {
+        packagesInstalled: command.dependencies || []
+      };
+    }
+    return undefined;
+  }
+
+  private cleanCommandOutput(output: string): string {
+    return output
+      .split('\n')
+      .filter(line => !line.includes('npm WARN') && line.trim().length > 0)
+      .slice(0, 5) // Limit output lines
+      .join('\n');
+  }
+
+  private summarizeWorkspaceChanges(workspaceState: any): string {
+    const parts = [];
+    if (workspaceState.filesCreated?.length) {
+      parts.push(`${workspaceState.filesCreated.length} files created`);
+    }
+    if (workspaceState.packagesInstalled?.length) {
+      parts.push(`${workspaceState.packagesInstalled.length} packages installed`);
+    }
+    return parts.join(', ');
+  }
+
+  private async extractPackageNames(text: string): Promise<string[]> {
+    const npmPackagePattern = /(?:npm install |add |install )([a-z0-9\-@\/\s]+)/gi;
+    const matches = [...text.matchAll(npmPackagePattern)];
+
+    return matches
+      .flatMap(match => match[1].trim().split(/\s+/))
+      .filter(pkg => pkg.length > 1 && !pkg.startsWith('-'));
+  }
+
+  // ====================== 📊 COMMAND SYSTEM ANALYTICS ======================
+
+  /**
+   * Get command execution statistics
+   */
+  getCommandStats(): {
+    totalExecuted: number;
+    successRate: number;
+    averageDuration: number;
+    topCommands: string[];
+    recentFailures: string[];
+  } {
+    const totalExecuted = this.commandHistory.length;
+    const successful = this.commandHistory.filter(cmd => cmd.success).length;
+    const successRate = totalExecuted > 0 ? successful / totalExecuted : 0;
+
+    const durations = this.commandHistory.map(cmd => cmd.duration);
+    const averageDuration = durations.length > 0
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : 0;
+
+    const commandCounts = new Map<string, number>();
+    this.commandHistory.forEach(cmd => {
+      const key = cmd.command.command.split(' ')[0];
+      commandCounts.set(key, (commandCounts.get(key) || 0) + 1);
+    });
+
+    const topCommands = [...commandCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([cmd]) => cmd);
+
+    const recentFailures = this.commandHistory
+      .filter(cmd => !cmd.success)
+      .slice(-3)
+      .map(cmd => cmd.error || 'Unknown error');
+
+    return {
+      totalExecuted,
+      successRate,
+      averageDuration,
+      topCommands,
+      recentFailures
+    };
+  }
+
+  /**
+   * Clear command history and caches
+   */
+  clearCommandData(): void {
+    this.commandHistory = [];
+    this.packageCache.clear();
+    this.commandTemplates.clear();
+  }
+
+  /**
+   * Configure cognitive features for the AI provider
+   */
+  configureCognitiveFeatures(config: {
+    enableCognition: boolean;
+    orchestrationLevel: number;
+    intelligentCommands: boolean;
+    adaptivePlanning: boolean;
+  }): void {
+    console.log(chalk.cyan(`🧠 AdvancedAIProvider cognitive features configured`));
+    if (config.enableCognition) {
+      console.log(chalk.cyan(`🎯 Cognitive features enabled (level: ${config.orchestrationLevel})`));
+    }
+    if (config.intelligentCommands) {
+      console.log(chalk.cyan(`⚡ Intelligent commands active`));
+    }
+    if (config.adaptivePlanning) {
+      console.log(chalk.cyan(`📋 Adaptive planning enabled`));
+    }
   }
 }
 

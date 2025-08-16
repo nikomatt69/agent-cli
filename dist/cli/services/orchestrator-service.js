@@ -211,7 +211,7 @@ class OrchestratorService extends events_1.EventEmitter {
         console.log(chalk_1.default.blue(`\\n🤖 Launching ${agentName} agent...`));
         console.log(chalk_1.default.gray(`Task: ${task}\\n`));
         try {
-            const taskId = await agent_service_1.agentService.executeTask(agentName, task);
+            const taskId = await agent_service_1.agentService.executeTask(agentName, task, {});
             console.log(chalk_1.default.dim(`Task ID: ${taskId}`));
         }
         catch (error) {

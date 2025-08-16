@@ -81,7 +81,7 @@ class AgentService extends events_1.EventEmitter {
         this.agents.set(agent.name, agent);
         console.log(chalk_1.default.dim(`🤖 Registered agent: ${agent.name}`));
     }
-    async executeTask(agentType, task) {
+    async executeTask(agentType, task, _enhancedOptions) {
         const agent = this.agents.get(agentType);
         if (!agent) {
             throw new Error(`Agent '${agentType}' not found`);

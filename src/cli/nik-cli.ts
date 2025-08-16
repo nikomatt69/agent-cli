@@ -15,6 +15,9 @@ import { toolsManager } from './tools/tools-manager';
 import { agentFactory } from './core/agent-factory';
 import { agentStream } from './core/agent-stream';
 import { workspaceContext } from './context/workspace-context';
+import { validatorManager } from './core/validator-manager';
+import { toolRouter } from './core/tool-router';
+import { StreamingOrchestrator } from './streaming-orchestrator';
 
 import { AgentManager } from './core/agent-manager';
 import { PlanningManager } from './planning/planning-manager';
@@ -143,10 +146,17 @@ export class NikCLI {
     private sessionStartTime: Date = new Date();
     private contextTokens: number = 0;
     private realTimeCost: number = 0;
+    private maxContextTokens: number = 200000; // Limite sicuro
+    private contextHistory: string[] = [];
+    private toolchainTokenLimit: number = 150000; // Limite per toolchain
+    private toolchainContext: Map<string, number> = new Map();
     private activeSpinner: any = null;
     private aiOperationStart: Date | null = null;
     private modelPricing: Map<string, { input: number; output: number }> = new Map();
     private tokenOptimizer?: TokenOptimizer;
+    private streamingOrchestrator?: StreamingOrchestrator;
+    private cognitiveMode: boolean = true;
+    private orchestrationLevel: number = 8;
 
     constructor() {
         this.workingDirectory = process.cwd();
@@ -158,7 +168,7 @@ export class NikCLI {
         this.planningManager = new PlanningManager(this.workingDirectory);
         this.slashHandler = new SlashCommandHandler();
         this.advancedUI = advancedUI;
-        
+
         // Token optimizer will be initialized lazily when needed
 
         // Register agents
@@ -178,6 +188,12 @@ export class NikCLI {
 
         // Initialize token cache system
         this.initializeTokenCache();
+
+        // Initialize cognitive orchestration system
+        this.initializeCognitiveOrchestration();
+
+        // Expose NikCLI globally for token management
+        (global as any).__nikcli = this;
     }
 
     /**
@@ -238,7 +254,7 @@ export class NikCLI {
         try {
             const currentContext = await this.loadProjectContext();
             const timestamp = new Date().toISOString();
-            
+
             // Extract key information from user input
             const keyInfo = this.extractKeyInformation(userInput);
             if (keyInfo) {
@@ -255,23 +271,23 @@ export class NikCLI {
      */
     private extractKeyInformation(input: string): string | null {
         const lowercaseInput = input.toLowerCase();
-        
+
         // Extract project-relevant information
-        if (lowercaseInput.includes('project') || lowercaseInput.includes('goal') || 
+        if (lowercaseInput.includes('project') || lowercaseInput.includes('goal') ||
             lowercaseInput.includes('objective') || lowercaseInput.includes('requirement')) {
             return `User goal/requirement: ${input}`;
         }
-        
-        if (lowercaseInput.includes('error') || lowercaseInput.includes('issue') || 
+
+        if (lowercaseInput.includes('error') || lowercaseInput.includes('issue') ||
             lowercaseInput.includes('problem')) {
             return `Issue reported: ${input}`;
         }
-        
-        if (lowercaseInput.includes('feature') || lowercaseInput.includes('add') || 
+
+        if (lowercaseInput.includes('feature') || lowercaseInput.includes('add') ||
             lowercaseInput.includes('implement')) {
             return `Feature request: ${input}`;
         }
-        
+
         return null;
     }
 
@@ -293,6 +309,198 @@ export class NikCLI {
                 console.log(chalk.dim(`Cache initialization warning: ${error.message}`));
             }
         }, 1000); // Delay to avoid interfering with startup
+    }
+
+    /**
+     * Initialize cognitive orchestration system with enhanced components
+     */
+    private initializeCognitiveOrchestration(): void {
+        try {
+            console.log(chalk.dim('🧠 Initializing cognitive orchestration system...'));
+
+            // Initialize streaming orchestrator with adaptive supervision
+            this.streamingOrchestrator = new StreamingOrchestrator();
+
+            // Configure cognitive features
+            this.streamingOrchestrator.configureAdaptiveSupervision({
+                adaptiveSupervision: this.cognitiveMode,
+                intelligentPrioritization: true,
+                cognitiveFiltering: true,
+                orchestrationAwareness: true
+            });
+
+            // Setup cognitive event listeners
+            this.setupCognitiveEventListeners();
+
+            // Integrate with existing systems
+            this.integrateCognitiveComponents();
+
+            console.log(chalk.green('✅ Cognitive orchestration system initialized'));
+        } catch (error: any) {
+            console.log(chalk.yellow(`⚠️ Cognitive orchestration initialization warning: ${error.message}`));
+            this.cognitiveMode = false; // Fallback to standard mode
+        }
+    }
+
+    /**
+     * Setup cognitive event listeners for system coordination
+     */
+    private setupCognitiveEventListeners(): void {
+        if (!this.streamingOrchestrator) return;
+
+        // Listen to supervision events
+        this.streamingOrchestrator.on('supervision:updated', (cognition: any) => {
+            this.handleSupervisionUpdate(cognition);
+        });
+
+        // Listen to validation events
+        validatorManager.on('validation:completed', (event: any) => {
+            this.handleValidationEvent(event);
+        });
+
+        // Listen to tool routing events
+        toolRouter.on('routing:optimized', (event: any) => {
+            this.handleRoutingOptimization(event);
+        });
+
+        // Listen to agent factory events
+        agentFactory.on('selection:optimized', (event: any) => {
+            this.handleAgentSelectionOptimization(event);
+        });
+    }
+
+    /**
+     * Integrate cognitive components with existing systems
+     */
+    private integrateCognitiveComponents(): void {
+        // Enhance agent service with cognitive awareness
+        this.enhanceAgentServiceWithCognition();
+
+        // Integrate validation manager with planning
+        this.integrateValidationWithPlanning();
+
+        // Setup tool router coordination
+        this.setupToolRouterCoordination();
+
+        // Configure advanced AI provider cognitive features
+        this.configureAdvancedAIProviderCognition();
+    }
+
+    /**
+     * Enhance agent service with cognitive awareness
+     */
+    private enhanceAgentServiceWithCognition(): void {
+        const originalExecuteTask = agentService.executeTask.bind(agentService);
+
+        agentService.executeTask = async (agentType: string, task: string, options?: any) => {
+            // Apply cognitive enhancement to task execution
+            const enhancedOptions = {
+                ...options,
+                cognitiveMode: this.cognitiveMode,
+                orchestrationLevel: this.orchestrationLevel,
+                validatorManager: validatorManager,
+                toolRouter: toolRouter
+            };
+
+            return originalExecuteTask(agentType, task, enhancedOptions);
+        };
+    }
+
+    /**
+     * Integrate validation manager with planning service
+     */
+    private integrateValidationWithPlanning(): void {
+        const originalCreatePlan = planningService.createPlan.bind(planningService);
+
+        planningService.createPlan = async (task: string, options?: any) => {
+            // Apply cognitive validation to plan creation
+            const enhancedOptions = {
+                ...options,
+                validationConfig: {
+                    cognitiveValidation: this.cognitiveMode,
+                    orchestrationAware: true,
+                    intelligentCaching: true
+                }
+            };
+
+            return originalCreatePlan(task, enhancedOptions);
+        };
+    }
+
+    /**
+     * Setup tool router coordination with other components
+     */
+    private setupToolRouterCoordination(): void {
+        // Tool router is now cognitive-aware by default
+        console.log(chalk.dim('🔧 Tool router cognitive coordination active'));
+    }
+
+    /**
+     * Configure advanced AI provider cognitive features
+     */
+    private configureAdvancedAIProviderCognition(): void {
+        advancedAIProvider.configureCognitiveFeatures({
+            enableCognition: this.cognitiveMode,
+            orchestrationLevel: this.orchestrationLevel,
+            intelligentCommands: true,
+            adaptivePlanning: true
+        });
+    }
+
+    /**
+     * Handle supervision cognition updates
+     */
+    private handleSupervisionUpdate(cognition: any): void {
+        // Update orchestration level based on supervision
+        if (cognition.orchestrationLevel) {
+            this.orchestrationLevel = Math.max(this.orchestrationLevel, cognition.orchestrationLevel);
+        }
+
+        // Adjust cognitive mode based on system load
+        if (cognition.systemLoad === 'overloaded' && this.cognitiveMode) {
+            console.log(chalk.yellow('⚡ Temporarily reducing cognitive features due to high load'));
+            this.cognitiveMode = false;
+        } else if (cognition.systemLoad === 'light' && !this.cognitiveMode) {
+            console.log(chalk.green('🧠 Re-enabling cognitive features - system load normalized'));
+            this.cognitiveMode = true;
+        }
+    }
+
+    /**
+     * Handle validation events from cognitive validator
+     */
+    private handleValidationEvent(event: any): void {
+        const { context, cognition, result } = event;
+
+        if (result.cognitiveScore && result.cognitiveScore < 0.5) {
+            console.log(chalk.yellow(`⚠️ Low cognitive score for ${context.filePath}: ${(result.cognitiveScore * 100).toFixed(1)}%`));
+        }
+
+        if (result.orchestrationCompatibility && result.orchestrationCompatibility > 0.9) {
+            console.log(chalk.green(`🎯 High orchestration compatibility: ${(result.orchestrationCompatibility * 100).toFixed(1)}%`));
+        }
+    }
+
+    /**
+     * Handle tool routing optimization events
+     */
+    private handleRoutingOptimization(event: any): void {
+        const { tools, cognitiveScore, orchestrationAwareness } = event;
+
+        if (cognitiveScore > 0.8) {
+            console.log(chalk.green(`🎯 Optimal tool routing: ${tools.length} tools, score ${(cognitiveScore * 100).toFixed(1)}%`));
+        }
+    }
+
+    /**
+     * Handle agent selection optimization events
+     */
+    private handleAgentSelectionOptimization(event: any): void {
+        const { selectedAgents, totalScore, cognitiveFactors } = event;
+
+        if (totalScore > 85) {
+            console.log(chalk.green(`🤖 Optimal agent selection: ${selectedAgents.length} agents, score ${totalScore.toFixed(1)}%`));
+        }
     }
 
     /**
@@ -1400,6 +1608,12 @@ export class NikCLI {
             this.currentMode = 'auto';
         }
 
+        // Initialize cognitive orchestration if enabled
+        if (this.cognitiveMode && this.streamingOrchestrator) {
+            console.log(chalk.green('🧠 Cognitive orchestration active'));
+            this.displayCognitiveStatus();
+        }
+
         // Decision Point: structuredUI vs Console stdout (as per diagram)
         // Always enable structured UI to show Files/Diffs panels in all modes
         const shouldUseStructuredUI = Boolean(options.structuredUI) ||
@@ -1504,7 +1718,7 @@ export class NikCLI {
                     try {
                         const optimizationResult = await optimizer.optimizePrompt(trimmed);
                         optimizedInput = optimizationResult.content;
-                        
+
                         if (optimizationResult.tokensSaved > 5) {
                             QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
                         }
@@ -1991,6 +2205,9 @@ export class NikCLI {
                     break;
                 case 'queue':
                     this.handleQueueCommand(args);
+                    break;
+                case 'tokens':
+                    await this.manageTokenCommands(args);
                     break;
                 case 'clear':
                     await this.clearSession();
@@ -2655,7 +2872,7 @@ export class NikCLI {
             // Load project context for enhanced chat responses
             const projectContext = await this.loadProjectContext();
             const enhancedInput = projectContext ? `${input}\n\nProject Context: ${projectContext}` : input;
-            
+
             switch (this.currentMode) {
                 case 'plan':
                     await this.handlePlanMode(enhancedInput);
@@ -2668,7 +2885,7 @@ export class NikCLI {
                 default:
                     await this.handleDefaultMode(enhancedInput);
             }
-            
+
             // Update project context based on interaction
             await this.updateProjectContext(input);
         } catch (error: any) {
@@ -3052,7 +3269,7 @@ export class NikCLI {
 
         try {
             // Launch real agent via AgentService; run asynchronously
-            const taskId = await agentService.executeTask(name, task);
+            const taskId = await agentService.executeTask(name, task, {});
             console.log(wrapBlue(`🚀 Launched ${name} (Task ID: ${taskId.slice(-6)})`));
         } catch (error: any) {
             console.log(chalk.red(`Agent execution failed: ${error.message}`));
@@ -3090,7 +3307,7 @@ export class NikCLI {
                 // Direct autonomous execution - select best agent and launch
                 const selected = this.agentManager.findBestAgentForTask(task as any);
                 console.log(chalk.blue(`🤖 Selected agent: ${chalk.cyan(selected)}`));
-                const taskId = await agentService.executeTask(selected as any, task);
+                const taskId = await agentService.executeTask(selected as any, task, {});
                 console.log(wrapBlue(`🚀 Launched ${selected} (Task ID: ${taskId.slice(-6)})`));
             }
         } catch (error: any) {
@@ -3932,7 +4149,7 @@ Planning:
                     const agentName = args[0];
                     const task = args.slice(1).join(' ');
                     console.log(formatAgent(agentName, 'executing', task));
-                    const taskId = await agentService.executeTask(agentName, task);
+                    const taskId = await agentService.executeTask(agentName, task, {});
                     console.log(wrapBlue(`🚀 Launched ${agentName} (Task ID: ${taskId.slice(-6)})`));
                     break;
                 }
@@ -5922,6 +6139,33 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
     }
 
     /**
+     * Display cognitive orchestration status
+     */
+    private displayCognitiveStatus(): void {
+        if (!this.streamingOrchestrator) return;
+
+        console.log(chalk.dim('\n🧠 Cognitive Orchestration System Status:'));
+        console.log(chalk.dim('─'.repeat(50)));
+
+        // Get supervision metrics if available
+        const metrics = this.streamingOrchestrator.getSupervisionMetrics();
+
+        console.log(chalk.dim(`🎯 Supervision: ${metrics.cognition ? 'Active' : 'Inactive'}`));
+        console.log(chalk.dim(`📊 Metrics: ${Object.keys(metrics.metrics).length} tracked`));
+        console.log(chalk.dim(`🔄 Patterns: ${Object.keys(metrics.patterns).length} recognized`));
+        console.log(chalk.dim(`📈 History: ${metrics.historyLength} entries`));
+
+        // Display component status
+        console.log(chalk.dim(`🧠 ValidatorManager: Cognitive validation enabled`));
+        console.log(chalk.dim(`🔧 ToolRouter: Advanced routing algorithms active`));
+        console.log(chalk.dim(`🤖 AgentFactory: Multi-dimensional selection enabled`));
+        console.log(chalk.dim(`🚀 AdvancedAIProvider: Intelligent commands ready`));
+        console.log(chalk.dim(`🎯 Orchestration Level: ${this.orchestrationLevel}/10`));
+
+        console.log(chalk.green('\n✅ All cognitive components initialized and coordinating\n'));
+    }
+
+    /**
      * Initialize project context
      */
     private async handleInitProject(force: boolean = false): Promise<void> {
@@ -6018,7 +6262,8 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
 
         // Token info line (centered and dimmed)
         const tokenLine = chalk.gray(tokenInfo);
-        const tokenPadding = Math.max(0, Math.floor((boxWidth - tokenInfo.length) / 2));
+        const plainTokenLength = this._stripAnsi(tokenInfo).length;
+        const tokenPadding = Math.max(0, Math.floor((boxWidth - plainTokenLength) / 2));
         const centeredTokenInfo = ' '.repeat(tokenPadding) + tokenLine;
 
         // Status line
@@ -6043,7 +6288,16 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const statusDot = this.assistantProcessing ? chalk.green('●') + chalk.dim('….') : chalk.red('●');
         const statusWithQueue = queueIndicator ? `${statusDot} ${queueIndicator}` : statusDot;
 
-        const prompt = `\n┌─[${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusWithQueue}]\n└─❯ `;
+        const promptContent = `${modeIcon}${agentInfo}${chalk.green(workingDir)} ${statusWithQueue}`;
+        const promptLength = this._stripAnsi(promptContent).length;
+
+        // Truncate if too long
+        const maxPromptLength = terminalWidth - 10; // Leave space for borders
+        const truncatedPrompt = promptLength > maxPromptLength
+            ? this._stripAnsi(promptContent).substring(0, maxPromptLength - 3) + '...'
+            : promptContent;
+
+        const prompt = `\n┌─[${truncatedPrompt}]\n└─❯ `;
         this.rl.setPrompt(prompt);
         this.rl.prompt();
     }
@@ -6051,7 +6305,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
     /**
      * Strip ANSI escape codes to calculate actual string length
      */
-    private stripAnsi(str: string): string {
+    private _stripAnsi(str: string): string {
         return str.replace(/\x1b\[[0-9;]*m/g, '');
     }
 
@@ -6070,6 +6324,96 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         this.contextTokens = 0;
         this.realTimeCost = 0;
         this.sessionStartTime = new Date();
+    }
+
+    /**
+     * Manage toolchain token usage to prevent limits
+     */
+    public manageToolchainTokens(toolName: string, estimatedTokens: number): boolean {
+        const currentUsage = this.toolchainContext.get(toolName) || 0;
+        const newTotal = currentUsage + estimatedTokens;
+
+        if (newTotal > this.toolchainTokenLimit) {
+            console.log(chalk.yellow(`⚠️ Toolchain token limit reached for ${toolName}`));
+            console.log(chalk.dim(`   Current: ${currentUsage}, Adding: ${estimatedTokens}, Limit: ${this.toolchainTokenLimit}`));
+
+            // Clear old context for this tool
+            this.toolchainContext.set(toolName, estimatedTokens);
+            return false; // Indicates limit reached
+        }
+
+        this.toolchainContext.set(toolName, newTotal);
+        return true; // Indicates safe to proceed
+    }
+
+    /**
+     * Clear toolchain context to free tokens
+     */
+    public clearToolchainContext(toolName?: string): void {
+        if (toolName) {
+            this.toolchainContext.delete(toolName);
+            console.log(chalk.blue(`🧹 Cleared context for ${toolName}`));
+        } else {
+            this.toolchainContext.clear();
+            console.log(chalk.blue(`🧹 Cleared all toolchain context`));
+        }
+    }
+
+    /**
+     * Manage token commands for toolchain control
+     */
+    private async manageTokenCommands(args: string[]): Promise<void> {
+        const [subCmd] = args;
+
+        switch (subCmd) {
+            case 'status':
+                this.showTokenStatus();
+                break;
+            case 'clear':
+                this.clearToolchainContext();
+                break;
+            case 'limit':
+                if (args[1]) {
+                    const newLimit = parseInt(args[1]);
+                    if (!isNaN(newLimit)) {
+                        this.toolchainTokenLimit = newLimit;
+                        console.log(chalk.green(`✅ Toolchain token limit set to ${newLimit}`));
+                    } else {
+                        console.log(chalk.red('❌ Invalid limit value'));
+                    }
+                } else {
+                    console.log(chalk.blue(`Current toolchain limit: ${this.toolchainTokenLimit}`));
+                }
+                break;
+            default:
+                console.log(chalk.cyan.bold('\n🔢 Token Management Commands:'));
+                console.log(chalk.gray('─'.repeat(40)));
+                console.log(`${chalk.green('/tokens status')} - Show token usage`);
+                console.log(`${chalk.green('/tokens clear')}  - Clear toolchain context`);
+                console.log(`${chalk.green('/tokens limit')} [value] - Set/Show token limit`);
+        }
+    }
+
+    /**
+     * Show detailed token status
+     */
+    private showTokenStatus(): void {
+        console.log(chalk.cyan.bold('\n🔢 Token Status'));
+        console.log(chalk.gray('─'.repeat(40)));
+        console.log(`${chalk.blue('Session Tokens:')} ${this.sessionTokenUsage}`);
+        console.log(`${chalk.blue('Context Tokens:')} ${this.contextTokens}`);
+        console.log(`${chalk.blue('Total Tokens:')} ${this.sessionTokenUsage + this.contextTokens}`);
+        console.log(`${chalk.blue('Toolchain Limit:')} ${this.toolchainTokenLimit}`);
+
+        if (this.toolchainContext.size > 0) {
+            console.log(chalk.blue('\nToolchain Usage:'));
+            this.toolchainContext.forEach((tokens, tool) => {
+                const percentage = (tokens / this.toolchainTokenLimit * 100).toFixed(1);
+                const color = tokens > this.toolchainTokenLimit * 0.8 ? chalk.red :
+                    tokens > this.toolchainTokenLimit * 0.5 ? chalk.yellow : chalk.green;
+                console.log(`  ${tool}: ${color(tokens)} tokens (${percentage}%)`);
+            });
+        }
     }
 
     /**

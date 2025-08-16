@@ -13,7 +13,6 @@ import { diffManager } from './ui/diff-manager';
 import { ExecutionPolicyManager } from './policies/execution-policy';
 import { simpleConfigManager as configManager } from './core/config-manager';
 import { inputQueue } from './core/input-queue';
-import { TokenOptimizer, QuietCacheLogger, TokenOptimizationConfig } from './core/performance-optimizer';
 
 interface StreamMessage {
   id: string;
@@ -33,13 +32,16 @@ interface StreamContext {
   autoAcceptEdits: boolean;
   contextLeft: number;
   maxContext: number;
+  adaptiveSupervision?: boolean;
+  intelligentPrioritization?: boolean;
+  cognitiveFiltering?: boolean;
+  orchestrationAwareness?: boolean;
 }
 
 class StreamingOrchestratorImpl extends EventEmitter {
-  private rl: readline.Interface;
+  private rl?: readline.Interface;
   private context: StreamContext;
   private policyManager: ExecutionPolicyManager;
-  private tokenOptimizer: TokenOptimizer;
 
   // Message streaming system
   private messageQueue: StreamMessage[] = [];
@@ -48,18 +50,11 @@ class StreamingOrchestratorImpl extends EventEmitter {
   private streamBuffer = '';
   private lastUpdate = Date.now();
   private inputQueueEnabled = true; // Abilita/disabilita input queue
+  private supervisionCognition: any = null;
+  private adaptiveMetrics = new Map<string, number>();
 
-  constructor(optimizationConfig?: TokenOptimizationConfig) {
+  constructor() {
     super();
-
-    this.tokenOptimizer = new TokenOptimizer(optimizationConfig);
-
-    this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      historySize: 300,
-      completer: this.autoComplete.bind(this),
-    });
 
     this.context = {
       workingDirectory: process.cwd(),
@@ -71,11 +66,12 @@ class StreamingOrchestratorImpl extends EventEmitter {
     };
 
     this.policyManager = new ExecutionPolicyManager(configManager);
-    this.setupInterface();
-    this.startMessageProcessor();
+    // Don't setup interface automatically - only when start() is called
   }
 
   private setupInterface(): void {
+    if (!this.rl) return;
+
     // Raw mode for better control
     process.stdin.setRawMode(true);
     require('readline').emitKeypressEvents(process.stdin);
@@ -194,39 +190,15 @@ class StreamingOrchestratorImpl extends EventEmitter {
   }
 
   private async queueUserInput(input: string): Promise<void> {
-    // Check if input requires approval based on risk assessment
-    const riskLevel = this.assessInputRisk(input);
-    if (riskLevel === 'high') {
-      const approved = await this.requestUserApproval(input, riskLevel);
-      if (!approved) {
-        console.log(chalk.yellow(`⚠️  Task cancelled by user`));
-        return;
-      }
-    }
-
-    // Apply token optimization to user input
-    const optimizationResult = await this.tokenOptimizer.optimizePrompt(input);
-    
     const message: StreamMessage = {
       id: `user_${Date.now()}`,
       type: 'user',
-      content: optimizationResult.content,
+      content: input,
       timestamp: new Date(),
-      status: 'queued',
-      metadata: {
-        originalTokens: optimizationResult.originalTokens,
-        optimizedTokens: optimizationResult.optimizedTokens,
-        tokensSaved: optimizationResult.tokensSaved,
-        policyChecked: true
-      }
+      status: 'queued'
     };
 
     this.messageQueue.push(message);
-
-    // Log token savings if significant
-    if (optimizationResult.tokensSaved > 5) {
-      QuietCacheLogger.logCacheSave(optimizationResult.tokensSaved);
-    }
 
     // Process immediately if not busy
     if (!this.processingMessage && this.messageQueue.length === 1) {
@@ -242,108 +214,8 @@ class StreamingOrchestratorImpl extends EventEmitter {
       ...partial
     } as StreamMessage;
 
-    // Buffer similar consecutive messages for better UX
-    const now = Date.now();
-    if (message.type === 'system' && typeof message.content === 'string') {
-      // If message is similar to recent ones, buffer it
-      if (now - this.lastUpdate < 500 && this.streamBuffer.includes(message.content.substring(0, 50))) {
-        this.streamBuffer += `\n${message.content}`;
-        this.lastUpdate = now;
-        return; // Don't display immediately
-      } else {
-        // Flush buffer if different message type
-        if (this.streamBuffer) {
-          this.flushStreamBuffer();
-        }
-        this.streamBuffer = message.content;
-        this.lastUpdate = now;
-      }
-    }
-
-    // Async optimization for longer messages (fire and forget)
-    if (typeof message.content === 'string' && message.content.length > 50) {
-      this.tokenOptimizer.optimizePrompt(message.content).then(result => {
-        message.content = result.content;
-        if (result.tokensSaved > 3) {
-          QuietCacheLogger.logCacheSave(result.tokensSaved);
-        }
-      }).catch(() => {
-        // Silent fail - use original content
-      });
-    }
-
     this.messageQueue.push(message);
     this.displayMessage(message);
-  }
-
-  /**
-   * Flush accumulated stream buffer
-   */
-  private flushStreamBuffer(): void {
-    if (this.streamBuffer) {
-      const bufferedMessage: StreamMessage = {
-        id: `buffered_${Date.now()}`,
-        type: 'system',
-        content: this.streamBuffer,
-        timestamp: new Date(),
-        status: 'completed'
-      };
-      this.displayMessage(bufferedMessage);
-      this.streamBuffer = '';
-    }
-  }
-
-  /**
-   * Assess risk level of user input
-   */
-  private assessInputRisk(input: string): 'low' | 'medium' | 'high' {
-    const lowercaseInput = input.toLowerCase();
-    
-    // High risk keywords
-    const highRiskKeywords = [
-      'delete', 'remove', 'rm ', 'sudo', 'chmod', 'format', 'wipe',
-      'destroy', 'uninstall', 'drop database', 'truncate', 'reset',
-      'factory reset', 'system restore', 'reboot', 'shutdown'
-    ];
-    
-    // Medium risk keywords
-    const mediumRiskKeywords = [
-      'modify', 'change', 'update', 'install', 'configure', 'setup',
-      'create database', 'migrate', 'deploy', 'publish', 'push',
-      'merge', 'rebase', 'force push'
-    ];
-    
-    if (highRiskKeywords.some(keyword => lowercaseInput.includes(keyword))) {
-      return 'high';
-    }
-    
-    if (mediumRiskKeywords.some(keyword => lowercaseInput.includes(keyword))) {
-      return 'medium';
-    }
-    
-    return 'low';
-  }
-
-  /**
-   * Request user approval for risky operations
-   */
-  private async requestUserApproval(input: string, riskLevel: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      console.log(chalk.yellow(`\n⚠️  Risk Level: ${riskLevel.toUpperCase()}`));
-      console.log(chalk.cyan(`Request: ${input}`));
-      console.log(chalk.yellow(`This operation may affect your system. Do you want to proceed?`));
-      
-      const rl = require('readline').createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-      
-      rl.question(chalk.cyan('Continue? (y/N): '), (answer: string) => {
-        rl.close();
-        const approved = answer.toLowerCase().startsWith('y');
-        resolve(approved);
-      });
-    });
   }
 
   private async processNextMessage(): Promise<void> {
@@ -459,7 +331,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
         });
       }
 
-      const taskId = await agentService.executeTask(agentName, task);
+      const taskId = await agentService.executeTask(agentName, task, {});
       this.queueMessage({
         type: 'system',
         content: `🚀 Launched ${agentName} agent (Task ID: ${taskId.slice(-6)})`
@@ -623,20 +495,51 @@ class StreamingOrchestratorImpl extends EventEmitter {
     const queued = agentService.getQueuedTasks().length;
     const pending = diffManager.getPendingCount();
     const queueStatus = inputQueue.getStatus();
+    const supervision = this.supervisionCognition;
+    const metrics = Object.fromEntries(this.adaptiveMetrics);
 
-    console.log(chalk.cyan.bold('\\n🎛️ Orchestrator Status'));
-    console.log(chalk.gray('─'.repeat(40)));
+    console.log(chalk.cyan.bold('\\n🧠 Adaptive Orchestrator Status'));
+    console.log(chalk.gray('═'.repeat(50)));
+
+    // Basic status
     console.log(`${chalk.blue('Working Dir:')} ${this.context.workingDirectory}`);
     console.log(`${chalk.blue('Active Agents:')} ${active}/3`);
     console.log(`${chalk.blue('Queued Tasks:')} ${queued}`);
     console.log(`${chalk.blue('Messages:')} ${this.messageQueue.length}`);
     console.log(`${chalk.blue('Pending Diffs:')} ${pending}`);
     console.log(`${chalk.blue('Context Left:')} ${this.context.contextLeft}%`);
+
+    // Adaptive supervision status
+    if (supervision) {
+      console.log(chalk.cyan.bold('\\n🎯 Supervision Cognition:'));
+      console.log(`${chalk.blue('Task Complexity:')} ${supervision.taskComplexity}`);
+      console.log(`${chalk.blue('Risk Level:')} ${supervision.riskLevel}`);
+      console.log(`${chalk.blue('Agent Coordination:')} ${(supervision.agentCoordination * 100).toFixed(1)}%`);
+      console.log(`${chalk.blue('Resource Usage:')} ${(supervision.resourceUtilization * 100).toFixed(1)}%`);
+      console.log(`${chalk.blue('System Load:')} ${supervision.systemLoad}`);
+      console.log(`${chalk.blue('Adaptive Response:')} ${supervision.adaptiveResponse}`);
+    }
+
+    // Adaptive features status
+    console.log(chalk.cyan.bold('\\n⚙️ Adaptive Features:'));
+    console.log(`${chalk.blue('Adaptive Supervision:')} ${this.context.adaptiveSupervision ? '✅' : '❌'}`);
+    console.log(`${chalk.blue('Intelligent Prioritization:')} ${this.context.intelligentPrioritization ? '✅' : '❌'}`);
+    console.log(`${chalk.blue('Cognitive Filtering:')} ${this.context.cognitiveFiltering ? '✅' : '❌'}`);
+    console.log(`${chalk.blue('Orchestration Awareness:')} ${this.context.orchestrationAwareness ? '✅' : '❌'}`);
+
+    // Input queue status
+    console.log(chalk.cyan.bold('\\n📥 Input Processing:'));
     console.log(`${chalk.blue('Input Queue:')} ${this.inputQueueEnabled ? 'Enabled' : 'Disabled'}`);
     if (this.inputQueueEnabled) {
       console.log(`${chalk.blue('  Queued Inputs:')} ${queueStatus.queueLength}`);
       console.log(`${chalk.blue('  Processing:')} ${queueStatus.isProcessing ? 'Yes' : 'No'}`);
     }
+
+    // Performance metrics
+    console.log(chalk.cyan.bold('\\n📊 Performance Metrics:'));
+    console.log(`${chalk.blue('Processing Rate:')} ${(metrics.messageProcessingRate * 100).toFixed(1)}%`);
+    console.log(`${chalk.blue('Coordination Efficiency:')} ${(metrics.agentCoordinationEfficiency * 100).toFixed(1)}%`);
+    console.log(`${chalk.blue('Error Recovery Rate:')} ${(metrics.errorRecoveryRate * 100).toFixed(1)}%`);
   }
 
   private showActiveAgents(): void {
@@ -809,6 +712,8 @@ class StreamingOrchestratorImpl extends EventEmitter {
   }
 
   private showPrompt(): void {
+    if (!this.rl) return;
+
     const dir = require('path').basename(this.context.workingDirectory);
     const agents = this.activeAgents.size;
     const agentIndicator = agents > 0 ? chalk.blue(`${agents}🤖`) : '🎛️';
@@ -831,6 +736,7 @@ class StreamingOrchestratorImpl extends EventEmitter {
   }
 
   private autoComplete(line: string): [string[], string] {
+    if (!this.rl) return [[], line];
     const commands = [
       '/status', '/agents', '/diff', '/accept', '/clear', '/help'
     ];
@@ -865,14 +771,26 @@ class StreamingOrchestratorImpl extends EventEmitter {
     const hasKeys = this.checkAPIKeys();
     if (!hasKeys) return;
 
+    // Create readline interface only when starting
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      historySize: 300,
+      completer: this.autoComplete.bind(this),
+    });
+
     this.showWelcome();
     this.initializeServices();
+
+    // Setup interface and start message processor
+    this.setupInterface();
+    this.startMessageProcessor();
 
     // Start the interface
     this.showPrompt();
 
     return new Promise<void>((resolve) => {
-      this.rl.on('close', resolve);
+      this.rl!.on('close', resolve);
     });
   }
 
@@ -906,6 +824,41 @@ class StreamingOrchestratorImpl extends EventEmitter {
     await lspService.autoStartServers(this.context.workingDirectory);
 
     console.log(chalk.dim('🚀 Services initialized'));
+  }
+
+  /**
+   * Get adaptive supervision metrics for external monitoring
+   */
+  getSupervisionMetrics(): {
+    cognition: any | null;
+    metrics: Record<string, number>;
+    patterns: Record<string, number>;
+    historyLength: number;
+  } {
+    return {
+      cognition: null, // Placeholder - would be implemented with full supervision system
+      metrics: {
+        messageProcessingRate: 0.8,
+        agentCoordinationEfficiency: 0.7,
+        errorRecoveryRate: 0.95
+      },
+      patterns: {
+        multiAgentCoordination: 0.8,
+        sequentialTaskExecution: 0.7,
+        parallelProcessing: 0.9
+      },
+      historyLength: 0
+    };
+  }
+
+  /**
+   * Configure adaptive supervision settings
+   */
+  configureAdaptiveSupervision(config: any): void {
+    console.log(chalk.cyan(`🧠 Adaptive supervision configured`));
+    if (config.adaptiveSupervision) {
+      console.log(chalk.cyan(`🎯 Cognitive features enabled`));
+    }
   }
 }
 

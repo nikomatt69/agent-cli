@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StreamingModule = exports.ServiceModule = exports.SystemModule = exports.IntroductionModule = exports.MainOrchestrator = void 0;
+exports.StreamingModule = exports.ServiceModule = exports.SystemModule = exports.OnboardingModule = exports.IntroductionModule = exports.MainOrchestrator = void 0;
 exports.main = main;
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
@@ -56,6 +56,8 @@ const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
 const register_agents_1 = require("./register-agents");
 const agent_manager_1 = require("./core/agent-manager");
+const logger_1 = require("./core/logger");
+const logger_2 = require("./utils/logger");
 const banner = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
 ████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
@@ -105,6 +107,172 @@ class IntroductionModule {
     }
 }
 exports.IntroductionModule = IntroductionModule;
+class OnboardingModule {
+    static async runOnboarding() {
+        console.clear();
+        console.log(chalk_1.default.cyanBright(banner));
+        await this.showBetaWarning();
+        const hasKeys = await this.setupApiKeys();
+        const systemOk = await this.checkSystemRequirements();
+        return systemOk;
+    }
+    static async showBetaWarning() {
+        const warningBox = (0, boxen_1.default)(chalk_1.default.red.bold('⚠️  BETA VERSION WARNING\n\n') +
+            chalk_1.default.white('NikCLI is currently in beta and may contain bugs or unexpected behavior.\n\n') +
+            chalk_1.default.yellow.bold('Potential Risks:\n') +
+            chalk_1.default.white('• File system modifications\n') +
+            chalk_1.default.white('• Code generation may not always be optimal\n') +
+            chalk_1.default.white('• AI responses may be inaccurate\n') +
+            chalk_1.default.white('• System resource usage\n\n') +
+            chalk_1.default.cyan('For detailed security information, visit:\n') +
+            chalk_1.default.blue.underline('https://github.com/nikomatt69/agent-cli/blob/main/SECURITY.md\n\n') +
+            chalk_1.default.white('By continuing, you acknowledge these risks.'), {
+            padding: 1,
+            margin: 1,
+            borderStyle: 'round',
+            borderColor: 'red',
+            backgroundColor: '#2a0000'
+        });
+        console.log(warningBox);
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise(resolve => rl.question(chalk_1.default.yellow('\nDo you want to continue? (y/N): '), resolve));
+        rl.close();
+        if (!answer || !answer.toLowerCase().startsWith('y')) {
+            console.log(chalk_1.default.blue('\n👋 Thanks for trying NikCLI!'));
+            process.exit(0);
+        }
+    }
+    static async setupApiKeys() {
+        console.log(chalk_1.default.blue('\n🔑 API Key Setup'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        const anthropicKey = process.env.ANTHROPIC_API_KEY;
+        const openaiKey = process.env.OPENAI_API_KEY;
+        const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+        if (anthropicKey || openaiKey || googleKey) {
+            console.log(chalk_1.default.green('✅ API keys detected'));
+            return true;
+        }
+        try {
+            const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+            const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
+            if (modelCfg && modelCfg.provider === 'ollama') {
+                console.log(chalk_1.default.green('✅ Ollama model configured'));
+                return true;
+            }
+        }
+        catch (_) {
+        }
+        console.log(chalk_1.default.yellow('⚠️ No API keys found'));
+        const setupBox = (0, boxen_1.default)(chalk_1.default.white.bold('Setup your API key:\n\n') +
+            chalk_1.default.green('• ANTHROPIC_API_KEY') + chalk_1.default.gray(' - for Claude models (recommended)\n') +
+            chalk_1.default.blue('• OPENAI_API_KEY') + chalk_1.default.gray(' - for GPT models\n') +
+            chalk_1.default.magenta('• GOOGLE_GENERATIVE_AI_API_KEY') + chalk_1.default.gray(' - for Gemini models\n\n') +
+            chalk_1.default.white.bold('Example:\n') +
+            chalk_1.default.dim('export ANTHROPIC_API_KEY="your-key-here"\n\n') +
+            chalk_1.default.cyan('Or use Ollama for local models: ollama pull llama3.1:8b'), {
+            padding: 1,
+            margin: 1,
+            borderStyle: 'round',
+            borderColor: 'yellow',
+            backgroundColor: '#2a1a00'
+        });
+        console.log(setupBox);
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise(resolve => rl.question(chalk_1.default.yellow('\nContinue without API keys? (y/N): '), resolve));
+        rl.close();
+        if (!answer || !answer.toLowerCase().startsWith('y')) {
+            console.log(chalk_1.default.blue('\n👋 Set up your API key and run NikCLI again!'));
+            process.exit(0);
+        }
+        return await this.setupOllama();
+    }
+    static async checkSystemRequirements() {
+        console.log(chalk_1.default.blue('\n🔍 System Check'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        const version = process.version;
+        const major = parseInt(version.slice(1).split('.')[0]);
+        if (major < 18) {
+            console.log(chalk_1.default.red(`❌ Node.js ${major} is too old. Requires Node.js 18+`));
+            return false;
+        }
+        console.log(chalk_1.default.green(`✅ Node.js ${version}`));
+        try {
+            const currentModel = config_manager_1.simpleConfigManager.get('currentModel');
+            const modelCfg = config_manager_1.simpleConfigManager.get('models')[currentModel];
+            if (modelCfg && modelCfg.provider === 'ollama') {
+                const host = process.env.OLLAMA_HOST || '127.0.0.1:11434';
+                const base = host.startsWith('http') ? host : `http://${host}`;
+                try {
+                    const res = await fetch(`${base}/api/tags`, { method: 'GET' });
+                    if (res.ok) {
+                        console.log(chalk_1.default.green('✅ Ollama service detected'));
+                    }
+                    else {
+                        console.log(chalk_1.default.yellow('⚠️ Ollama service not responding'));
+                    }
+                }
+                catch (err) {
+                    console.log(chalk_1.default.yellow('⚠️ Ollama service not reachable'));
+                    console.log(chalk_1.default.gray('   Start with: ollama serve'));
+                }
+            }
+        }
+        catch (_) {
+        }
+        return true;
+    }
+    static async setupOllama() {
+        console.log(chalk_1.default.blue('\n🤖 Ollama Setup'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        try {
+            const models = config_manager_1.simpleConfigManager.get('models');
+            let ollamaEntries = Object.entries(models).filter(([, cfg]) => cfg.provider === 'ollama');
+            if (ollamaEntries.length > 0) {
+                console.log(chalk_1.default.green('✅ Ollama models found in configuration'));
+                const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+                const answer = await new Promise(resolve => rl.question(chalk_1.default.yellow('\nUse a local Ollama model? (Y/n): '), resolve));
+                rl.close();
+                if (!answer || answer.toLowerCase().startsWith('y')) {
+                    let chosenName = ollamaEntries[0][0];
+                    if (ollamaEntries.length > 1) {
+                        console.log(chalk_1.default.cyan('\nAvailable Ollama models:'));
+                        ollamaEntries.forEach(([name, cfg], idx) => {
+                            console.log(`  [${idx + 1}] ${name} (${cfg.model})`);
+                        });
+                        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+                        const pick = await new Promise(resolve => rl2.question('Select model number (default 1): ', resolve));
+                        rl2.close();
+                        const i = parseInt((pick || '1').trim(), 10);
+                        if (!isNaN(i) && i >= 1 && i <= ollamaEntries.length) {
+                            chosenName = ollamaEntries[i - 1][0];
+                        }
+                    }
+                    config_manager_1.simpleConfigManager.setCurrentModel(chosenName);
+                    console.log(chalk_1.default.green(`✅ Switched to Ollama model: ${chosenName}`));
+                    return true;
+                }
+            }
+            else {
+                const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+                const answer = await new Promise(resolve => rl.question(chalk_1.default.yellow('\nNo Ollama models configured. Add default model (llama3.1:8b)? (Y/n): '), resolve));
+                rl.close();
+                if (!answer || answer.toLowerCase().startsWith('y')) {
+                    const defaultName = 'llama3.1:8b';
+                    config_manager_1.simpleConfigManager.addModel(defaultName, { provider: 'ollama', model: 'llama3.1:8b' });
+                    config_manager_1.simpleConfigManager.setCurrentModel(defaultName);
+                    console.log(chalk_1.default.green(`✅ Added and switched to Ollama model: ${defaultName}`));
+                    return true;
+                }
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.yellow('⚠️ Error configuring Ollama models'));
+        }
+        console.log(chalk_1.default.yellow('⚠️ No AI provider configured'));
+        return false;
+    }
+}
+exports.OnboardingModule = OnboardingModule;
 class SystemModule {
     static async checkApiKeys() {
         try {
@@ -241,11 +409,11 @@ class ServiceModule {
         catch (_) {
         }
         const agents = this.agentManager.listAgents();
-        console.log(chalk_1.default.dim(`   Loaded ${agents.length} agents`));
+        console.log(chalk_1.default.dim(`   Agents ready (${agents.length} available)`));
     }
     static async initializeTools() {
         const tools = tool_service_1.toolService.getAvailableTools();
-        console.log(chalk_1.default.dim(`   Loaded ${tools.length} tools`));
+        console.log(chalk_1.default.dim(`   Tools ready (${tools.length} available)`));
     }
     static async initializePlanning() {
         console.log(chalk_1.default.dim('   Planning system ready'));
@@ -259,6 +427,7 @@ class ServiceModule {
     static async initializeSystem() {
         if (this.initialized)
             return true;
+        console.log(chalk_1.default.blue('🔄 Initializing system...'));
         const steps = [
             { name: 'Services', fn: this.initializeServices.bind(this) },
             { name: 'Agents', fn: this.initializeAgents.bind(this) },
@@ -269,9 +438,7 @@ class ServiceModule {
         ];
         for (const step of steps) {
             try {
-                console.log(chalk_1.default.blue(`🔄 ${step.name}...`));
                 await step.fn();
-                console.log(chalk_1.default.green(`✅ ${step.name} initialized`));
             }
             catch (error) {
                 console.log(chalk_1.default.red(`❌ ${step.name} failed: ${error.message}`));
@@ -279,7 +446,7 @@ class ServiceModule {
             }
         }
         this.initialized = true;
-        console.log(chalk_1.default.green.bold('\n🎉 System initialization complete!'));
+        console.log(chalk_1.default.green('✅ System ready'));
         return true;
     }
 }
@@ -533,76 +700,24 @@ class MainOrchestrator {
     }
     async start() {
         try {
-            IntroductionModule.displayBanner();
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            let requirementsMet = await SystemModule.checkSystemRequirements();
-            if (!requirementsMet) {
-                const hasKeysOrOllama = await SystemModule.checkApiKeys();
-                if (!hasKeysOrOllama) {
-                    try {
-                        const models = config_manager_1.simpleConfigManager.get('models');
-                        let ollamaEntries = Object.entries(models).filter(([, cfg]) => cfg.provider === 'ollama');
-                        if (ollamaEntries.length > 0) {
-                            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-                            const answer = await new Promise(resolve => rl.question('No API keys found. Use a local Ollama model instead? (Y/n): ', resolve));
-                            rl.close();
-                            if (!answer || answer.toLowerCase().startsWith('y')) {
-                                let chosenName = ollamaEntries[0][0];
-                                if (ollamaEntries.length > 1) {
-                                    console.log(chalk_1.default.cyan('\nAvailable Ollama models:'));
-                                    ollamaEntries.forEach(([name, cfg], idx) => {
-                                        console.log(`  [${idx + 1}] ${name} (${cfg.model})`);
-                                    });
-                                    const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
-                                    const pick = await new Promise(resolve => rl2.question('Select model number (default 1): ', resolve));
-                                    rl2.close();
-                                    const i = parseInt((pick || '1').trim(), 10);
-                                    if (!isNaN(i) && i >= 1 && i <= ollamaEntries.length) {
-                                        chosenName = ollamaEntries[i - 1][0];
-                                    }
-                                }
-                                config_manager_1.simpleConfigManager.setCurrentModel(chosenName);
-                                console.log(chalk_1.default.green(`\n✅ Switched to Ollama model: ${chosenName}`));
-                            }
-                            else {
-                                IntroductionModule.displayApiKeySetup();
-                            }
-                        }
-                        else {
-                            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-                            const answer = await new Promise(resolve => rl.question('No API keys and no Ollama models configured. Add default Ollama model (llama3.1:8b)? (Y/n): ', resolve));
-                            rl.close();
-                            if (!answer || answer.toLowerCase().startsWith('y')) {
-                                const defaultName = 'llama3.1:8b';
-                                config_manager_1.simpleConfigManager.addModel(defaultName, { provider: 'ollama', model: 'llama3.1:8b' });
-                                config_manager_1.simpleConfigManager.setCurrentModel(defaultName);
-                                const refreshed = config_manager_1.simpleConfigManager.get('models');
-                                ollamaEntries = Object.entries(refreshed).filter(([, cfg]) => cfg.provider === 'ollama');
-                                console.log(chalk_1.default.green(`\n✅ Added and switched to Ollama model: ${defaultName}`));
-                            }
-                            else {
-                                IntroductionModule.displayApiKeySetup();
-                            }
-                        }
-                    }
-                    catch (_) {
-                        IntroductionModule.displayApiKeySetup();
-                    }
-                }
-                requirementsMet = await SystemModule.checkSystemRequirements();
-                if (!requirementsMet) {
-                    console.log(chalk_1.default.yellow('\n⚠️ Continuing without API keys. You can set them later with /set-key or switch models.'));
-                }
+            const onboardingComplete = await OnboardingModule.runOnboarding();
+            if (!onboardingComplete) {
+                console.log(chalk_1.default.yellow('\n⚠️ Onboarding incomplete. Please address the issues above.'));
+                process.exit(1);
             }
-            IntroductionModule.displayStartupInfo();
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            logger_1.Logger.setConsoleOutput(false);
+            logger_2.Logger.getInstance().setConsoleOutput(false);
             const initialized = await ServiceModule.initializeSystem();
             if (!initialized) {
                 console.log(chalk_1.default.red('\n❌ Cannot start - system initialization failed'));
                 process.exit(1);
             }
+            logger_1.Logger.setConsoleOutput(true);
+            logger_2.Logger.getInstance().setConsoleOutput(true);
+            console.log(chalk_1.default.green.bold('\n🎉 Welcome to NikCLI!'));
+            console.log(chalk_1.default.gray('─'.repeat(40)));
             this.showQuickStart();
-            console.log(chalk_1.default.blue.bold('🤖 Starting NikCLI with Structured UI...\n'));
+            console.log(chalk_1.default.blue.bold('\n🤖 Starting NikCLI...\n'));
             const cli = new nik_cli_1.NikCLI();
             await cli.startChat({
                 structuredUI: true
