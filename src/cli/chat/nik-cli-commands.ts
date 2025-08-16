@@ -97,6 +97,12 @@ export class SlashCommandHandler {
     this.commands.set('test', this.testCommand.bind(this));
     this.commands.set('lint', this.lintCommand.bind(this));
     this.commands.set('create', this.createProjectCommand.bind(this));
+
+    // VM Management Commands
+    this.commands.set('vm', this.vmCommand.bind(this));
+    this.commands.set('vm-status', this.vmStatusCommand.bind(this));
+    this.commands.set('vm-logs', this.vmLogsCommand.bind(this));
+    this.commands.set('vm-cleanup', this.vmCleanupCommand.bind(this));
   }
 
   async handle(input: string): Promise<CommandResult> {
@@ -1634,5 +1640,122 @@ ${chalk.gray('Tip: Use Ctrl+C to stop streaming responses')}
       default:
         return chalk.gray(mode);
     }
+  }
+
+  // VM Management Commands
+  private async vmCommand(args: string[]): Promise<CommandResult> {
+    const subcommand = args[0] || 'help';
+    
+    try {
+      const { vmIntegration } = await import('../core/vm-integration');
+      
+      switch (subcommand) {
+        case 'create':
+          const config = args[1] ? JSON.parse(args[1]) : {};
+          const vm = await vmIntegration.createVM(config);
+          console.log(chalk.green(`✅ VM created: ${vm.id}`));
+          break;
+          
+        case 'list':
+          const vms = vmIntegration.listVMs();
+          console.log(chalk.blue.bold('\n🐳 Active VMs:'));
+          vms.forEach(vm => {
+            console.log(`  ${chalk.cyan(vm.id)} - ${vm.status} (${vm.config.name})`);
+          });
+          break;
+          
+        case 'destroy':
+          const vmId = args[1];
+          if (!vmId) {
+            console.log(chalk.red('❌ VM ID required'));
+            break;
+          }
+          await vmIntegration.destroyVM(vmId);
+          console.log(chalk.green(`✅ VM destroyed: ${vmId}`));
+          break;
+          
+        case 'help':
+        default:
+          console.log(chalk.cyan.bold('\n🐳 VM Management Commands'));
+          console.log(chalk.gray('─'.repeat(35)));
+          console.log(`${chalk.green('/vm create [config]')} - Create a new VM`);
+          console.log(`${chalk.green('/vm list')} - List active VMs`);
+          console.log(`${chalk.green('/vm destroy <id>')} - Destroy a VM`);
+          console.log(`${chalk.green('/vm help')} - Show this help`);
+          break;
+      }
+    } catch (error: any) {
+      console.log(chalk.red(`❌ VM command failed: ${error.message}`));
+    }
+
+    return { shouldExit: false, shouldUpdatePrompt: false };
+  }
+
+  private async vmStatusCommand(args: string[]): Promise<CommandResult> {
+    try {
+      const { vmIntegration } = await import('../core/vm-integration');
+      const status = vmIntegration.getStatus();
+      
+      console.log(chalk.blue.bold('\n🐳 VM Integration Status'));
+      console.log(chalk.gray('─'.repeat(30)));
+      console.log(`${chalk.blue('Enabled:')} ${status.enabled ? chalk.green('Yes') : chalk.red('No')}`);
+      console.log(`${chalk.blue('Active VMs:')} ${status.activeVMs}`);
+      console.log(`${chalk.blue('Active Tasks:')} ${status.activeTasks}`);
+      
+      if (status.vmAgentStatus) {
+        console.log(chalk.blue('\nAgent Status:'));
+        console.log(`  ${chalk.cyan('VMs Created:')} ${status.vmAgentStatus.metrics?.vmsCreated || 0}`);
+        console.log(`  ${chalk.cyan('Tasks Completed:')} ${status.vmAgentStatus.metrics?.tasksCompleted || 0}`);
+        console.log(`  ${chalk.cyan('Tasks Failed:')} ${status.vmAgentStatus.metrics?.tasksFailed || 0}`);
+      }
+    } catch (error: any) {
+      console.log(chalk.red(`❌ VM status command failed: ${error.message}`));
+    }
+
+    return { shouldExit: false, shouldUpdatePrompt: false };
+  }
+
+  private async vmLogsCommand(args: string[]): Promise<CommandResult> {
+    const vmId = args[0];
+    
+    try {
+      if (!vmId) {
+        console.log(chalk.red('❌ VM ID required'));
+        console.log(chalk.gray('Use /vm list to see available VMs'));
+        return { shouldExit: false, shouldUpdatePrompt: false };
+      }
+
+      const { vmManager } = await import('../automation/vm/vm-manager');
+      const logs = await vmManager.getVMLogs(vmId);
+      
+      console.log(chalk.blue.bold(`\n📋 VM Logs: ${vmId}`));
+      console.log(chalk.gray('─'.repeat(50)));
+      
+      if (logs.length === 0) {
+        console.log(chalk.yellow('No logs available'));
+      } else {
+        logs.forEach(log => {
+          console.log(chalk.white(log));
+        });
+      }
+    } catch (error: any) {
+      console.log(chalk.red(`❌ VM logs command failed: ${error.message}`));
+    }
+
+    return { shouldExit: false, shouldUpdatePrompt: false };
+  }
+
+  private async vmCleanupCommand(args: string[]): Promise<CommandResult> {
+    try {
+      const { vmIntegration } = await import('../core/vm-integration');
+      
+      console.log(chalk.yellow('🧹 Cleaning up VM resources...'));
+      await vmIntegration.cleanup();
+      console.log(chalk.green('✅ VM cleanup completed'));
+    } catch (error: any) {
+      console.log(chalk.red(`❌ VM cleanup command failed: ${error.message}`));
+    }
+
+    return { shouldExit: false, shouldUpdatePrompt: false };
   }
 }

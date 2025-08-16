@@ -34,6 +34,7 @@ npm start
 
 - **Node.js**: 18+ (enforced at startup)
 - **Git**: For autonomous development features
+- **Docker**: For VM integration features (optional but recommended)
 - **API Keys**: At least one of:
   - `ANTHROPIC_API_KEY` - for Claude models (recommended)
   - `OPENAI_API_KEY` - for GPT models
@@ -98,6 +99,22 @@ NikCLI provides an extensive set of commands organized into logical categories:
 | `/test [pattern]`       | Run tests with optional pattern |
 | `/lint`                 | Run project linting             |
 | `/create <type> <name>` | Create new project or component |
+
+### 🐳 VM Management (Enterprise)
+
+| Command                    | Description                                |
+| -------------------------- | ------------------------------------------ |
+| `/vm create [config]`      | Create a new VM for isolated operations    |
+| `/vm list`                 | List active VMs                            |
+| `/vm destroy <id>`         | Destroy a VM by ID                         |
+| `/vm-status`               | Show VM integration status                 |
+| `/vm-logs <vm-id>`         | Show logs for a specific VM                |
+| `/vm-cleanup`              | Clean up all VM resources                  |
+
+**Natural Language Commands:**
+- `analizza la repository https://github.com/user/repo` - Autonomous repository analysis
+- `analizza la repository https://github.com/user/repo e verifica la sicurezza` - Security analysis
+- `analizza la repository https://github.com/user/repo e ottimizza le performance` - Performance optimization
 
 ### Agent Management
 
@@ -219,6 +236,52 @@ NikCLI provides an extensive set of commands organized into logical categories:
 - Stream-based message processing with real-time feedback
 - Command completion, history, and interactive help system
 - Support for natural language commands and agent-specific targeting
+
+## 🐳 Enterprise VM Integration System
+
+### Overview
+
+NikCLI now includes a powerful **VM Integration System** that transforms the CLI into an enterprise-grade platform with autonomous agents operating in isolated Docker containers. This system enables secure repository analysis, automated testing, and development tasks in completely isolated environments.
+
+### Key Features
+
+- **🐳 Autonomous VM Agents**: Specialized agents that operate in Docker containers
+- **🔍 Repository Analysis**: Automatic analysis with pull request creation
+- **🛡️ Complete Isolation**: Each operation runs in an isolated Docker environment
+- **🧹 Auto-cleanup**: Automatic VM cleanup after task completion
+- **📊 Real-time UI**: Live agent status indicators and log panels
+- **⌨️ Keyboard Shortcuts**: Quick access to agent logs and controls
+
+### Usage Examples
+
+```bash
+# Natural language repository analysis
+analizza la repository https://github.com/user/repo e verifica la sicurezza del codice
+
+# VM management commands
+/vm create
+/vm list
+/vm-status
+/vm-logs <vm-id>
+/vm-cleanup
+```
+
+### UI Controls
+
+- **`L`**: Show agent logs
+- **`ESC`**: Return to main chat
+- **`R`**: Refresh logs
+- **`C`**: Clear logs
+- **`N`/`P`**: Navigate between agents
+
+### Architecture
+
+- **VM Manager**: Docker container lifecycle management
+- **Autonomous VM Agent**: Specialized agent for VM operations
+- **Agent Status UI**: Real-time agent monitoring and control
+- **VM Integration**: Main integration layer with CLI
+
+For detailed documentation, see [VM Integration Guide](docs/VM_INTEGRATION.md).
 
 ## 🤖 Agent System
 
