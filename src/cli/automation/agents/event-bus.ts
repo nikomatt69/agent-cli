@@ -390,5 +390,18 @@ export const EventTypes = {
     // File operations
     FILE_CHANGED: 'file.changed',
     FILE_CREATED: 'file.created',
-    FILE_DELETED: 'file.deleted'
+    FILE_DELETED: 'file.deleted',
+
+    // VM Management
+    VM_CREATED: 'vm.created',
+    VM_DESTROYED: 'vm.destroyed',
+    VM_TASK_STARTED: 'vm.task.started',
+    VM_TASK_COMPLETED: 'vm.task.completed',
+    VM_TASK_FAILED: 'vm.task.failed',
+
+    // VM Agent specific
+    VM_AGENT_CREATED: 'vm.agent.created',
+    VM_AGENT_DESTROYED: 'vm.agent.destroyed',
+    AGENT_TASK_COMPLETED: 'agent.task.completed',
+    AGENT_TASK_FAILED: 'agent.task.failed'
 } as const;
