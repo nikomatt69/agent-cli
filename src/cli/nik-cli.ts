@@ -46,6 +46,7 @@ import { registerAgents } from './register-agents';
 import { advancedUI } from './ui/advanced-cli-ui';
 import { inputQueue } from './core/input-queue';
 import { TokenOptimizer, QuietCacheLogger, TokenOptimizationConfig } from './core/performance-optimizer';
+import { OAuthCommands } from './commands/oauth-commands';
 
 // Configure marked for terminal rendering
 marked.setOptions({
@@ -1911,6 +1912,33 @@ export class NikCLI {
     }
 
     /**
+     * Handle OAuth commands
+     */
+    private async handleOAuthCommand(args: string[]): Promise<void> {
+        const [subCmd] = args;
+
+        switch (subCmd) {
+            case 'status':
+                await OAuthCommands.showOAuthStatus();
+                break;
+            case 'setup':
+                await OAuthCommands.setupOAuth();
+                break;
+            case 'remove':
+                await OAuthCommands.removeOAuthToken(args[1]);
+                break;
+            case 'refresh':
+                await OAuthCommands.refreshOAuthToken(args[1]);
+                break;
+            case 'help':
+                OAuthCommands.showHelp();
+                break;
+            default:
+                OAuthCommands.showHelp();
+        }
+    }
+
+    /**
      * Dispatch /slash commands to rich SlashCommandHandler while preserving mode controls
      */
     private async dispatchSlash(command: string): Promise<void> {
@@ -2197,6 +2225,11 @@ export class NikCLI {
                     break;
                 case 'doc-suggest':
                     await this.handleDocSuggestCommand(args);
+                    break;
+
+                // OAuth Commands
+                case 'oauth':
+                    await this.handleOAuthCommand(args);
                     break;
 
                 // Help and Exit
@@ -6021,6 +6054,13 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/set-key <model> <key>', 'Set API key'],
             ['/config', 'Show configuration'],
 
+            // OAuth Authentication
+            ['/oauth status', 'Show OAuth provider status'],
+            ['/oauth setup', 'Setup OAuth authentication'],
+            ['/oauth remove [provider]', 'Remove OAuth token'],
+            ['/oauth refresh [provider]', 'Refresh OAuth token'],
+            ['/oauth help', 'Show OAuth help'],
+
             // MCP (Model Context Protocol)
             ['/mcp servers', 'List configured MCP servers'],
             ['/mcp test <server>', 'Test MCP server connection'],
@@ -6093,23 +6133,28 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
+        console.log(chalk.blue.bold('\n🔐 OAuth Authentication:'));
+        commands.slice(38, 43).forEach(([cmd, desc]) => {
+            console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
+        });
+
         console.log(chalk.blue.bold('\n🔮 MCP (Model Context Protocol):'));
-        commands.slice(38, 44).forEach(([cmd, desc]) => {
+        commands.slice(43, 49).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
         console.log(chalk.blue.bold('\n📚 Documentation Management:'));
-        commands.slice(44, 55).forEach(([cmd, desc]) => {
+        commands.slice(49, 60).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
         console.log(chalk.blue.bold('\n🔧 Advanced Features:'));
-        commands.slice(55, 60).forEach(([cmd, desc]) => {
+        commands.slice(60, 65).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 
         console.log(chalk.blue.bold('\n📋 Basic Commands:'));
-        commands.slice(60).forEach(([cmd, desc]) => {
+        commands.slice(65).forEach(([cmd, desc]) => {
             console.log(`${chalk.green(cmd.padEnd(25))} ${chalk.dim(desc)}`);
         });
 

@@ -78,6 +78,7 @@ const register_agents_1 = require("./register-agents");
 const advanced_cli_ui_1 = require("./ui/advanced-cli-ui");
 const input_queue_1 = require("./core/input-queue");
 const performance_optimizer_1 = require("./core/performance-optimizer");
+const oauth_commands_1 = require("./commands/oauth-commands");
 marked_1.marked.setOptions({
     renderer: new marked_terminal_1.default(),
 });
@@ -1367,6 +1368,28 @@ class NikCLI {
                 console.log(`${chalk_1.default.green('/queue process')}  - Process next queued input`);
         }
     }
+    async handleOAuthCommand(args) {
+        const [subCmd] = args;
+        switch (subCmd) {
+            case 'status':
+                await oauth_commands_1.OAuthCommands.showOAuthStatus();
+                break;
+            case 'setup':
+                await oauth_commands_1.OAuthCommands.setupOAuth();
+                break;
+            case 'remove':
+                await oauth_commands_1.OAuthCommands.removeOAuthToken(args[1]);
+                break;
+            case 'refresh':
+                await oauth_commands_1.OAuthCommands.refreshOAuthToken(args[1]);
+                break;
+            case 'help':
+                oauth_commands_1.OAuthCommands.showHelp();
+                break;
+            default:
+                oauth_commands_1.OAuthCommands.showHelp();
+        }
+    }
     async dispatchSlash(command) {
         const parts = command.slice(1).split(' ');
         const cmd = parts[0];
@@ -1608,6 +1631,9 @@ class NikCLI {
                     break;
                 case 'doc-suggest':
                     await this.handleDocSuggestCommand(args);
+                    break;
+                case 'oauth':
+                    await this.handleOAuthCommand(args);
                     break;
                 case 'help':
                     this.showSlashHelp();
@@ -4732,6 +4758,11 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/model <name>', 'Switch to model'],
             ['/set-key <model> <key>', 'Set API key'],
             ['/config', 'Show configuration'],
+            ['/oauth status', 'Show OAuth provider status'],
+            ['/oauth setup', 'Setup OAuth authentication'],
+            ['/oauth remove [provider]', 'Remove OAuth token'],
+            ['/oauth refresh [provider]', 'Refresh OAuth token'],
+            ['/oauth help', 'Show OAuth help'],
             ['/mcp servers', 'List configured MCP servers'],
             ['/mcp test <server>', 'Test MCP server connection'],
             ['/mcp call <server> <method>', 'Make MCP call'],
@@ -4788,20 +4819,24 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         commands.slice(34, 38).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
+        console.log(chalk_1.default.blue.bold('\n🔐 OAuth Authentication:'));
+        commands.slice(38, 43).forEach(([cmd, desc]) => {
+            console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
+        });
         console.log(chalk_1.default.blue.bold('\n🔮 MCP (Model Context Protocol):'));
-        commands.slice(38, 44).forEach(([cmd, desc]) => {
+        commands.slice(43, 49).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n📚 Documentation Management:'));
-        commands.slice(44, 55).forEach(([cmd, desc]) => {
+        commands.slice(49, 60).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n🔧 Advanced Features:'));
-        commands.slice(55, 60).forEach(([cmd, desc]) => {
+        commands.slice(60, 65).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n📋 Basic Commands:'));
-        commands.slice(60).forEach(([cmd, desc]) => {
+        commands.slice(65).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.gray('\n💡 Tip: Use Ctrl+C to stop any running operation'));

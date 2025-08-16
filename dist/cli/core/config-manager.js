@@ -60,6 +60,52 @@ const ConfigSchema = zod_1.z.object({
     preferredAgent: zod_1.z.string().optional(),
     models: zod_1.z.record(ModelConfigSchema),
     apiKeys: zod_1.z.record(zod_1.z.string()).optional(),
+    oauth: zod_1.z.object({
+        enabled: zod_1.z.boolean().default(false),
+        providers: zod_1.z.object({
+            claude: zod_1.z.object({
+                enabled: zod_1.z.boolean().default(false),
+                clientId: zod_1.z.string().optional(),
+                clientSecret: zod_1.z.string().optional(),
+                redirectUri: zod_1.z.string().optional(),
+                scope: zod_1.z.string().default('read write'),
+                tokenRefreshInterval: zod_1.z.number().min(300000).max(86400000).default(3600000),
+            }).default({
+                enabled: false,
+                scope: 'read write',
+                tokenRefreshInterval: 3600000,
+            }),
+            openai: zod_1.z.object({
+                enabled: zod_1.z.boolean().default(false),
+                clientId: zod_1.z.string().optional(),
+                clientSecret: zod_1.z.string().optional(),
+                redirectUri: zod_1.z.string().optional(),
+                scope: zod_1.z.string().default('read write'),
+                tokenRefreshInterval: zod_1.z.number().min(300000).max(86400000).default(3600000),
+            }).default({
+                enabled: false,
+                scope: 'read write',
+                tokenRefreshInterval: 3600000,
+            }),
+        }).default({
+            claude: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+            openai: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+        }),
+        tokens: zod_1.z.record(zod_1.z.object({
+            access_token: zod_1.z.string(),
+            refresh_token: zod_1.z.string().optional(),
+            expires_in: zod_1.z.number(),
+            token_type: zod_1.z.string(),
+            scope: zod_1.z.string().optional(),
+            expires_at: zod_1.z.number().optional(),
+        })).optional(),
+    }).default({
+        enabled: false,
+        providers: {
+            claude: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+            openai: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+        },
+    }),
     mcpServers: zod_1.z.record(zod_1.z.object({
         name: zod_1.z.string(),
         type: zod_1.z.enum(['http', 'websocket', 'command', 'stdio']),
@@ -387,6 +433,66 @@ class SimpleConfigManager {
     import(config) {
         this.config = { ...this.defaultConfig, ...config };
         this.saveConfig();
+    }
+    saveOAuthToken(provider, token) {
+        if (!this.config.oauth.tokens) {
+            this.config.oauth.tokens = {};
+        }
+        const tokenWithExpiry = {
+            ...token,
+            expires_at: Date.now() + (token.expires_in * 1000)
+        };
+        this.config.oauth.tokens[provider] = tokenWithExpiry;
+        this.saveConfig();
+    }
+    getOAuthToken(provider) {
+        if (!this.config.oauth.tokens || !this.config.oauth.tokens[provider]) {
+            return null;
+        }
+        const token = this.config.oauth.tokens[provider];
+        if (token.expires_at && Date.now() > token.expires_at) {
+            delete this.config.oauth.tokens[provider];
+            this.saveConfig();
+            return null;
+        }
+        return token;
+    }
+    removeOAuthToken(provider) {
+        if (this.config.oauth.tokens && this.config.oauth.tokens[provider]) {
+            delete this.config.oauth.tokens[provider];
+            this.saveConfig();
+        }
+    }
+    isOAuthEnabled(provider) {
+        return this.config.oauth.enabled &&
+            this.config.oauth.providers[provider]?.enabled;
+    }
+    enableOAuthProvider(provider, config) {
+        this.config.oauth.enabled = true;
+        if (config) {
+            this.config.oauth.providers[provider] = {
+                ...this.config.oauth.providers[provider],
+                ...config,
+                enabled: true
+            };
+        }
+        else {
+            this.config.oauth.providers[provider].enabled = true;
+        }
+        this.saveConfig();
+    }
+    disableOAuthProvider(provider) {
+        if (this.config.oauth.providers[provider]) {
+            this.config.oauth.providers[provider].enabled = false;
+            this.saveConfig();
+        }
+    }
+    getOAuthProviders() {
+        return Object.entries(this.config.oauth.providers).map(([name, config]) => ({
+            name,
+            enabled: config.enabled,
+            hasToken: !!this.getOAuthToken(name)
+        }));
     }
 }
 exports.SimpleConfigManager = SimpleConfigManager;

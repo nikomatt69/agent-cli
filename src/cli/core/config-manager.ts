@@ -25,6 +25,53 @@ const ConfigSchema = z.object({
   preferredAgent: z.string().optional(),
   models: z.record(ModelConfigSchema),
   apiKeys: z.record(z.string()).optional(),
+  // OAuth configuration
+  oauth: z.object({
+    enabled: z.boolean().default(false),
+    providers: z.object({
+      claude: z.object({
+        enabled: z.boolean().default(false),
+        clientId: z.string().optional(),
+        clientSecret: z.string().optional(),
+        redirectUri: z.string().optional(),
+        scope: z.string().default('read write'),
+        tokenRefreshInterval: z.number().min(300000).max(86400000).default(3600000), // 1 hour
+      }).default({
+        enabled: false,
+        scope: 'read write',
+        tokenRefreshInterval: 3600000,
+      }),
+      openai: z.object({
+        enabled: z.boolean().default(false),
+        clientId: z.string().optional(),
+        clientSecret: z.string().optional(),
+        redirectUri: z.string().optional(),
+        scope: z.string().default('read write'),
+        tokenRefreshInterval: z.number().min(300000).max(86400000).default(3600000), // 1 hour
+      }).default({
+        enabled: false,
+        scope: 'read write',
+        tokenRefreshInterval: 3600000,
+      }),
+    }).default({
+      claude: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+      openai: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+    }),
+    tokens: z.record(z.object({
+      access_token: z.string(),
+      refresh_token: z.string().optional(),
+      expires_in: z.number(),
+      token_type: z.string(),
+      scope: z.string().optional(),
+      expires_at: z.number().optional(),
+    })).optional(),
+  }).default({
+    enabled: false,
+    providers: {
+      claude: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+      openai: { enabled: false, scope: 'read write', tokenRefreshInterval: 3600000 },
+    },
+  }),
   // MCP (Model Context Protocol) servers configuration
   mcpServers: z.record(z.object({
     name: z.string(),
@@ -406,6 +453,81 @@ export class SimpleConfigManager {
   import(config: Partial<ConfigType>): void {
     this.config = { ...this.defaultConfig, ...config };
     this.saveConfig();
+  }
+
+  // OAuth token management
+  saveOAuthToken(provider: string, token: any): void {
+    if (!this.config.oauth.tokens) {
+      this.config.oauth.tokens = {};
+    }
+    
+    // Add expiration timestamp
+    const tokenWithExpiry = {
+      ...token,
+      expires_at: Date.now() + (token.expires_in * 1000)
+    };
+    
+    this.config.oauth.tokens[provider] = tokenWithExpiry;
+    this.saveConfig();
+  }
+
+  getOAuthToken(provider: string): any | null {
+    if (!this.config.oauth.tokens || !this.config.oauth.tokens[provider]) {
+      return null;
+    }
+
+    const token = this.config.oauth.tokens[provider];
+    
+    // Check if token is expired
+    if (token.expires_at && Date.now() > token.expires_at) {
+      // Token is expired, remove it
+      delete this.config.oauth.tokens[provider];
+      this.saveConfig();
+      return null;
+    }
+
+    return token;
+  }
+
+  removeOAuthToken(provider: string): void {
+    if (this.config.oauth.tokens && this.config.oauth.tokens[provider]) {
+      delete this.config.oauth.tokens[provider];
+      this.saveConfig();
+    }
+  }
+
+  isOAuthEnabled(provider: string): boolean {
+    return this.config.oauth.enabled && 
+           this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers]?.enabled;
+  }
+
+  enableOAuthProvider(provider: string, config?: any): void {
+    this.config.oauth.enabled = true;
+    if (config) {
+      this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers] = {
+        ...this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers],
+        ...config,
+        enabled: true
+      };
+    } else {
+      this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers].enabled = true;
+    }
+    this.saveConfig();
+  }
+
+  disableOAuthProvider(provider: string): void {
+    if (this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers]) {
+      this.config.oauth.providers[provider as keyof typeof this.config.oauth.providers].enabled = false;
+      this.saveConfig();
+    }
+  }
+
+  getOAuthProviders(): Array<{ name: string; enabled: boolean; hasToken: boolean }> {
+    return Object.entries(this.config.oauth.providers).map(([name, config]) => ({
+      name,
+      enabled: config.enabled,
+      hasToken: !!this.getOAuthToken(name)
+    }));
   }
 }
 
