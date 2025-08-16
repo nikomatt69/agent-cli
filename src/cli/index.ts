@@ -28,6 +28,7 @@ import { registerAgents } from './register-agents';
 import { AgentManager } from './core/agent-manager';
 import { Logger } from './core/logger';
 import { Logger as UtilsLogger } from './utils/logger';
+import { oauthService } from './services/oauth-service';
 
 // Types from streaming orchestrator
 interface StreamMessage {
@@ -180,8 +181,20 @@ class OnboardingModule {
     const openaiKey = process.env.OPENAI_API_KEY;
     const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
-    if (anthropicKey || openaiKey || googleKey) {
-      console.log(chalk.green('✅ API keys detected'));
+    // Check for OAuth tokens
+    const claudeToken = await oauthService.getOAuthToken('claude');
+    const openaiToken = await oauthService.getOAuthToken('openai');
+
+    if (anthropicKey || openaiKey || googleKey || claudeToken || openaiToken) {
+      console.log(chalk.green('✅ Authentication credentials detected'));
+      if (claudeToken) {
+        console.log(chalk.green('   • Claude.ai OAuth token available'));
+        process.env.ANTHROPIC_API_KEY = claudeToken.access_token;
+      }
+      if (openaiToken) {
+        console.log(chalk.blue('   • OpenAI OAuth token available'));
+        process.env.OPENAI_API_KEY = openaiToken.access_token;
+      }
       return true;
     }
 
@@ -199,38 +212,47 @@ class OnboardingModule {
 
     console.log(chalk.yellow('⚠️ No API keys found'));
 
-    const setupBox = boxen(
-      chalk.white.bold('Setup your API key:\n\n') +
-      chalk.green('• ANTHROPIC_API_KEY') + chalk.gray(' - for Claude models (recommended)\n') +
-      chalk.blue('• OPENAI_API_KEY') + chalk.gray(' - for GPT models\n') +
-      chalk.magenta('• GOOGLE_GENERATIVE_AI_API_KEY') + chalk.gray(' - for Gemini models\n\n') +
-      chalk.white.bold('Example:\n') +
-      chalk.dim('export ANTHROPIC_API_KEY="your-key-here"\n\n') +
-      chalk.cyan('Or use Ollama for local models: ollama pull llama3.1:8b'),
+    // Show authentication options
+    const authBox = boxen(
+      chalk.white.bold('Choose your authentication method:\n\n') +
+      chalk.cyan('1.') + chalk.white(' OAuth Login (Recommended)\n') +
+      chalk.gray('   • Login with your Claude.ai account\n') +
+      chalk.gray('   • Login with your OpenAI account\n') +
+      chalk.gray('   • Use your subscription plan\n\n') +
+      chalk.cyan('2.') + chalk.white(' API Keys (Manual setup)\n') +
+      chalk.gray('   • ANTHROPIC_API_KEY for Claude models\n') +
+      chalk.gray('   • OPENAI_API_KEY for GPT models\n') +
+      chalk.gray('   • GOOGLE_GENERATIVE_AI_API_KEY for Gemini models\n\n') +
+      chalk.cyan('3.') + chalk.white(' Ollama (Local models)\n') +
+      chalk.gray('   • Use local models without API keys'),
       {
         padding: 1,
         margin: 1,
         borderStyle: 'round',
-        borderColor: 'yellow',
-        backgroundColor: '#2a1a00'
+        borderColor: 'cyan',
+        backgroundColor: '#1a1a2e'
       }
     );
 
-    console.log(setupBox);
+    console.log(authBox);
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const answer: string = await new Promise(resolve =>
-      rl.question(chalk.yellow('\nContinue without API keys? (y/N): '), resolve)
+    const choice: string = await new Promise(resolve =>
+      rl.question(chalk.cyan('\nSelect authentication method (1-3): '), resolve)
     );
     rl.close();
 
-    if (!answer || !answer.toLowerCase().startsWith('y')) {
-      console.log(chalk.blue('\n👋 Set up your API key and run NikCLI again!'));
-      process.exit(0);
+    switch (choice.trim()) {
+      case '1':
+        return await this.setupOAuth();
+      case '2':
+        return await this.setupManualApiKeys();
+      case '3':
+        return await this.setupOllama();
+      default:
+        console.log(chalk.yellow('⚠️ Invalid choice. Using OAuth login...'));
+        return await this.setupOAuth();
     }
-
-    // User chose to continue without API keys - offer Ollama setup
-    return await this.setupOllama();
   }
 
   private static async checkSystemRequirements(): Promise<boolean> {
@@ -335,6 +357,133 @@ class OnboardingModule {
 
     console.log(chalk.yellow('⚠️ No AI provider configured'));
     return false;
+  }
+
+  private static async setupOAuth(): Promise<boolean> {
+    console.log(chalk.blue('\n🔐 OAuth Authentication Setup'));
+    console.log(chalk.gray('─'.repeat(40)));
+
+    try {
+      // Start OAuth server
+      await oauthService.startServer();
+
+      const oauthBox = boxen(
+        chalk.white.bold('Choose your OAuth provider:\n\n') +
+        chalk.green('1.') + chalk.white(' Claude.ai (Anthropic)\n') +
+        chalk.gray('   • Login with your Claude.ai account\n') +
+        chalk.gray('   • Use your Claude subscription\n\n') +
+        chalk.blue('2.') + chalk.white(' OpenAI\n') +
+        chalk.gray('   • Login with your OpenAI account\n') +
+        chalk.gray('   • Use your OpenAI subscription\n\n') +
+        chalk.yellow('3.') + chalk.white(' Both (Recommended)\n') +
+        chalk.gray('   • Setup both providers for maximum flexibility'),
+        {
+          padding: 1,
+          margin: 1,
+          borderStyle: 'round',
+          borderColor: 'green',
+          backgroundColor: '#1a2e1a'
+        }
+      );
+
+      console.log(oauthBox);
+
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const choice: string = await new Promise(resolve =>
+        rl.question(chalk.cyan('\nSelect OAuth provider (1-3): '), resolve)
+      );
+      rl.close();
+
+      let claudeToken = null;
+      let openaiToken = null;
+
+      switch (choice.trim()) {
+        case '1':
+          console.log(chalk.green('\n🔐 Authenticating with Claude.ai...'));
+          claudeToken = await oauthService.authenticateWithClaude();
+          break;
+        case '2':
+          console.log(chalk.blue('\n🔐 Authenticating with OpenAI...'));
+          openaiToken = await oauthService.authenticateWithOpenAI();
+          break;
+        case '3':
+        default:
+          console.log(chalk.green('\n🔐 Authenticating with Claude.ai...'));
+          claudeToken = await oauthService.authenticateWithClaude();
+          console.log(chalk.blue('\n🔐 Authenticating with OpenAI...'));
+          openaiToken = await oauthService.authenticateWithOpenAI();
+          break;
+      }
+
+      // Save tokens and configure environment
+      if (claudeToken) {
+        console.log(chalk.green('✅ Claude.ai authentication successful'));
+        await oauthService.saveOAuthToken('claude', claudeToken);
+        configManager.enableOAuthProvider('claude');
+        process.env.ANTHROPIC_API_KEY = claudeToken.access_token;
+      }
+
+      if (openaiToken) {
+        console.log(chalk.blue('✅ OpenAI authentication successful'));
+        await oauthService.saveOAuthToken('openai', openaiToken);
+        configManager.enableOAuthProvider('openai');
+        process.env.OPENAI_API_KEY = openaiToken.access_token;
+      }
+
+      // Stop OAuth server
+      await oauthService.stopServer();
+
+      if (claudeToken || openaiToken) {
+        console.log(chalk.green('\n🎉 OAuth setup completed successfully!'));
+        return true;
+      } else {
+        console.log(chalk.yellow('\n⚠️ OAuth authentication failed. Falling back to manual setup...'));
+        return await this.setupManualApiKeys();
+      }
+
+    } catch (error) {
+      console.log(chalk.red(`❌ OAuth setup failed: ${error}`));
+      await oauthService.stopServer();
+      return await this.setupManualApiKeys();
+    }
+  }
+
+  private static async setupManualApiKeys(): Promise<boolean> {
+    console.log(chalk.blue('\n🔑 Manual API Key Setup'));
+    console.log(chalk.gray('─'.repeat(40)));
+
+    const setupBox = boxen(
+      chalk.white.bold('Setup your API key:\n\n') +
+      chalk.green('• ANTHROPIC_API_KEY') + chalk.gray(' - for Claude models (recommended)\n') +
+      chalk.blue('• OPENAI_API_KEY') + chalk.gray(' - for GPT models\n') +
+      chalk.magenta('• GOOGLE_GENERATIVE_AI_API_KEY') + chalk.gray(' - for Gemini models\n\n') +
+      chalk.white.bold('Example:\n') +
+      chalk.dim('export ANTHROPIC_API_KEY="your-key-here"\n\n') +
+      chalk.cyan('Or use Ollama for local models: ollama pull llama3.1:8b'),
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: 'yellow',
+        backgroundColor: '#2a1a00'
+      }
+    );
+
+    console.log(setupBox);
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer: string = await new Promise(resolve =>
+      rl.question(chalk.yellow('\nContinue without API keys? (y/N): '), resolve)
+    );
+    rl.close();
+
+    if (!answer || !answer.toLowerCase().startsWith('y')) {
+      console.log(chalk.blue('\n👋 Set up your API key and run NikCLI again!'));
+      process.exit(0);
+    }
+
+    // User chose to continue without API keys - offer Ollama setup
+    return await this.setupOllama();
   }
 }
 
