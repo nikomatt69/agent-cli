@@ -1,6 +1,5 @@
-import { generateText } from 'ai';
 import { BaseAgent } from './base-agent';
-import { google } from '@ai-sdk/google';
+import { modelProvider, ChatMessage } from '../../ai/model-provider';
 
 export class CodeGeneratorAgent extends BaseAgent {
   id = 'code-generator';
@@ -29,9 +28,11 @@ export class CodeGeneratorAgent extends BaseAgent {
     const prompt = `Generate clean, well-documented TypeScript code for the following requirement:\n\n${generationTask}\n\nInclude proper types, error handling, and JSDoc comments.`;
 
     try {
-      const { text } = await generateText({
-        model: google('gemini-2.5-flash'),
-        prompt: prompt,
+      const messages: ChatMessage[] = [
+        { role: 'user', content: prompt },
+      ];
+      const text = await modelProvider.generateResponse({
+        messages,
         maxTokens: 800,
       });
 

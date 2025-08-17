@@ -1,0 +1,75 @@
+graph TB
+ 
+    
+    subgraph "User Interface Layer"
+        CLI["/create-agent --vm 'Repository Analyzer'"]
+        CMD[nik-cli-commands.ts]
+        HELP["/help commands"]
+    end
+    
+    subgraph "Command Processing"
+        PARSE[Flag Parser<br/>--vm, --container]
+        DETECT[Auto-Detection<br/>Keywords: vm, container, docker]
+        ROUTE[Agent Type Router<br/>standard &#124; vm &#124; container]
+    end
+    
+    subgraph "Agent Factory Core"
+        AF[AgentFactory]
+        CREATE[createAgentBlueprint&#40;&#41;]
+        VMCREATE[createVMAgentBlueprint&#40;&#41;]
+        BLUEPRINT[AgentBlueprint<br/>Extended Interface]
+    end
+    
+    subgraph "VM Configuration"
+        VMCONFIG[VMContainerConfig<br/>- containerImage<br/>- resourceLimits<br/>- networkAccess]
+        VMCAP[VM Capabilities<br/>- vm-management<br/>- container-orchestration<br/>- isolated-execution]
+        VMTOOLS[VM Tools<br/>- Docker, Bash, Git<br/>- VSCode, Terminal]
+    end
+    
+    subgraph "Blueprint Storage"
+        REGISTRY[Blueprint Registry<br/>Map&lt;string, AgentBlueprint&gt;]
+        METADATA[Container Metadata<br/>- containerId<br/>- isActive<br/>- createdAt]
+    end
+    
+    subgraph "Output & Launch"
+        DISPLAY[🐳 VM Agent Created<br/>Blueprint ID: xxx<br/>Container Image: node:18]
+        LAUNCH["/launch-agent &lt;id&gt;"]
+        INSTANCE[SecureVirtualizedAgent<br/>Instance]
+    end
+    
+    CLI --> CMD
+    CMD --> PARSE
+    PARSE --> DETECT
+    DETECT --> ROUTE
+    
+    ROUTE -->|standard| CREATE
+    ROUTE -->|vm/container| VMCREATE
+    
+    CREATE --> AF
+    VMCREATE --> AF
+    
+    AF --> BLUEPRINT
+    BLUEPRINT --> VMCONFIG
+    BLUEPRINT --> VMCAP
+    BLUEPRINT --> VMTOOLS
+    
+    BLUEPRINT --> REGISTRY
+    REGISTRY --> METADATA
+    
+    REGISTRY --> DISPLAY
+    DISPLAY --> LAUNCH
+    LAUNCH --> INSTANCE
+    
+    classDef userLayer fill:#e1f5fe
+    classDef processing fill:#f3e5f5
+    classDef factory fill:#e8f5e8
+    classDef config fill:#fff3e0
+    classDef storage fill:#fce4ec
+    classDef output fill:#f1f8e9
+    
+    class CLI,CMD,HELP userLayer
+    class PARSE,DETECT,ROUTE processing
+    class AF,CREATE,VMCREATE,BLUEPRINT factory
+    class VMCONFIG,VMCAP,VMTOOLS config
+    class REGISTRY,METADATA storage
+    class DISPLAY,LAUNCH,INSTANCE output

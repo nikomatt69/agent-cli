@@ -1,9 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIAnalysisAgent = void 0;
-const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
-const google_1 = require("@ai-sdk/google");
+const model_provider_1 = require("../../ai/model-provider");
 class AIAnalysisAgent extends base_agent_1.BaseAgent {
     constructor(workingDirectory = process.cwd()) {
         super(workingDirectory);
@@ -25,9 +24,11 @@ class AIAnalysisAgent extends base_agent_1.BaseAgent {
         const codeToAnalyze = taskData || 'function add(a: number, b: number): number { return a + b; }';
         const prompt = `Analyze this code and provide insights about its functionality, potential improvements, and best practices:\n\n${codeToAnalyze}`;
         try {
-            const { text } = await (0, ai_1.generateText)({
-                model: (0, google_1.google)('gemini-pro'),
-                prompt: prompt,
+            const messages = [
+                { role: 'user', content: prompt },
+            ];
+            const text = await model_provider_1.modelProvider.generateResponse({
+                messages,
                 maxTokens: 500,
             });
             return {

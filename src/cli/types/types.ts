@@ -18,27 +18,27 @@ export interface Agent {
   specialization: string;
   capabilities: string[];
   version: string;
-  
+
   // Status and state
   status: AgentStatus;
   currentTasks: number;
   maxConcurrentTasks: number;
-  
+
   // Core lifecycle methods
   initialize(context?: AgentContext): Promise<void>;
   run(task: AgentTask): Promise<AgentTaskResult>;
   cleanup(): Promise<void>;
-  
+
   // Task execution
   executeTodo(todo: AgentTodo): Promise<void>;
   executeTask(task: AgentTask): Promise<AgentTaskResult>;
-  
+
   // State management
   getStatus(): AgentStatus;
   getMetrics(): AgentMetrics;
   getCapabilities(): string[];
   canHandle(task: AgentTask): boolean;
-  
+
   // Configuration and guidance
   updateGuidance(guidance: string): void;
   updateConfiguration(config: Partial<AgentConfig>): void;
@@ -49,32 +49,32 @@ export interface Agent {
  */
 export interface AgentTask {
   id: string;
-  type: 'user_request' | 'internal' | 'scheduled' | 'recovery';
+  type: 'user_request' | 'internal' | 'scheduled' | 'recovery' | 'vm-todo';
   title: string;
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
-  
+
   // Task data and context
   data: Record<string, any>;
   context?: AgentContext;
-  
+
   // Timing and lifecycle
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;
   completedAt?: Date;
-  
+
   // Dependencies and requirements
   dependencies?: string[];
   requiredCapabilities?: string[];
   estimatedDuration?: number;
   timeout?: number;
-  
+
   // Progress tracking
   progress: number; // 0-100
   steps?: TaskStep[];
-  
+
   // Error handling
   retryCount?: number;
   maxRetries?: number;
@@ -91,13 +91,13 @@ export interface AgentTodo {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
-  
+
   // Timing
   createdAt: Date;
   updatedAt: Date;
   estimatedDuration?: number;
   actualDuration?: number;
-  
+
   // Context and metadata
   tags: string[];
   context?: {
@@ -106,7 +106,7 @@ export interface AgentTodo {
     reasoning?: string;
     guidance?: string;
   };
-  
+
   // Hierarchy and dependencies
   subtasks?: AgentTodo[];
   dependencies?: string[];
@@ -133,20 +133,20 @@ export interface AgentContext {
   // Environment
   workingDirectory: string;
   projectPath: string;
-  
+
   // Guidance and configuration
   guidance?: string;
   configuration?: AgentConfig;
-  
+
   // User preferences and session
   userId?: string;
   sessionId?: string;
   userPreferences?: Record<string, any>;
-  
+
   // Project information
   projectAnalysis?: ProjectAnalysis;
   availableTools?: string[];
-  
+
   // Execution environment
   executionPolicy?: ExecutionPolicy;
   sandboxMode?: SandboxMode;
@@ -161,17 +161,17 @@ export interface AgentConfig {
   autonomyLevel: 'supervised' | 'semi-autonomous' | 'fully-autonomous';
   temperature?: number;
   maxTokens?: number;
-  
+
   // Execution settings
   maxConcurrentTasks: number;
   defaultTimeout: number;
   retryPolicy: RetryPolicy;
-  
+
   // Integration settings
   enabledTools: string[];
   guidanceFiles: string[];
   logLevel: LogLevel;
-  
+
   // Security and permissions
   permissions: AgentPermissions;
   sandboxRestrictions: string[];
@@ -184,21 +184,21 @@ export interface AgentTaskResult {
   taskId: string;
   agentId: string;
   status: TaskStatus;
-  
+
   // Results
   result?: any;
   output?: string;
   artifacts?: TaskArtifact[];
-  
+
   // Execution details
   startTime: Date;
   endTime?: Date;
   duration?: number;
-  
+
   // Error information
   error?: string;
   errorDetails?: any;
-  
+
   // Metadata
   tokensUsed?: number;
   toolsUsed?: string[];
@@ -215,20 +215,20 @@ export interface AgentMetrics {
   tasksSucceeded: number;
   tasksFailed: number;
   tasksInProgress: number;
-  
+
   // Performance metrics
   averageExecutionTime: number;
   totalExecutionTime: number;
   successRate: number;
-  
+
   // Resource usage
   tokensConsumed: number;
   apiCallsTotal: number;
-  
+
   // Activity tracking
   lastActive: Date;
   uptime: number;
-  
+
   // Efficiency metrics
   productivity: number; // tasks completed per hour
   accuracy: number; // percentage of successful tasks
@@ -256,17 +256,17 @@ export interface ProjectAnalysis {
   projectType: string;
   languages: string[];
   frameworks: string[];
-  
+
   // Structure
   fileCount: number;
   directoryCount: number;
   totalSize: number;
-  
+
   // Dependencies and tools
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
   scripts: Record<string, string>;
-  
+
   // Analysis results
   complexity: 'low' | 'medium' | 'high';
   maintainability: number;
@@ -306,16 +306,16 @@ export interface AgentPermissions {
   canDeleteFiles: boolean;
   allowedPaths: string[];
   forbiddenPaths: string[];
-  
+
   // Command execution
   canExecuteCommands: boolean;
   allowedCommands: string[];
   forbiddenCommands: string[];
-  
+
   // Network and API access
   canAccessNetwork: boolean;
   allowedDomains: string[];
-  
+
   // System operations
   canInstallPackages: boolean;
   canModifyConfig: boolean;
@@ -330,23 +330,23 @@ export interface AgentWorkPlan {
   agentId: string;
   goal: string;
   todos: AgentTodo[];
-  
+
   // Planning information
   estimatedTimeTotal: number;
   actualTimeTotal?: number;
   complexity: 'low' | 'medium' | 'high';
   riskLevel: 'low' | 'medium' | 'high';
-  
+
   // Status tracking
   status: TaskStatus;
   progress: number;
   createdAt: Date;
   completedAt?: Date;
-  
+
   // Dependencies and resources
   requiredResources: string[];
   dependencies: string[];
-  
+
   // Results
   results?: Record<string, any>;
   artifacts?: TaskArtifact[];
@@ -364,7 +364,7 @@ export interface AgentEvent<T = any> {
   sessionId?: string;
 }
 
-export type AgentEventType = 
+export type AgentEventType =
   | 'agent.initialized'
   | 'agent.status.changed'
   | 'task.started'

@@ -51,7 +51,6 @@ class FeatureFlagManager extends events_1.EventEmitter {
         super();
         this.flags = new Map();
         this.isInitialized = false;
-        this.workingDirectory = workingDirectory;
         this.config = exports.FeatureFlagConfigSchema.parse(config);
         this.configFilePath = (0, path_1.join)(workingDirectory, this.config.configFile);
     }
@@ -368,7 +367,7 @@ class FeatureFlagManager extends events_1.EventEmitter {
     }
     async loadFromFile() {
         try {
-            if (!await (0, fs_1.existsSync)(this.configFilePath)) {
+            if (!(0, fs_1.existsSync)(this.configFilePath)) {
                 await this.saveToFile();
                 return;
             }

@@ -1,9 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CodeGeneratorAgent = void 0;
-const ai_1 = require("ai");
 const base_agent_1 = require("./base-agent");
-const google_1 = require("@ai-sdk/google");
+const model_provider_1 = require("../../ai/model-provider");
 class CodeGeneratorAgent extends base_agent_1.BaseAgent {
     constructor(workingDirectory = process.cwd()) {
         super(workingDirectory);
@@ -25,9 +24,11 @@ class CodeGeneratorAgent extends base_agent_1.BaseAgent {
         const generationTask = taskData || 'Create a TypeScript function that validates email addresses';
         const prompt = `Generate clean, well-documented TypeScript code for the following requirement:\n\n${generationTask}\n\nInclude proper types, error handling, and JSDoc comments.`;
         try {
-            const { text } = await (0, ai_1.generateText)({
-                model: (0, google_1.google)('gemini-2.5-flash'),
-                prompt: prompt,
+            const messages = [
+                { role: 'user', content: prompt },
+            ];
+            const text = await model_provider_1.modelProvider.generateResponse({
+                messages,
                 maxTokens: 800,
             });
             return {

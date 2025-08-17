@@ -11,6 +11,9 @@ import { diffManager } from '../ui/diff-manager';
 import { ExecutionPolicyManager } from '../policies/execution-policy';
 import { simpleConfigManager as configManager } from '../core/config-manager';
 import { ModuleManager, ModuleContext } from '../core/module-manager';
+import { VMStatusIndicator } from '../ui/vm-status-indicator';
+import { VMKeyboardControls } from '../ui/vm-keyboard-controls';
+import { APIKeyProxy } from '../virtualized-agents/security/api-key-proxy';
 
 export interface OrchestratorContext {
   workingDirectory: string;
@@ -256,6 +259,13 @@ export class OrchestratorService extends EventEmitter {
 
     console.log(chalk.blue('🧠 Processing natural language request...'));
 
+    // Check for VM agent trigger patterns
+    if (this.isVMAgentRequest(input)) {
+      console.log(chalk.cyan('🤖 VM Agent request detected - launching secure virtualized agent'));
+      await this.executeVMAgentTask(input);
+      return;
+    }
+
     if (this.context.planMode) {
       // Create execution plan first
       console.log(chalk.cyan('🎯 Plan Mode: Creating execution plan...'));
@@ -283,6 +293,49 @@ export class OrchestratorService extends EventEmitter {
       const bestAgent = this.selectBestAgent(input);
       console.log(chalk.blue(`🎯 Selected ${bestAgent} agent for this task`));
       await this.executeAgentTask(bestAgent, input);
+    }
+  }
+
+  /**
+   * Check if request should use VM agent
+   */
+  private isVMAgentRequest(input: string): boolean {
+    const lowerInput = input.toLowerCase();
+    const vmTriggers = [
+      'analizza la repository',
+      'analizza il repository', 
+      'analyze the repository',
+      'analyze repository',
+      'clone and analyze',
+      'vm agent',
+      'isolated environment',
+      'autonomous repository'
+    ];
+    
+    return vmTriggers.some(trigger => lowerInput.includes(trigger)) ||
+           (lowerInput.includes('repository') && lowerInput.includes('analizza'));
+  }
+
+  /**
+   * Execute VM agent task
+   */
+  private async executeVMAgentTask(input: string): Promise<void> {
+    try {
+      console.log(chalk.blue('🐳 Starting VM Agent with secure environment...'));
+      
+      // Launch vm-agent
+      const taskId = await agentService.executeTask('vm-agent', input, {
+        createVM: true,
+        isolated: true,
+        autonomous: true
+      });
+      
+      console.log(chalk.green(`✅ VM Agent launched with task ID: ${taskId}`));
+      console.log(chalk.dim('🔐 Agent will operate in secure isolated environment'));
+      console.log(chalk.dim('📊 Monitor with Ctrl+L for logs, Ctrl+S for security dashboard'));
+      
+    } catch (error: any) {
+      console.log(chalk.red(`❌ Failed to launch VM agent: ${error.message}`));
     }
   }
 

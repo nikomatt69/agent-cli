@@ -1,6 +1,5 @@
-import { generateText } from 'ai';
 import { BaseAgent } from './base-agent';
-import { google } from '@ai-sdk/google';
+import { modelProvider, ChatMessage } from '../../ai/model-provider';
 
 export class AIAnalysisAgent extends BaseAgent {
   id = 'ai-analysis';
@@ -23,18 +22,20 @@ export class AIAnalysisAgent extends BaseAgent {
     if (taskData) {
       console.log(`Task: ${taskData}`);
     }
-    
+
     // Default code to analyze if no task provided
     const codeToAnalyze = taskData || 'function add(a: number, b: number): number { return a + b; }';
     const prompt = `Analyze this code and provide insights about its functionality, potential improvements, and best practices:\n\n${codeToAnalyze}`;
-    
+
     try {
-      const { text } = await generateText({
-        model: google('gemini-pro'),
-        prompt: prompt,
+      const messages: ChatMessage[] = [
+        { role: 'user', content: prompt },
+      ];
+      const text = await modelProvider.generateResponse({
+        messages,
         maxTokens: 500,
       });
-      
+
       return {
         analysis: text,
         code: codeToAnalyze,

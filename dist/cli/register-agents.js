@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAgents = registerAgents;
 const universal_agent_1 = require("./automation/agents/universal-agent");
+const secure_vm_agent_1 = require("./virtualized-agents/secure-vm-agent");
 function registerAgents(agentManager) {
     agentManager.registerAgentClass(universal_agent_1.UniversalAgent, {
         id: 'universal-agent',
@@ -87,6 +88,76 @@ function registerAgents(agentManager) {
                 canAccessSecrets: false
             },
             sandboxRestrictions: []
+        }
+    });
+    agentManager.registerAgentClass(secure_vm_agent_1.SecureVirtualizedAgent, {
+        id: 'vm-agent',
+        name: 'Secure VM Agent',
+        description: 'Autonomous development agent with isolated VM environment and complete repository management',
+        specialization: 'virtualized-autonomous',
+        version: '0.1.15-beta',
+        capabilities: [
+            'vm-management',
+            'container-orchestration',
+            'isolated-execution',
+            'repository-cloning',
+            'vscode-server',
+            'autonomous-development',
+            'pull-request-automation',
+            'repository-analysis',
+            'dependency-management',
+            'testing-automation',
+            'documentation-generation',
+            'code-quality-analysis',
+            'secure-api-communication',
+            'token-budget-management',
+            'audit-logging',
+            'resource-isolation',
+            'credential-management',
+            'full-stack-development',
+            'ci-cd-integration',
+            'git-operations',
+            'package-management',
+            'environment-setup'
+        ],
+        category: 'enterprise-vm',
+        tags: ['vm', 'isolated', 'autonomous', 'secure', 'repository'],
+        requiresGuidance: false,
+        defaultConfig: {
+            autonomyLevel: 'fully-autonomous',
+            maxConcurrentTasks: 1,
+            defaultTimeout: 1800000,
+            retryPolicy: {
+                maxAttempts: 2,
+                backoffMs: 5000,
+                backoffMultiplier: 2,
+                retryableErrors: ['container-error', 'network', 'timeout']
+            },
+            enabledTools: ['docker', 'git', 'npm', 'analysis', 'security'],
+            guidanceFiles: [],
+            logLevel: 'info',
+            permissions: {
+                canReadFiles: true,
+                canWriteFiles: true,
+                canDeleteFiles: false,
+                allowedPaths: ['/workspace/*'],
+                forbiddenPaths: ['/etc', '/system', '/var'],
+                canExecuteCommands: true,
+                allowedCommands: ['git', 'npm', 'yarn', 'docker', 'code-server'],
+                forbiddenCommands: ['rm -rf', 'sudo', 'su', 'chmod 777'],
+                canAccessNetwork: true,
+                allowedDomains: ['github.com', 'npmjs.com', 'yarnpkg.com'],
+                canInstallPackages: true,
+                canModifyConfig: false,
+                canAccessSecrets: false
+            },
+            sandboxRestrictions: [
+                'isolated-container',
+                'resource-limits',
+                'network-restrictions',
+                'token-budget-enforcement'
+            ],
+            maxTokens: 50000
         }
     });
 }

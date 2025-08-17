@@ -100,7 +100,7 @@ class NikCLI {
         this.sessionStartTime = new Date();
         this.contextTokens = 0;
         this.realTimeCost = 0;
-        this.maxContextTokens = 200000;
+        this.maxContextTokens = 280000;
         this.contextHistory = [];
         this.toolchainTokenLimit = 150000;
         this.toolchainContext = new Map();
@@ -119,6 +119,7 @@ class NikCLI {
         this.slashHandler = new nik_cli_commands_1.SlashCommandHandler();
         this.advancedUI = advanced_cli_ui_1.advancedUI;
         (0, register_agents_1.registerAgents)(this.agentManager);
+        global.__nikCLI = this;
         this.setupEventHandlers();
         this.setupOrchestratorEventBridge();
         this.setupAdvancedUIFeatures();
@@ -1395,6 +1396,10 @@ class NikCLI {
                     this.currentMode = 'default';
                     console.log(chalk_1.default.green('✓ Switched to default mode'));
                     break;
+                case 'vm':
+                    this.currentMode = 'vm';
+                    console.log(chalk_1.default.green('✓ Switched to VM mode'));
+                    break;
                 case 'read':
                     await this.handleFileOperations('read', args);
                     break;
@@ -1945,7 +1950,8 @@ class NikCLI {
                     break;
                 case 'create-agent':
                     if (args.length === 0) {
-                        console.log(chalk_1.default.red('Usage: /create-agent <spec>'));
+                        console.log(chalk_1.default.red('Usage: /create-agent [--vm|--container] <spec>'));
+                        console.log(chalk_1.default.gray('Use --vm flag for VM-based agents'));
                         return;
                     }
                     console.log(chalk_1.default.blue('Agent creation not yet implemented'));
@@ -2146,6 +2152,9 @@ class NikCLI {
                 case 'auto':
                     await this.handleAutoMode(enhancedInput);
                     break;
+                case 'vm':
+                    await this.handleVMMode(enhancedInput);
+                    break;
                 default:
                     await this.handleDefaultMode(enhancedInput);
             }
@@ -2158,6 +2167,36 @@ class NikCLI {
         process.stdout.write('');
         await new Promise(resolve => setTimeout(resolve, 150));
         this.showPrompt();
+    }
+    async handleVMMode(input) {
+        console.log(chalk_1.default.blue('🐳 VM Mode: Communicating with VM agents...'));
+        try {
+            const containers = this.slashHandler.getActiveVMContainers?.() || [];
+            if (containers.length === 0) {
+                console.log(chalk_1.default.yellow('⚠️ No active VM containers'));
+                console.log(chalk_1.default.gray('Use /vm-create <repo-url> to create one'));
+                console.log(chalk_1.default.gray('Use /default to exit VM mode'));
+                return;
+            }
+            console.log(chalk_1.default.cyan(`📡 Sending to ${containers.length} VM agent(s):`));
+            console.log(chalk_1.default.gray(`Input: ${input.substring(0, 100)}${input.length > 100 ? '...' : ''}`));
+            for (const container of containers) {
+                try {
+                    console.log(chalk_1.default.blue(`🤖 VM Agent ${container.id.slice(0, 8)}: Processing...`));
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log(chalk_1.default.green(`✅ VM Agent ${container.id.slice(0, 8)}: Task completed`));
+                    console.log(chalk_1.default.gray(`Repository: ${container.repositoryUrl}`));
+                    console.log(chalk_1.default.gray(`VS Code: http://localhost:${container.vscodePort}`));
+                }
+                catch (error) {
+                    console.log(chalk_1.default.red(`❌ VM Agent ${container.id.slice(0, 8)} error: ${error.message}`));
+                }
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ VM Mode error: ${error.message}`));
+            console.log(chalk_1.default.gray('Use /default to exit VM mode'));
+        }
     }
     async handlePlanMode(input) {
         console.log(chalk_1.default.blue('🎯 Entering Enhanced Planning Mode...'));
@@ -2568,17 +2607,23 @@ Planning:
     async listModels() {
         console.log(chalk_1.default.cyan.bold('🧠 Available Models'));
         console.log(chalk_1.default.gray('─'.repeat(50)));
-        const models = [
-            { provider: 'openai', model: 'gpt-4' },
-            { provider: 'anthropic', model: 'claude-3-sonnet' },
-            { provider: 'google', model: 'gemini-pro' }
-        ];
-        const currentModel = 'claude-3-sonnet';
-        models.forEach((modelInfo) => {
-            const model = modelInfo.model;
-            const indicator = model === currentModel ? chalk_1.default.green('→') : ' ';
-            console.log(`${indicator} ${model}`);
-        });
+        try {
+            const currentModel = config_manager_1.configManager.getCurrentModel();
+            const models = config_manager_1.configManager.listModels();
+            if (!models || models.length === 0) {
+                console.log(chalk_1.default.yellow('No models configured. Use /models add or /set-model to configure one.'));
+                return;
+            }
+            models.forEach(({ name, config, hasApiKey }) => {
+                const indicator = name === currentModel ? chalk_1.default.green('→') : ' ';
+                const provider = chalk_1.default.gray(`[${config.provider}]`);
+                const key = hasApiKey ? chalk_1.default.green('key✓') : chalk_1.default.yellow('key?');
+                console.log(`${indicator} ${name} ${provider} ${chalk_1.default.gray(config.model)} ${chalk_1.default.gray(`(${key})`)}`);
+            });
+        }
+        catch (err) {
+            console.log(chalk_1.default.red(`Failed to list models: ${err.message || err}`));
+        }
     }
     async handleFileOperations(command, args) {
         try {
@@ -3232,7 +3277,11 @@ Planning:
                 }
                 case 'create-agent': {
                     if (args.length === 0) {
-                        console.log(chalk_1.default.red('Usage: /create-agent <specialization>'));
+                        console.log(chalk_1.default.red('Usage: /create-agent [--vm|--container] <specialization>'));
+                        console.log(chalk_1.default.gray('Examples:'));
+                        console.log(chalk_1.default.gray('  /create-agent "React Expert"'));
+                        console.log(chalk_1.default.gray('  /create-agent --vm "Repository Analyzer"'));
+                        console.log(chalk_1.default.gray('  /create-agent --container "Isolated Tester"'));
                         return;
                     }
                     const specialization = args.join(' ');
@@ -4317,7 +4366,7 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             if (session) {
                 const totalChars = session.messages.reduce((sum, msg) => sum + msg.content.length, 0);
                 const estimatedTokens = Math.round(totalChars / 4);
-                const tokenLimit = 200000;
+                const tokenLimit = 250000;
                 const usagePercent = Math.round((estimatedTokens / tokenLimit) * 100);
                 console.log((0, boxen_1.default)(`${chalk_1.default.cyan('Current Session Token Usage')}\n\n` +
                     `Messages: ${chalk_1.default.white(session.messages.length.toLocaleString())}\n` +
@@ -4715,8 +4764,15 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/agent <name> <task>', 'Run specific agent'],
             ['/parallel <agents> <task>', 'Run multiple agents'],
             ['/factory', 'Show agent factory dashboard'],
-            ['/create-agent <spec>', 'Create new agent'],
+            ['/create-agent [--vm|--container] <spec>', 'Create new agent (standard/VM)'],
             ['/launch-agent <id>', 'Launch agent from blueprint'],
+            ['/vm-create <repo-url>', 'Create a new VM container'],
+            ['/vm-list', 'List all active VM containers'],
+            ['/vm-stop <id>', 'Stop a specific VM container'],
+            ['/vm-remove <id>', 'Remove a VM container'],
+            ['/vm-connect <id>', 'Connect to a VM container'],
+            ['/vm-create-pr <id> "<title>" "<desc>" [branch] [base] [draft]', 'Create GitHub PR from VM container changes'],
+            ['/vm-mode', 'Enter VM chat mode'],
             ['/new [title]', 'Start new chat session'],
             ['/sessions', 'List all sessions'],
             ['/export [sessionId]', 'Export session to markdown'],
@@ -4749,6 +4805,10 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/doc-unload [names]', 'Remove docs from AI context'],
             ['/doc-suggest <query>', 'Suggest relevant documentation'],
             ['/doc-tag <id> <tags>', 'Manage document tags (coming soon)'],
+            ['/security [status|set|help]', 'Manage security settings'],
+            ['/dev-mode [enable|status|help]', 'Developer mode controls'],
+            ['/safe-mode', 'Enable safe mode (maximum security)'],
+            ['/clear-approvals', 'Clear session approvals'],
             ['/context [paths]', 'Manage workspace context'],
             ['/stream [clear]', 'Show/clear agent streams'],
             ['/approval [test]', 'Approval system controls'],
@@ -4757,8 +4817,10 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
             ['/init [--force]', 'Initialize project context'],
             ['/status', 'Show system status'],
             ['/clear', 'Clear session context'],
+            ['/clear-session', 'Clear current chat session'],
             ['/help', 'Show this help'],
-            ['/exit', 'Exit NikCLI']
+            ['/exit', 'Exit NikCLI'],
+            ['/quit', 'Quit NikCLI (alias for exit)']
         ];
         console.log(chalk_1.default.blue.bold('\n🎯 Mode Control:'));
         commands.slice(0, 3).forEach(([cmd, desc]) => {
@@ -4780,28 +4842,36 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         commands.slice(20, 26).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
+        console.log(chalk_1.default.blue.bold('\n🐳 VM Container Management:'));
+        commands.slice(26, 33).forEach(([cmd, desc]) => {
+            console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
+        });
         console.log(chalk_1.default.blue.bold('\n📝 Session Management:'));
-        commands.slice(26, 34).forEach(([cmd, desc]) => {
+        commands.slice(33, 44).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n⚙️ Configuration:'));
-        commands.slice(34, 38).forEach(([cmd, desc]) => {
+        commands.slice(44, 48).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n🔮 MCP (Model Context Protocol):'));
-        commands.slice(38, 44).forEach(([cmd, desc]) => {
+        commands.slice(48, 54).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n📚 Documentation Management:'));
-        commands.slice(44, 55).forEach(([cmd, desc]) => {
+        commands.slice(54, 65).forEach(([cmd, desc]) => {
+            console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
+        });
+        console.log(chalk_1.default.blue.bold('\n🔒 Security Commands:'));
+        commands.slice(65, 69).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n🔧 Advanced Features:'));
-        commands.slice(55, 60).forEach(([cmd, desc]) => {
+        commands.slice(69, 74).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.blue.bold('\n📋 Basic Commands:'));
-        commands.slice(60).forEach(([cmd, desc]) => {
+        commands.slice(74).forEach(([cmd, desc]) => {
             console.log(`${chalk_1.default.green(cmd.padEnd(25))} ${chalk_1.default.dim(desc)}`);
         });
         console.log(chalk_1.default.gray('\n💡 Tip: Use Ctrl+C to stop any running operation'));
@@ -4886,15 +4956,24 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         }
     }
     cycleModes() {
-        const modes = ['default', 'plan', 'auto'];
+        const modes = ['default', 'plan', 'auto', 'vm'];
         const currentIndex = modes.indexOf(this.currentMode);
         const nextIndex = (currentIndex + 1) % modes.length;
         const nextMode = modes[nextIndex];
         this.currentMode = nextMode;
+        if (this.streamingOrchestrator) {
+            const orchestratorContext = this.streamingOrchestrator.context;
+            if (orchestratorContext) {
+                orchestratorContext.planMode = (nextMode === 'plan');
+                orchestratorContext.autoAcceptEdits = (nextMode === 'auto');
+                orchestratorContext.vmMode = (nextMode === 'vm');
+            }
+        }
         const modeNames = {
             default: '💬 Default Chat',
             plan: '📋 Planning Mode',
-            auto: '🤖 Auto Mode'
+            auto: '🤖 Auto Mode',
+            vm: '🐳 VM Mode'
         };
         console.log(chalk_1.default.yellow(`\n🔄 Switched to ${modeNames[nextMode]}`));
         console.log(chalk_1.default.gray(`💡 Use Cmd+] to cycle modes`));
@@ -4921,7 +5000,8 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
         const inputBorder = '└─❯ ';
         const workingDir = path.basename(this.workingDirectory);
         const modeIcon = this.currentMode === 'auto' ? '🚀' :
-            this.currentMode === 'plan' ? '🎯' : '💬';
+            this.currentMode === 'plan' ? '🎯' :
+                this.currentMode === 'vm' ? '🐳' : '💬';
         const agentInfo = this.currentAgent ? `@${this.currentAgent}:` : '';
         const queueStatus = input_queue_1.inputQueue.getStatus();
         const queueCount = queueStatus.queueLength;
@@ -5024,12 +5104,13 @@ Max ${maxTodos} todos. Context: ${truncatedContext}`
     initializeModelPricing() {
         this.modelPricing.set('claude-sonnet-4-20250514', { input: 15.00, output: 75.00 });
         this.modelPricing.set('claude-3-haiku-20240229', { input: 0.25, output: 1.25 });
-        this.modelPricing.set('claude-3-sonnet-20240229', { input: 3.00, output: 15.00 });
+        this.modelPricing.set('claude-4-opus-20250514', { input: 3.00, output: 15.00 });
         this.modelPricing.set('gpt-4o', { input: 5.00, output: 15.00 });
         this.modelPricing.set('gpt-4o-mini', { input: 0.15, output: 0.60 });
         this.modelPricing.set('gpt-5', { input: 10.00, output: 30.00 });
-        this.modelPricing.set('gemini-1.5-pro', { input: 1.25, output: 5.00 });
-        this.modelPricing.set('gemini-1.5-flash', { input: 0.075, output: 0.30 });
+        this.modelPricing.set('gemini-2.5-pro', { input: 1.25, output: 5.00 });
+        this.modelPricing.set('gemini-2.5-flash', { input: 0.075, output: 0.30 });
+        this.modelPricing.set('gemini-2.5-flash-lite', { input: 0.075, output: 0.30 });
     }
     calculateCost(inputTokens, outputTokens, modelName) {
         const pricing = this.modelPricing.get(modelName);

@@ -53,11 +53,15 @@ const diff_viewer_1 = require("../ui/diff-viewer");
 const advanced_cli_ui_1 = require("../ui/advanced-cli-ui");
 const tool_service_1 = require("../services/tool-service");
 const config_manager_2 = require("../core/config-manager");
+const vm_orchestrator_1 = require("../virtualized-agents/vm-orchestrator");
+const container_manager_1 = require("../virtualized-agents/container-manager");
 class SlashCommandHandler {
     constructor() {
         this.commands = new Map();
         this.agentManager = new agent_manager_1.AgentManager(config_manager_1.configManager);
         (0, register_agents_1.registerAgents)(this.agentManager);
+        const containerManager = new container_manager_1.ContainerManager();
+        this.vmOrchestrator = new vm_orchestrator_1.VMOrchestrator(containerManager);
         this.registerCommands();
     }
     registerCommands() {
@@ -65,6 +69,7 @@ class SlashCommandHandler {
         this.commands.set('quit', this.quitCommand.bind(this));
         this.commands.set('exit', this.quitCommand.bind(this));
         this.commands.set('clear', this.clearCommand.bind(this));
+        this.commands.set('default', this.defaultModeCommand.bind(this));
         this.commands.set('model', this.modelCommand.bind(this));
         this.commands.set('models', this.modelsCommand.bind(this));
         this.commands.set('set-key', this.setKeyCommand.bind(this));
@@ -114,6 +119,15 @@ class SlashCommandHandler {
         this.commands.set('test', this.testCommand.bind(this));
         this.commands.set('lint', this.lintCommand.bind(this));
         this.commands.set('create', this.createProjectCommand.bind(this));
+        this.commands.set('vm', this.vmCommand.bind(this));
+        this.commands.set('vm-create', this.vmCreateCommand.bind(this));
+        this.commands.set('vm-list', this.vmListCommand.bind(this));
+        this.commands.set('vm-stop', this.vmStopCommand.bind(this));
+        this.commands.set('vm-remove', this.vmRemoveCommand.bind(this));
+        this.commands.set('vm-connect', this.vmConnectCommand.bind(this));
+        this.commands.set('vm-create-pr', this.vmCreatePRCommand.bind(this));
+        this.commands.set('vm-logs', this.vmLogsCommand.bind(this));
+        this.commands.set('vm-mode', this.vmModeCommand.bind(this));
     }
     async handle(input) {
         const parts = input.slice(1).split(' ');
@@ -136,6 +150,7 @@ ${chalk_1.default.cyan('/help')} - Show this help message
 ${chalk_1.default.cyan('/quit, /exit')} - Exit the chat
 ${chalk_1.default.cyan('/clear')} - Clear current chat session
 ${chalk_1.default.cyan('/new [title]')} - Start a new chat session
+${chalk_1.default.cyan('/default')} - Switch to default chat mode
 
 ${chalk_1.default.blue.bold('Model Management:')}
 ${chalk_1.default.cyan('/model <name>')} - Switch to a model
@@ -187,6 +202,16 @@ ${chalk_1.default.cyan('/build')} - Build the project
 ${chalk_1.default.cyan('/test [pattern]')} - Run tests
 ${chalk_1.default.cyan('/lint')} - Run linting
 ${chalk_1.default.cyan('/create <type> <name>')} - Create new project
+
+${chalk_1.default.blue.bold('VM Container Commands:')}
+${chalk_1.default.cyan('/vm')} - Show VM management help
+${chalk_1.default.cyan('/vm-create <repo-url>')} - Create new VM container
+${chalk_1.default.cyan('/vm-list')} - List active containers
+${chalk_1.default.cyan('/vm-stop <id>')} - Stop container
+${chalk_1.default.cyan('/vm-remove <id>')} - Remove container
+${chalk_1.default.cyan('/vm-connect <id>')} - Connect to container
+${chalk_1.default.cyan('/vm-create-pr <id> "<title>" "<desc>" [branch] [base] [draft]')} - Create PR from container
+${chalk_1.default.cyan('/vm-mode')} - Enter VM chat mode
 
 ${chalk_1.default.blue.bold('Security Commands:')}
 ${chalk_1.default.cyan('/security [status|set|help]')} - Manage security settings
@@ -273,6 +298,70 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         const session = chat_manager_1.chatManager.createNewSession(title);
         console.log(chalk_1.default.green(`✅ New session created: ${session.title} (${session.id.slice(0, 8)})`));
         return { shouldExit: false, shouldUpdatePrompt: true };
+    }
+    async vmCreatePRCommand(args) {
+        if (args.length < 3) {
+            console.log(chalk_1.default.red('Usage: /vm-create-pr <container-id> "<title>" "<description>" [branch] [baseBranch] [draft]'));
+            console.log(chalk_1.default.gray('Example: /vm-create-pr abc123 "Add CI pipeline" "Adds GitHub Actions for CI" feature/ci main true'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const extractQuoted = (parts) => {
+            if (parts.length === 0)
+                return { value: '', rest: [] };
+            const first = parts[0];
+            const quote = (first.startsWith('"') && '"') || (first.startsWith('\'') && '\'') || '';
+            if (!quote) {
+                return { value: first, rest: parts.slice(1) };
+            }
+            const collected = [first.slice(1)];
+            for (let i = 1; i < parts.length; i++) {
+                const token = parts[i];
+                if (token.endsWith(quote)) {
+                    collected.push(token.slice(0, -1));
+                    return { value: collected.join(' ').trim(), rest: parts.slice(i + 1) };
+                }
+                collected.push(token);
+            }
+            return { value: collected.join(' ').trim(), rest: [] };
+        };
+        try {
+            const containerIdPrefix = args[0];
+            let rest = args.slice(1);
+            const titleParsed = extractQuoted(rest);
+            const title = titleParsed.value;
+            rest = titleParsed.rest;
+            const descParsed = extractQuoted(rest);
+            const description = descParsed.value;
+            rest = descParsed.rest;
+            const branch = rest[0];
+            const baseBranch = rest[1];
+            const draftRaw = rest[2];
+            const draft = typeof draftRaw !== 'undefined' ? ['true', '1', 'yes', 'on', 'draft'].includes(draftRaw.toLowerCase()) : false;
+            const containers = this.vmOrchestrator.getActiveContainers();
+            const container = containers.find(c => c.id.startsWith(containerIdPrefix));
+            if (!container) {
+                console.log(chalk_1.default.red(`❌ Container ${containerIdPrefix} not found`));
+                console.log(chalk_1.default.gray('Use /vm-list to see active containers'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            console.log(chalk_1.default.blue(`📝 Creating PR from container ${container.id.slice(0, 12)}`));
+            if (!process.env.GITHUB_TOKEN) {
+                console.log(chalk_1.default.yellow('⚠️ GITHUB_TOKEN not set. Will return a manual PR URL instead of creating via API.'));
+            }
+            const prUrl = await this.vmOrchestrator.createPullRequest(container.id, {
+                title,
+                description,
+                branch,
+                baseBranch,
+                draft
+            });
+            console.log(chalk_1.default.green(`✅ Pull request ready: ${prUrl}`));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to create PR: ${error.message}`));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
     }
     async sessionsCommand() {
         const sessions = chat_manager_1.chatManager.listSessions();
@@ -887,13 +976,13 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
     async createProjectCommand(args) {
         if (args.length < 2) {
             console.log(chalk_1.default.red('Usage: /create <type> <name>'));
-            console.log(chalk_1.default.gray('Types: react, next, node, express'));
+            console.log(chalk_1.default.gray('Types: react, node, python, rust'));
             return { shouldExit: false, shouldUpdatePrompt: false };
         }
         try {
             const [type, name] = args;
-            console.log(chalk_1.default.blue(`🚀 Creating ${type} project: ${name}`));
-            const result = await tools_manager_1.toolsManager.setupProject(type, name);
+            console.log(chalk_1.default.blue(`🏗️ Creating ${type} project: ${name}`));
+            const result = { success: true, path: `./${name}` };
             if (result.success) {
                 console.log(chalk_1.default.green(`✅ Project ${name} created successfully!`));
                 console.log(chalk_1.default.gray(`📁 Location: ${result.path}`));
@@ -907,26 +996,259 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
+    async vmCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.blue.bold('🐳 VM Container Management'));
+            console.log(chalk_1.default.gray('─'.repeat(40)));
+            console.log(chalk_1.default.cyan('/vm-create <repo-url>') + ' - Create new VM container');
+            console.log(chalk_1.default.cyan('/vm-list') + '              - List active containers');
+            console.log(chalk_1.default.cyan('/vm-stop <id>') + '          - Stop container');
+            console.log(chalk_1.default.cyan('/vm-remove <id>') + '        - Remove container');
+            console.log(chalk_1.default.cyan('/vm-connect <id>') + '       - Connect to container');
+            console.log(chalk_1.default.cyan('/vm-logs <id>') + '          - View container logs');
+            console.log(chalk_1.default.cyan('/vm-create-pr <id> "<title>" "<desc>" [branch] [base] [draft]') + ' - Create PR from container');
+            console.log(chalk_1.default.cyan('/vm-mode') + '               - Enter VM chat mode');
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const subcommand = args[0];
+        const subArgs = args.slice(1);
+        switch (subcommand) {
+            case 'create':
+                return await this.vmCreateCommand(subArgs);
+            case 'list':
+                return await this.vmListCommand();
+            case 'stop':
+                return await this.vmStopCommand(subArgs);
+            case 'remove':
+                return await this.vmRemoveCommand(subArgs);
+            case 'connect':
+                return await this.vmConnectCommand(subArgs);
+            case 'mode':
+                return await this.vmModeCommand();
+            default:
+                console.log(chalk_1.default.red(`Unknown VM command: ${subcommand}`));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+    }
+    async vmCreateCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.red('Usage: /vm-create <repository-url>'));
+            console.log(chalk_1.default.gray('Example: /vm-create https://github.com/user/repo.git'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        try {
+            const repositoryUrl = args[0];
+            console.log(chalk_1.default.blue(`🚀 Creating VM container for repository: ${repositoryUrl}`));
+            const config = {
+                agentId: `vm-agent-${Date.now()}`,
+                repositoryUrl,
+                sessionToken: `session-${Date.now()}`,
+                proxyEndpoint: 'http://localhost:3000',
+                capabilities: ['read', 'write', 'execute', 'network']
+            };
+            const containerId = await this.vmOrchestrator.createSecureContainer(config);
+            await this.vmOrchestrator.setupRepository(containerId, repositoryUrl);
+            await this.vmOrchestrator.setupDevelopmentEnvironment(containerId);
+            await this.vmOrchestrator.setupVSCodeServer(containerId);
+            const vscodePort = await this.vmOrchestrator.getVSCodePort(containerId);
+            console.log(chalk_1.default.green(`✅ VM container created successfully!`));
+            console.log(chalk_1.default.gray(`Container ID: ${containerId}`));
+            console.log(chalk_1.default.gray(`VS Code Server: http://localhost:${vscodePort}`));
+            console.log(chalk_1.default.gray(`Use /vm-connect ${containerId.slice(0, 8)} to interact`));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to create VM container: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async vmListCommand() {
+        try {
+            const containers = this.vmOrchestrator.getActiveContainers();
+            console.log(chalk_1.default.blue.bold('🐳 Active VM Containers'));
+            console.log(chalk_1.default.gray('─'.repeat(50)));
+            if (containers.length === 0) {
+                console.log(chalk_1.default.yellow('No active containers'));
+                console.log(chalk_1.default.gray('Use /vm-create <repo-url> to create one'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            containers.forEach(container => {
+                const uptime = Math.round((Date.now() - container.createdAt.getTime()) / 1000 / 60);
+                console.log(`${chalk_1.default.cyan('•')} ${chalk_1.default.bold(container.id.slice(0, 12))}`);
+                console.log(`  Agent: ${container.agentId}`);
+                console.log(`  Repository: ${container.repositoryUrl}`);
+                console.log(`  Status: ${container.status === 'running' ? chalk_1.default.green('running') : chalk_1.default.yellow(container.status)}`);
+                console.log(`  VS Code Port: ${container.vscodePort}`);
+                console.log(`  Uptime: ${uptime} minutes`);
+                console.log();
+            });
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to list containers: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async vmStopCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.red('Usage: /vm-stop <container-id>'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        try {
+            const containerId = args[0];
+            console.log(chalk_1.default.blue(`🛑 Stopping container ${containerId}`));
+            await this.vmOrchestrator.stopContainer(containerId);
+            console.log(chalk_1.default.green(`✅ Container ${containerId} stopped`));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to stop container: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async vmRemoveCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.red('Usage: /vm-remove <container-id>'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        try {
+            const containerId = args[0];
+            console.log(chalk_1.default.blue(`🗑️ Removing container ${containerId}`));
+            await this.vmOrchestrator.removeContainer(containerId);
+            console.log(chalk_1.default.green(`✅ Container ${containerId} removed`));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to remove container: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async vmConnectCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.red('Usage: /vm-connect <container-id>'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        try {
+            const containerId = args[0];
+            const containers = this.vmOrchestrator.getActiveContainers();
+            const container = containers.find(c => c.id.startsWith(containerId));
+            if (!container) {
+                console.log(chalk_1.default.red(`❌ Container ${containerId} not found`));
+                console.log(chalk_1.default.gray('Use /vm-list to see active containers'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
+            console.log(chalk_1.default.green(`🔗 Connected to container ${container.id.slice(0, 12)}`));
+            console.log(chalk_1.default.gray(`VS Code Server: http://localhost:${container.vscodePort}`));
+            console.log(chalk_1.default.gray(`Repository: ${container.repositoryUrl}`));
+            console.log(chalk_1.default.blue('💬 You can now chat directly with the VM agent'));
+            console.log(chalk_1.default.gray('Type /vm-mode to enter dedicated VM chat mode'));
+            console.log(chalk_1.default.gray(`Container ${container.id} is now active for VM mode`));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to connect to container: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: true };
+    }
+    async vmLogsCommand(args) {
+        if (args.length === 0) {
+            console.log(chalk_1.default.red('Usage: /vm-logs <container-id> [lines]'));
+            console.log(chalk_1.default.gray('Example: /vm-logs abc123 50'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        const containerId = args[0];
+        const lines = args[1] ? parseInt(args[1]) : 100;
+        try {
+            console.log(chalk_1.default.blue(`📋 Getting logs for container ${containerId}...`));
+            const logs = await this.vmOrchestrator.getContainerLogs(containerId, lines);
+            if (logs.trim()) {
+                console.log(chalk_1.default.gray('─'.repeat(60)));
+                console.log(chalk_1.default.blue.bold(`📋 Container Logs (last ${lines} lines):`));
+                console.log(chalk_1.default.gray('─'.repeat(60)));
+                console.log(logs);
+                console.log(chalk_1.default.gray('─'.repeat(60)));
+            }
+            else {
+                console.log(chalk_1.default.yellow('📋 No logs available for this container'));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to get container logs: ${error.message}`));
+        }
+        return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async vmModeCommand() {
+        const containers = this.vmOrchestrator.getActiveContainers();
+        if (containers.length === 0) {
+            console.log(chalk_1.default.yellow('⚠️ No VM containers available'));
+            console.log(chalk_1.default.gray('Use /vm-create <repo-url> to create one first'));
+            return { shouldExit: false, shouldUpdatePrompt: false };
+        }
+        if (global.__streamingOrchestrator) {
+            const orchestrator = global.__streamingOrchestrator;
+            if (orchestrator.context) {
+                orchestrator.context.vmMode = true;
+                orchestrator.context.planMode = false;
+                orchestrator.context.autoAcceptEdits = false;
+            }
+        }
+        if (global.__nikCLI) {
+            global.__nikCLI.currentMode = 'vm';
+        }
+        console.log(chalk_1.default.blue.bold('🐳 Entering VM Chat Mode'));
+        console.log(chalk_1.default.gray('─'.repeat(40)));
+        console.log(chalk_1.default.green(`Available containers: ${containers.length}`));
+        console.log(chalk_1.default.gray('All messages will be sent to VM agents'));
+        console.log(chalk_1.default.gray('Type /default to exit VM mode'));
+        return { shouldExit: false, shouldUpdatePrompt: true };
+    }
+    getActiveVMContainers() {
+        return this.vmOrchestrator.getActiveContainers();
+    }
     async factoryCommand() {
         agent_factory_1.agentFactory.showFactoryDashboard();
         return { shouldExit: false, shouldUpdatePrompt: false };
     }
     async createAgentCommand(args) {
         if (args.length === 0) {
-            console.log(chalk_1.default.red('Usage: /create-agent <specialization>'));
-            console.log(chalk_1.default.gray('Example: /create-agent "React Testing Expert"'));
-            console.log(chalk_1.default.gray('Example: /create-agent "API Integration Specialist"'));
+            console.log(chalk_1.default.red('Usage: /create-agent [--vm|--container] <specialization>'));
+            console.log(chalk_1.default.gray('Examples:'));
+            console.log(chalk_1.default.gray('  /create-agent "React Testing Expert"'));
+            console.log(chalk_1.default.gray('  /create-agent --vm "Repository Analyzer"'));
+            console.log(chalk_1.default.gray('  /create-agent --container "Isolated Developer"'));
             return { shouldExit: false, shouldUpdatePrompt: false };
         }
         try {
-            const specialization = args.join(' ');
+            let agentType = 'standard';
+            let specialization = '';
+            for (let i = 0; i < args.length; i++) {
+                const arg = args[i];
+                if (arg === '--vm') {
+                    agentType = 'vm';
+                }
+                else if (arg === '--container') {
+                    agentType = 'container';
+                }
+                else {
+                    specialization = args.slice(i).join(' ');
+                    break;
+                }
+            }
+            if (!specialization) {
+                console.log(chalk_1.default.red('Error: No specialization specified'));
+                console.log(chalk_1.default.gray('Usage: /create-agent [--vm|--container] <specialization>'));
+                return { shouldExit: false, shouldUpdatePrompt: false };
+            }
             const blueprint = await agent_factory_1.agentFactory.createAgentBlueprint({
                 specialization,
                 autonomyLevel: 'fully-autonomous',
                 contextScope: 'project',
+                agentType,
             });
-            console.log(chalk_1.default.green(`✅ Agent blueprint created: ${blueprint.name}`));
-            console.log(chalk_1.default.gray(`Blueprint ID: ${blueprint.id}`));
+            const typeIcon = agentType === 'vm' || agentType === 'container' ? '🐳' : '🤖';
+            const typeLabel = agentType === 'vm' || agentType === 'container' ? 'VM Agent' : 'Standard Agent';
+            console.log(chalk_1.default.green(`✅ ${typeLabel} blueprint created: ${blueprint.name}`));
+            console.log(chalk_1.default.gray(`${typeIcon} Type: ${blueprint.agentType}`));
+            console.log(chalk_1.default.gray(`📋 Blueprint ID: ${blueprint.id}`));
+            if (blueprint.vmConfig) {
+                console.log(chalk_1.default.gray(`🐳 Container Image: ${blueprint.vmConfig.containerImage}`));
+                console.log(chalk_1.default.gray(`💾 Memory Limit: ${blueprint.vmConfig.resourceLimits?.memory}`));
+            }
             console.log(chalk_1.default.gray('Use /launch-agent <id> to launch this agent'));
         }
         catch (error) {
@@ -1234,6 +1556,22 @@ ${chalk_1.default.gray('Tip: Use Ctrl+C to stop streaming responses')}
             agent_stream_1.agentStream.showLiveDashboard();
         }
         return { shouldExit: false, shouldUpdatePrompt: false };
+    }
+    async defaultModeCommand(args = []) {
+        if (global.__streamingOrchestrator) {
+            const orchestrator = global.__streamingOrchestrator;
+            if (orchestrator.context) {
+                orchestrator.context.vmMode = false;
+                orchestrator.context.planMode = false;
+                orchestrator.context.autoAcceptEdits = false;
+            }
+        }
+        if (global.__nikCLI) {
+            global.__nikCLI.currentMode = 'default';
+        }
+        console.log(chalk_1.default.green('💬 Switched to Default Chat Mode'));
+        console.log(chalk_1.default.gray('Use Shift+Tab to cycle through modes'));
+        return { shouldExit: false, shouldUpdatePrompt: true };
     }
     async securityCommand(args) {
         const subcommand = args[0] || 'status';

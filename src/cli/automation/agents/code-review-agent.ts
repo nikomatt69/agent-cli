@@ -1,10 +1,9 @@
-import { generateText } from 'ai';
 import { BaseAgent } from './base-agent';
-import { google } from '@ai-sdk/google';
+import { modelProvider, ChatMessage } from '../../ai/model-provider';
 
 export class CodeReviewAgent extends BaseAgent {
   id = 'code-review';
-  capabilities = ["code-review","quality-analysis","best-practices"];
+  capabilities = ["code-review", "quality-analysis", "best-practices"];
   specialization = 'Code review and quality analysis';
 
   constructor(workingDirectory: string = process.cwd()) {
@@ -21,7 +20,7 @@ export class CodeReviewAgent extends BaseAgent {
     if (taskData) {
       console.log(`Task: ${taskData}`);
     }
-    
+
     // Default code to review if no taskData provided
     const codeToReview = taskData || `
 function processUser(user) {
@@ -30,7 +29,7 @@ function processUser(user) {
   }
   return null;
 }`;
-    
+
     const prompt = `Perform a comprehensive code review of the following code. Check for:
 - Code quality and best practices
 - Potential bugs or issues
@@ -45,14 +44,16 @@ ${codeToReview}
 \`\`\`
 
 Provide specific suggestions for improvement.`;
-    
+
     try {
-      const { text } = await generateText({
-        model: google('gemini-pro'),
-        prompt: prompt,
+      const messages: ChatMessage[] = [
+        { role: 'user', content: prompt },
+      ];
+      const text = await modelProvider.generateResponse({
+        messages,
         maxTokens: 600,
       });
-      
+
       return {
         review: text,
         code: codeToReview,

@@ -1,10 +1,9 @@
-import { generateText } from 'ai';
 import { BaseAgent } from './base-agent';
-import { google } from '@ai-sdk/google';
+import { modelProvider, ChatMessage } from '../../ai/model-provider';
 
 export class OptimizationAgent extends BaseAgent {
   id = 'optimization';
-  capabilities = ["performance-optimization","code-analysis","profiling"];
+  capabilities = ["performance-optimization", "code-analysis", "profiling"];
   specialization = 'Performance optimization and analysis';
 
   constructor(workingDirectory: string = process.cwd()) {
@@ -49,9 +48,11 @@ ${codeToOptimize}
 Provide the optimized version with explanations of the improvements made.`;
 
     try {
-      const { text } = await generateText({
-        model: google('gemini-pro'),
-        prompt: prompt,
+      const messages: ChatMessage[] = [
+        { role: 'user', content: prompt },
+      ];
+      const text = await modelProvider.generateResponse({
+        messages,
         maxTokens: 600,
       });
 

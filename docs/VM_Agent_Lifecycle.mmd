@@ -1,0 +1,115 @@
+stateDiagram-v2
+    [*] --> BlueprintCreated: /create-agent --vm
+    
+    state BlueprintCreated {
+        [*] --> Stored
+        Stored --> WaitingLaunch: Blueprint stored in registry
+        note right of Stored
+            Blueprint contains:
+            - VM configuration
+            - Container settings
+            - Capabilities
+            - System prompt
+        end note
+    }
+    
+    BlueprintCreated --> Launching: /launch-agent <id>
+    
+    state Launching {
+        [*] --> ValidatingBlueprint
+        ValidatingBlueprint --> CreatingInstance: Blueprint found
+        ValidatingBlueprint --> LaunchError: Blueprint not found
+        
+        CreatingInstance --> InitializingVM: SecureVirtualizedAgent()
+        InitializingVM --> StartingAPIProxy: Agent initialized
+        StartingAPIProxy --> RegisteringAgent: Proxy server started
+        RegisteringAgent --> ContainerReady: Agent registered with proxy
+        
+        note right of InitializingVM
+            - Generate JWT token
+            - Setup security context
+            - Configure resource limits
+        end note
+    }
+    
+    Launching --> Running: Container started successfully
+    Launching --> LaunchError: Initialization failed
+    
+    state Running {
+        [*] --> Idle
+        
+        Idle --> ProcessingChat: Chat message received
+        ProcessingChat --> StreamingAI: AI request via proxy
+        StreamingAI --> Idle: Response completed
+        
+        Idle --> ExecutingTask: Task assigned
+        ExecutingTask --> ContainerExecution: Commands in container
+        ContainerExecution --> AIProcessing: AI analysis/generation
+        AIProcessing --> TaskComplete: Task finished
+        TaskComplete --> Idle: Ready for next task
+        
+        Idle --> RepositoryAnalysis: Repository analysis request
+        RepositoryAnalysis --> FileSystemAccess: Access container files
+        FileSystemAccess --> CodeAnalysis: Analyze code structure
+        CodeAnalysis --> GeneratingReport: Create analysis report
+        GeneratingReport --> Idle: Report completed
+        
+        note right of ProcessingChat
+            Streaming AI via:
+            - APIKeyProxy
+            - makeStreamingAIRequest()
+            - Real-time responses
+        end note
+    }
+    
+    Running --> Stopping: Stop command
+    Running --> Error: Container failure
+    
+    state Stopping {
+        [*] --> CleaningUp
+        CleaningUp --> UnregisteringAgent: Cleanup resources
+        UnregisteringAgent --> StoppingContainer: Unregister from proxy
+        StoppingContainer --> RemovingInstance: Container stopped
+        RemovingInstance --> Stopped: Agent instance destroyed
+    }
+    
+    state Error {
+        [*] --> DiagnosingError
+        DiagnosingError --> LoggingError: Identify issue
+        LoggingError --> NotifyingUser: Log error details
+        NotifyingUser --> AttemptRecovery: User notified
+        AttemptRecovery --> Running: Recovery successful
+        AttemptRecovery --> Stopping: Recovery failed
+    }
+    
+    Stopping --> Stopped
+    Error --> Stopped: Unrecoverable error
+    
+    state Stopped {
+        [*] --> Terminated
+        note right of Terminated
+            Container metadata updated:
+            - isActive: false
+            - lastUsed: timestamp
+            - containerId: null
+        end note
+    }
+    
+    Stopped --> [*]
+    LaunchError --> [*]: Error during launch
+    
+    %% State annotations
+    note top of BlueprintCreated
+        VM Agent Blueprint
+        agentType: 'vm'
+        vmConfig: VMContainerConfig
+        vmCapabilities: string[]
+    end note
+    
+    note top of Running
+        Active VM Agent
+        - Container running
+        - API proxy active
+        - Streaming AI enabled
+        - Full autonomous operation
+    end note

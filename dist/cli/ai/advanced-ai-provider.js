@@ -998,7 +998,7 @@ Respond in a helpful, professional manner with clear explanations and actionable
                 responseQuality: this.performanceOptimizer.analyzeResponseQuality(accumulatedText)
             });
             if (truncatedTokens > 0) {
-                console.log(chalk_1.default.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 200000 - truncatedTokens)} remaining`));
+                console.log(chalk_1.default.dim(`\n\n💬 ${truncatedTokens} tokens | ${Math.max(0, 280000 - truncatedTokens)} remaining`));
             }
         }
         catch (error) {

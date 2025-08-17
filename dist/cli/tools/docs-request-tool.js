@@ -32,7 +32,6 @@ exports.docsRequestTool = (0, ai_1.tool)({
                 externalSources: [],
                 summary: ''
             };
-            const currentStats = docs_context_manager_1.docsContextManager.getContextStats();
             const currentDocs = docs_context_manager_1.docsContextManager.getLoadedDocs();
             const relevantLoaded = currentDocs.filter(doc => doc.title.toLowerCase().includes(concept.toLowerCase()) ||
                 doc.content.toLowerCase().includes(concept.toLowerCase()) ||

@@ -516,22 +516,22 @@ ContentValidators.autoValidator = async (content, filePath) => {
     if (filePath.match(/\.(tsx)$/)) {
         const result = await _a.lspReactValidator(content, filePath);
         errors.push(...result.errors);
-        warnings.push(...result.warnings);
+        warnings.push(...(result.warnings || []));
     }
     else if (filePath.match(/\.(ts)$/)) {
         const result = await _a.lspTypeScriptValidator(content, filePath);
         errors.push(...result.errors);
-        warnings.push(...result.warnings);
+        warnings.push(...(result.warnings || []));
     }
     else if (filePath.match(/\.(jsx)$/)) {
         const result = await _a.reactSyntax(content, filePath);
         errors.push(...result.errors);
-        warnings.push(...result.warnings);
+        warnings.push(...(result.warnings || []));
     }
     else if (filePath.endsWith('.json')) {
         const result = await _a.jsonSyntax(content, filePath);
         errors.push(...result.errors);
-        warnings.push(...result.warnings);
+        warnings.push(...(result.warnings || []));
     }
     const qualityResult = await _a.codeQuality(content, filePath);
     if (qualityResult.warnings) {

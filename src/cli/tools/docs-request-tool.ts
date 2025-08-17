@@ -7,6 +7,38 @@ import { getCloudDocsProvider } from '../core/cloud-docs-provider';
 import { docLibrary } from '../core/documentation-library';
 import { feedbackSystem } from '../core/feedback-system';
 
+// Types to avoid never[] inference on arrays inside the result object
+type LoadedDocOverview = {
+  title: string;
+  category: string;
+  source: string;
+  relevance: string;
+};
+
+type SuggestionItem = {
+  title: string;
+  category: string;
+  source: string;
+  score: string; // e.g. '85%'
+  url: string;
+};
+
+type ExternalSource = {
+  name: string;
+  url: string;
+  description: string;
+};
+
+type DocsRequestResult = {
+  concept: string;
+  context: string;
+  found: boolean;
+  suggestions: SuggestionItem[];
+  loadedDocs: LoadedDocOverview[];
+  externalSources: ExternalSource[];
+  summary: string;
+};
+
 /**
  * Tool per richiedere automaticamente documentazione quando gli agenti 
  * incontrano concetti, tecnologie o implementazioni che non conoscono
@@ -24,7 +56,7 @@ export const docsRequestTool: CoreTool = tool({
     try {
       console.log(chalk.blue(`🤖 Agent requesting docs: "${concept}"`));
 
-      const result = {
+      const result: DocsRequestResult = {
         concept,
         context,
         found: false,
@@ -35,11 +67,10 @@ export const docsRequestTool: CoreTool = tool({
       };
 
       // 1. First, check what documentation is already loaded
-      const currentStats = docsContextManager.getContextStats();
       const currentDocs = docsContextManager.getLoadedDocs();
 
       // Check if we already have relevant docs loaded
-      const relevantLoaded = currentDocs.filter(doc => 
+      const relevantLoaded = currentDocs.filter(doc =>
         doc.title.toLowerCase().includes(concept.toLowerCase()) ||
         doc.content.toLowerCase().includes(concept.toLowerCase()) ||
         doc.tags.some(tag => tag.toLowerCase().includes(concept.toLowerCase()))
@@ -49,11 +80,11 @@ export const docsRequestTool: CoreTool = tool({
         result.found = true;
         result.loadedDocs = relevantLoaded.map(doc => ({
           title: doc.title,
-          category: doc.category,
+          category: doc.category as string,
           source: doc.source,
           relevance: 'already-loaded'
         }));
-        
+
         result.summary = `✅ Found ${relevantLoaded.length} relevant documents already loaded in context:\n${relevantLoaded.map(doc => `- ${doc.title}`).join('\n')}\n\nYou can use this information immediately.`;
         return result;
       }
@@ -76,9 +107,9 @@ export const docsRequestTool: CoreTool = tool({
         try {
           // Search local docs first
           const localResults = await docLibrary.search(query, undefined, 3);
-          
+
           // Search cloud docs if available
-          let cloudResults = [];
+          let cloudResults: any[] = [];
           if (cloudProvider) {
             try {
               cloudResults = await cloudProvider.searchShared(query, undefined, 3);
@@ -91,7 +122,7 @@ export const docsRequestTool: CoreTool = tool({
           // Combine and score results
           const combinedResults = [
             ...localResults.map(r => ({ ...r, source: 'local', score: r.score })),
-            ...cloudResults.map(r => ({ 
+            ...cloudResults.map(r => ({
               entry: {
                 title: r.title,
                 category: r.category,
@@ -99,7 +130,7 @@ export const docsRequestTool: CoreTool = tool({
                 tags: r.tags,
                 content: r.content
               },
-              source: 'cloud', 
+              source: 'cloud',
               score: r.popularity_score / 100 // Normalize to 0-1 range
             }))
           ];
@@ -113,7 +144,7 @@ export const docsRequestTool: CoreTool = tool({
 
       // Remove duplicates and sort by score
       const uniqueMatches = bestMatches
-        .filter((match, index, self) => 
+        .filter((match, index, self) =>
           index === self.findIndex(m => m.entry.title === match.entry.title)
         )
         .sort((a, b) => b.score - a.score)
@@ -121,11 +152,11 @@ export const docsRequestTool: CoreTool = tool({
 
       if (uniqueMatches.length > 0) {
         result.found = true;
-        
+
         // Auto-load best matches if requested and urgency is medium/high
         if (autoLoad && (urgency === 'medium' || urgency === 'high')) {
           const docsToLoad = uniqueMatches.slice(0, 2).map(match => match.entry.title);
-          
+
           try {
             const loadedDocs = await docsContextManager.loadDocs(docsToLoad);
             result.loadedDocs = loadedDocs.map(doc => ({
@@ -134,7 +165,7 @@ export const docsRequestTool: CoreTool = tool({
               source: doc.source,
               relevance: 'auto-loaded'
             }));
-            
+
             console.log(chalk.green(`🤖 Auto-loaded ${loadedDocs.length} docs for "${concept}"`));
           } catch (error) {
             console.error('Auto-load failed:', error);
@@ -154,7 +185,7 @@ export const docsRequestTool: CoreTool = tool({
       // 3. Suggest external sources if not found locally and requested
       if (!result.found && suggestSources) {
         const conceptLower = concept.toLowerCase();
-        
+
         // Technology-specific suggestions
         if (conceptLower.includes('react')) {
           result.externalSources.push({
@@ -163,7 +194,7 @@ export const docsRequestTool: CoreTool = tool({
             description: 'Official React documentation and tutorials'
           });
         }
-        
+
         if (conceptLower.includes('typescript') || conceptLower.includes('ts')) {
           result.externalSources.push({
             name: 'TypeScript Handbook',
@@ -171,7 +202,7 @@ export const docsRequestTool: CoreTool = tool({
             description: 'Official TypeScript documentation'
           });
         }
-        
+
         if (conceptLower.includes('node') || conceptLower.includes('nodejs')) {
           result.externalSources.push({
             name: 'Node.js Documentation',
@@ -179,7 +210,7 @@ export const docsRequestTool: CoreTool = tool({
             description: 'Official Node.js API documentation'
           });
         }
-        
+
         if (conceptLower.includes('next')) {
           result.externalSources.push({
             name: 'Next.js Documentation',
@@ -207,7 +238,7 @@ export const docsRequestTool: CoreTool = tool({
       if (result.found) {
         const loaded = result.loadedDocs.length;
         const available = result.suggestions.length;
-        
+
         // Report successful documentation discovery
         await feedbackSystem.reportSuccess(
           concept,
@@ -215,25 +246,25 @@ export const docsRequestTool: CoreTool = tool({
           `Found ${loaded + available} relevant documents`,
           { agentType: 'docs_request' }
         );
-        
+
         result.summary = `🎯 Found documentation for "${concept}"!\n\n`;
-        
+
         if (loaded > 0) {
           result.summary += `✅ **Auto-loaded ${loaded} documents into context:**\n`;
           result.summary += result.loadedDocs.map(doc => `- ${doc.title} (${doc.category})`).join('\n') + '\n\n';
         }
-        
+
         if (available > loaded) {
           result.summary += `📚 **Additional documentation available:**\n`;
-          result.summary += result.suggestions.slice(loaded).map(doc => 
+          result.summary += result.suggestions.slice(loaded).map(doc =>
             `- ${doc.title} (${doc.category}) - ${doc.score} match`
           ).join('\n') + '\n\n';
           result.summary += `💡 Use the smart_docs_load tool to load additional documents.\n\n`;
         }
-        
+
         result.summary += `**Context:** ${context}\n`;
         result.summary += `**Next steps:** You now have relevant documentation loaded. Proceed with your implementation using the provided information.`;
-        
+
       } else {
         // Report documentation gap automatically
         const impactLevel = urgency === 'high' ? 'high' : urgency === 'medium' ? 'medium' : 'low';
@@ -242,24 +273,24 @@ export const docsRequestTool: CoreTool = tool({
           context,
           impactLevel as 'low' | 'medium' | 'high',
           'first-time',
-          { 
+          {
             agentType: 'docs_request',
             sources: result.externalSources.map(s => s.url)
           }
         );
-        
+
         result.summary = `❌ No local documentation found for "${concept}".\n\n`;
         result.summary += `**Context:** ${context}\n\n`;
-        
+
         if (result.externalSources.length > 0) {
           result.summary += `🌐 **Suggested external sources:**\n`;
-          result.summary += result.externalSources.map(source => 
+          result.summary += result.externalSources.map(source =>
             `- [${source.name}](${source.url}) - ${source.description}`
           ).join('\n') + '\n\n';
-          
+
           result.summary += `💡 **Recommendation:** Use the /doc-add command to add documentation from these sources to your local library for future use.\n\n`;
         }
-        
+
         result.summary += `**Alternative approaches:**\n`;
         result.summary += `- Try more specific or alternative keywords\n`;
         result.summary += `- Break down the concept into smaller parts\n`;
@@ -321,9 +352,9 @@ export const docsGapReportTool: CoreTool = tool({
         status: 'reported'
       };
 
-      const priorityLevel = impact === 'critical' ? '🚨 CRITICAL' : 
-                           impact === 'high' ? '⚠️ HIGH' : 
-                           impact === 'medium' ? '📝 MEDIUM' : '💡 LOW';
+      const priorityLevel = impact === 'critical' ? '🚨 CRITICAL' :
+        impact === 'high' ? '⚠️ HIGH' :
+          impact === 'medium' ? '📝 MEDIUM' : '💡 LOW';
 
       const summary = `${priorityLevel} Documentation Gap Reported\n\n` +
         `**Missing Concept:** ${missingConcept}\n` +
@@ -331,7 +362,7 @@ export const docsGapReportTool: CoreTool = tool({
         `**Impact:** ${impact}\n` +
         `**User Context:** ${userContext}\n\n` +
         `**Status:** This gap has been logged and will be aggregated with other feedback for system improvements.\n\n` +
-        (suggestedSources && suggestedSources.length > 0 ? 
+        (suggestedSources && suggestedSources.length > 0 ?
           `**Suggested Sources:**\n${suggestedSources.map(s => `- ${s}`).join('\n')}\n\n` : '') +
         `**Immediate Actions:**\n` +
         `- Use external sources temporarily\n` +

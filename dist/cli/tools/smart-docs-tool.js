@@ -154,7 +154,7 @@ exports.smartDocsLoadTool = (0, ai_1.tool)({
         replace: zod_1.z.boolean().default(false).describe('Replace current context or add to existing'),
         priority: zod_1.z.enum(['low', 'medium', 'high']).default('medium').describe('Priority level for context loading')
     }),
-    execute: async ({ docNames, replace, priority }) => {
+    execute: async ({ docNames, replace }) => {
         try {
             console.log(chalk_1.default.blue(`🤖 Agent loading docs: ${docNames.join(', ')}`));
             if (replace) {

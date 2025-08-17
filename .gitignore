@@ -1,5 +1,6 @@
 node_modules
 .env
+.env.production
 .claude
 CLAUDE.md
 tsconfig.cli.tsbuildinfo

@@ -5,7 +5,33 @@ import chalk from 'chalk';
 import { docLibrary } from '../core/documentation-library';
 import { docsContextManager } from '../context/docs-context-manager';
 import { getCloudDocsProvider } from '../core/cloud-docs-provider';
-import { simpleConfigManager } from '../core/config-manager';
+
+// Types for smart docs search results to avoid never[] inference
+type DocSearchResult = {
+  title: string;
+  category: string;
+  url: string;
+  tags: string[];
+  score: string;
+  snippet: string;
+  source: 'local' | 'shared';
+};
+
+type LoadedDocInfo = {
+  title: string;
+  category: string;
+  source: string;
+  summary: string;
+};
+
+type SmartDocsResults = {
+  found: boolean;
+  localResults: DocSearchResult[];
+  sharedResults: DocSearchResult[];
+  loadedToContext: LoadedDocInfo[];
+  suggestions: string[];
+  summary: string;
+};
 
 /**
  * Smart Documentation Tool per gli agenti AI
@@ -24,7 +50,7 @@ export const smartDocsSearchTool: CoreTool = tool({
     try {
       console.log(chalk.blue(`🤖 Agent searching docs: "${query}"`));
 
-      const results = {
+      const results: SmartDocsResults = {
         found: false,
         localResults: [],
         sharedResults: [],
@@ -59,7 +85,7 @@ export const smartDocsSearchTool: CoreTool = tool({
         try {
           const remainingSlots = maxResults - results.localResults.length;
           const cloudDocs = await cloudProvider.searchShared(query, category, remainingSlots);
-          
+
           results.sharedResults = cloudDocs.map(doc => ({
             title: doc.title,
             category: doc.category,
@@ -81,8 +107,8 @@ export const smartDocsSearchTool: CoreTool = tool({
       // 3. Auto-load relevant documents if requested and urgency is medium/high
       if (autoLoad && results.found && (urgency === 'medium' || urgency === 'high')) {
         try {
-          const docsToLoad = [];
-          
+          const docsToLoad: any[] = [];
+
           // Load top local results
           results.localResults.slice(0, 2).forEach(doc => {
             docsToLoad.push(doc.title);
@@ -136,9 +162,9 @@ ${loaded > 0 ? `✅ ${loaded} documents automatically loaded into context and re
 ${results.suggestions.length > 0 ? `\n💡 Related topics: ${results.suggestions.join(', ')}` : ''}
 
 Available documentation:
-${[...results.localResults, ...results.sharedResults].map((doc, i) => 
-  `${i + 1}. ${doc.title} (${doc.category}) - ${doc.score} match`
-).join('\n')}`;
+${[...results.localResults, ...results.sharedResults].map((doc, i) =>
+          `${i + 1}. ${doc.title} (${doc.category}) - ${doc.score} match`
+        ).join('\n')}`;
       }
 
       return {
@@ -180,7 +206,7 @@ export const smartDocsLoadTool: CoreTool = tool({
     replace: z.boolean().default(false).describe('Replace current context or add to existing'),
     priority: z.enum(['low', 'medium', 'high']).default('medium').describe('Priority level for context loading')
   }),
-  execute: async ({ docNames, replace, priority }) => {
+  execute: async ({ docNames, replace }) => {
     try {
       console.log(chalk.blue(`🤖 Agent loading docs: ${docNames.join(', ')}`));
 
@@ -218,9 +244,9 @@ Context now contains ${result.contextStats.totalDocs} documents (${result.contex
 Categories: ${result.contextStats.categories.join(', ')}
 
 Loaded documents:
-${result.loadedDocs.map((doc, i) => 
-  `${i + 1}. ${doc.title} (${doc.category}) - ${doc.wordCount.toLocaleString()} words`
-).join('\n')}`;
+${result.loadedDocs.map((doc, i) =>
+        `${i + 1}. ${doc.title} (${doc.category}) - ${doc.wordCount.toLocaleString()} words`
+      ).join('\n')}`;
 
       return {
         ...result,
@@ -270,11 +296,11 @@ export const smartDocsContextTool: CoreTool = tool({
           wordCount: doc.content.split(' ').length,
           loadedAt: doc.loadedAt.toISOString(),
           summary: doc.summary || '',
-          ...(includeContent ? { 
-            contentPreview: doc.content.substring(0, 500) + '...' 
+          ...(includeContent ? {
+            contentPreview: doc.content.substring(0, 500) + '...'
           } : {})
         })),
-        suggestions: []
+        suggestions: [] as string[]
       };
 
       // Generate suggestions if query provided
@@ -294,9 +320,9 @@ export const smartDocsContextTool: CoreTool = tool({
         summary = `Documentation context: ${result.stats.totalDocs} documents loaded (${result.stats.totalWords.toLocaleString()} words, ${result.stats.utilization}% capacity)
 
 Current documents:
-${result.documents.map((doc, i) => 
-  `${i + 1}. ${doc.title} (${doc.category}) - ${doc.wordCount.toLocaleString()} words`
-).join('\n')}
+${result.documents.map((doc, i) =>
+          `${i + 1}. ${doc.title} (${doc.category}) - ${doc.wordCount.toLocaleString()} words`
+        ).join('\n')}
 
 Categories: ${result.stats.categories.join(', ')}
 Sources: Local: ${result.stats.sources.local}, Cloud: ${result.stats.sources.shared}`;

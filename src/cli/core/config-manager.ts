@@ -161,13 +161,17 @@ export class SimpleConfigManager {
       provider: 'openai',
       model: 'gpt-4',
     },
-    'gemini-pro': {
+    'gemini-2.5-pro': {
       provider: 'google',
-      model: 'gemini-pro',
+      model: 'gemini-2.5-pro',
     },
-    'gemini-1.5-pro': {
+    'gemini-2.5-flash': {
       provider: 'google',
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.5-flash',
+    },
+    'gemini-2.5-flash-lite': {
+      provider: 'google',
+      model: 'gemini-2.5-flash-lite',
     },
     'llama3.1:8b': {
       provider: 'ollama',

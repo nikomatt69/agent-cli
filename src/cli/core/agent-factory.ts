@@ -28,6 +28,19 @@ function extractJsonFromMarkdown(text: string): string {
   return text.trim();
 }
 
+export interface VMContainerConfig {
+  repositoryUrl?: string;
+  containerImage?: string;
+  resourceLimits?: {
+    memory?: string;
+    cpu?: string;
+    disk?: string;
+  };
+  networkAccess?: boolean;
+  volumeMounts?: string[];
+  environmentVars?: Record<string, string>;
+}
+
 export interface AgentBlueprint {
   id: string;
   name: string;
@@ -45,6 +58,18 @@ export interface AgentBlueprint {
   autonomyLevel: 'supervised' | 'semi-autonomous' | 'fully-autonomous';
   contextScope: 'file' | 'directory' | 'project' | 'workspace';
   workingStyle: 'sequential' | 'parallel' | 'adaptive';
+
+  // VM Agent Support
+  agentType: 'standard' | 'vm' | 'container';
+  vmConfig?: VMContainerConfig;
+  vmCapabilities?: string[];
+  containerMetadata?: {
+    containerId?: string;
+    isActive?: boolean;
+    createdAt?: Date;
+    lastUsed?: Date;
+  };
+
   createdAt: Date;
 }
 
@@ -546,9 +571,26 @@ export class AgentFactory extends EventEmitter {
     autonomyLevel?: AgentBlueprint['autonomyLevel'];
     contextScope?: AgentBlueprint['contextScope'];
     personality?: Partial<AgentBlueprint['personality']>;
+    agentType?: 'standard' | 'vm' | 'container';
+    vmConfig?: VMContainerConfig;
   }): Promise<AgentBlueprint> {
 
-    console.log(chalk.blue(`🧬 Creating agent blueprint for: ${requirements.specialization}`));
+    // Auto-detect VM agent requirements
+    const vmKeywords = ['vm', 'container', 'docker', 'isolated', 'virtualized', 'sandbox', 'repository', 'secure'];
+    const isVMAgent = requirements.agentType === 'vm' ||
+      requirements.agentType === 'container' ||
+      vmKeywords.some(keyword =>
+        requirements.specialization.toLowerCase().includes(keyword)
+      );
+
+    const agentType = isVMAgent ? 'vm' : (requirements.agentType || 'standard');
+
+    if (isVMAgent) {
+      console.log(chalk.blue(`🐳 Creating VM agent blueprint for: ${requirements.specialization}`));
+      return this.createVMAgentBlueprint(requirements);
+    } else {
+      console.log(chalk.blue(`🧬 Creating standard agent blueprint for: ${requirements.specialization}`));
+    }
 
     // Verify model configuration and API key before proceeding
     try {
@@ -630,6 +672,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         autonomyLevel: requirements.autonomyLevel || 'semi-autonomous',
         contextScope: requirements.contextScope || 'project',
         workingStyle: aiBlueprint.workingStyle || 'adaptive',
+        agentType: 'standard',
         createdAt: new Date(),
       };
 
@@ -667,6 +710,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
           autonomyLevel: requirements.autonomyLevel || 'semi-autonomous',
           contextScope: requirements.contextScope || 'project',
           workingStyle: 'adaptive',
+          agentType: 'standard',
           createdAt: new Date(),
         };
 
@@ -683,6 +727,119 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     }
   }
 
+  // Create VM Agent Blueprint
+  async createVMAgentBlueprint(requirements: {
+    specialization: string;
+    description?: string;
+    autonomyLevel?: AgentBlueprint['autonomyLevel'];
+    contextScope?: AgentBlueprint['contextScope'];
+    personality?: Partial<AgentBlueprint['personality']>;
+    vmConfig?: VMContainerConfig;
+  }): Promise<AgentBlueprint> {
+
+    console.log(chalk.blue(`🐳 Creating VM agent blueprint for: ${requirements.specialization}`));
+
+    // Create VM-specific capabilities
+    const vmCapabilities = [
+      'vm-management',
+      'container-orchestration',
+      'isolated-execution',
+      'repository-cloning',
+      'secure-environment',
+      'autonomous-development',
+      'file-system-access',
+      'bash-execution',
+      'git-operations',
+      'package-management',
+      'code-analysis',
+      'testing-execution'
+    ];
+
+    // Create VM-specific tools
+    const vmTools = [
+      'Read', 'Write', 'Edit', 'Bash',
+      'Git', 'Docker', 'NPM', 'Yarn',
+      'VSCode', 'Terminal', 'FileManager'
+    ];
+
+    // Generate VM-specific system prompt
+    const vmSystemPrompt = `You are a specialized VM-based AI agent running in a secure, isolated container environment.
+
+Your specialization: ${requirements.specialization}
+
+You have complete access to a containerized development environment with:
+- Full file system access within the container
+- Bash terminal for command execution  
+- Git operations for version control
+- Package managers (npm, yarn, pip, etc.)
+- Development tools and IDEs
+- Network access for downloading dependencies
+
+Your capabilities include:
+- Repository analysis and understanding
+- Code generation and modification
+- Testing and debugging
+- Package installation and management
+- Build process execution
+- Deployment preparation
+
+Always prioritize security and follow best practices. Work autonomously but explain your actions clearly.
+Execute tasks step-by-step and verify results before proceeding.`;
+
+    // Create default VM configuration if not provided
+    const defaultVMConfig: VMContainerConfig = {
+      containerImage: 'node:18-alpine',
+      resourceLimits: {
+        memory: '2Gi',
+        cpu: '1000m',
+        disk: '5Gi'
+      },
+      networkAccess: true,
+      volumeMounts: ['/workspace'],
+      environmentVars: {
+        NODE_ENV: 'development',
+        WORKSPACE_PATH: '/workspace'
+      }
+    };
+
+    const blueprint: AgentBlueprint = {
+      id: nanoid(),
+      name: `${requirements.specialization.toLowerCase().replace(/\s+/g, '-')}-vm-agent`,
+      description: requirements.description || `VM-based agent specialized in ${requirements.specialization} running in isolated container environment`,
+      specialization: requirements.specialization,
+      systemPrompt: vmSystemPrompt,
+      capabilities: vmCapabilities,
+      requiredTools: vmTools,
+      personality: {
+        proactive: requirements.personality?.proactive || 80,
+        collaborative: requirements.personality?.collaborative || 70,
+        analytical: requirements.personality?.analytical || 90,
+        creative: requirements.personality?.creative || 60,
+      },
+      autonomyLevel: requirements.autonomyLevel || 'fully-autonomous',
+      contextScope: requirements.contextScope || 'project',
+      workingStyle: 'adaptive',
+      agentType: 'vm',
+      vmConfig: requirements.vmConfig || defaultVMConfig,
+      vmCapabilities,
+      containerMetadata: {
+        isActive: false,
+        createdAt: new Date()
+      },
+      createdAt: new Date(),
+    };
+
+    this.blueprints.set(blueprint.id, blueprint);
+
+    console.log(chalk.green(`✅ VM agent blueprint created: ${blueprint.name}`));
+    console.log(chalk.gray(`   Type: 🐳 VM Agent`));
+    console.log(chalk.gray(`   Capabilities: ${blueprint.capabilities.join(', ')}`));
+    console.log(chalk.gray(`   Container Image: ${blueprint.vmConfig?.containerImage}`));
+    console.log(chalk.gray(`   Autonomy: ${blueprint.autonomyLevel}`));
+
+    return blueprint;
+  }
+
   // Launch an agent from a blueprint
   async launchAgent(blueprintId: string): Promise<DynamicAgent> {
     const blueprint = this.blueprints.get(blueprintId);
@@ -691,6 +848,13 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     }
 
     console.log(chalk.blue(`🚀 Launching agent: ${blueprint.name}`));
+
+    // If an agent with this name is already launched, return the existing instance
+    const existing = this.instances.get(blueprint.name);
+    if (existing) {
+      console.log(chalk.yellow(`⚠️ Agent ${blueprint.name} already launched; returning existing instance`));
+      return existing;
+    }
 
     const agent = new DynamicAgent(blueprint);
     await agent.initialize();
@@ -733,14 +897,17 @@ Context Scope: ${requirements.contextScope || 'project'}`,
   // Show factory dashboard
   showFactoryDashboard(): void {
     const blueprints = this.getAllBlueprints();
-    const activeAgents = this.getActiveAgents();
+    // All instantiated agents (running or idle)
+    const allAgents = Array.from(this.instances.values());
+    // Currently running agents
+    const runningAgents = allAgents.filter(a => a.isActive());
 
     console.log(chalk.blue.bold('\n🏭 Agent Factory Dashboard'));
     console.log(chalk.gray('═'.repeat(50)));
 
     console.log(`📋 Blueprints: ${blueprints.length}`);
-    console.log(`🤖 Active Agents: ${activeAgents.length}`);
-    console.log(`🏃 Running Agents: ${activeAgents.filter(a => a.isActive()).length}`);
+    console.log(`🤖 Active Agents: ${allAgents.length}`);
+    console.log(`🏃 Running Agents: ${runningAgents.length}`);
 
     if (blueprints.length > 0) {
       console.log(chalk.blue.bold('\n📋 Available Blueprints:'));
@@ -755,9 +922,9 @@ Context Scope: ${requirements.contextScope || 'project'}`,
       });
     }
 
-    if (activeAgents.length > 0) {
+    if (allAgents.length > 0) {
       console.log(chalk.blue.bold('\n🤖 Active Agents:'));
-      activeAgents.forEach(agent => {
+      allAgents.forEach(agent => {
         const blueprint = agent.getBlueprint();
         const stats = agentTodoManager.getAgentStats(agent.id);
 
@@ -788,7 +955,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     confidence: number;
     fallbackOptions: DynamicAgent[];
   }> {
-    
+
     console.log(chalk.blue(`🎯 Multi-dimensional agent selection for: ${taskDescription.slice(0, 50)}...`));
 
     // Step 1: Get all available agents with performance metrics
@@ -807,7 +974,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
         urgency,
         taskDescription
       );
-      
+
       agentScores.set(agent.id, score.totalScore);
       agentReasons.set(agent.id, score.reasons);
     }
@@ -852,7 +1019,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     urgency: 'low' | 'normal' | 'high' | 'critical',
     taskDescription: string
   ): { totalScore: number; reasons: string[] } {
-    
+
     let totalScore = 0;
     const reasons: string[] = [];
     const maxScore = 100;
@@ -962,7 +1129,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     // Direct keyword matching
     const specWords = specLower.split(/\s+/);
     const taskWords = taskLower.split(/\s+/);
-    
+
     let relevanceScore = 0;
 
     // Word overlap scoring
@@ -992,7 +1159,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
   private scoreComplexityHandling(blueprint: AgentBlueprint, estimatedComplexity: number): number {
     // More capabilities = better complexity handling
     const capabilityBonus = Math.min(blueprint.capabilities.length / 20, 0.5);
-    
+
     // Autonomy level affects complexity handling
     const autonomyBonus = {
       'supervised': 0.3,
@@ -1008,7 +1175,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     ) / 100;
 
     const baseScore = (10 - Math.abs(estimatedComplexity - 5)) / 10; // Optimal at complexity 5
-    
+
     return Math.min(baseScore + capabilityBonus + autonomyBonus + personalityBonus, 1.0);
   }
 
@@ -1101,7 +1268,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
   private scoreAvailability(agentName: string): number {
     const agent = this.instances.get(agentName);
     if (!agent) return 0;
-    
+
     return agent.isActive() ? 0.3 : 1.0; // Prefer available agents
   }
 
@@ -1122,13 +1289,13 @@ Context Scope: ${requirements.contextScope || 'project'}`,
     primaryReasons: string[]
   ): string {
     const blueprint = primary.getBlueprint();
-    
+
     let reasoning = `Selected **${blueprint.name}** as primary agent because:\n`;
     reasoning += primaryReasons.map(reason => `• ${reason}`).join('\n');
-    
+
     if (secondary.length > 0) {
       reasoning += `\n\nSecondary agents available for collaboration:\n`;
-      reasoning += secondary.map(agent => 
+      reasoning += secondary.map(agent =>
         `• ${agent.getBlueprint().name} (${agent.getBlueprint().specialization})`
       ).join('\n');
     }
@@ -1154,7 +1321,7 @@ Context Scope: ${requirements.contextScope || 'project'}`,
       errorCount: number;
     }
   ): Promise<{ shouldRebalance: boolean; newPrimary?: DynamicAgent; reasoning: string }> {
-    
+
     console.log(chalk.yellow(`🔄 Evaluating agent rebalancing for task ${taskId}...`));
 
     // Determine if rebalancing is needed

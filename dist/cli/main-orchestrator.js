@@ -13,11 +13,16 @@ const tool_service_1 = require("./services/tool-service");
 const planning_service_1 = require("./services/planning-service");
 const lsp_service_1 = require("./services/lsp-service");
 const diff_manager_1 = require("./ui/diff-manager");
+const vm_orchestrator_1 = require("./virtualized-agents/vm-orchestrator");
+const container_manager_1 = require("./virtualized-agents/container-manager");
 class MainOrchestrator {
     constructor() {
         this.initialized = false;
         this.streamOrchestrator = new streaming_orchestrator_1.StreamingOrchestrator();
+        this.containerManager = new container_manager_1.ContainerManager();
+        this.vmOrchestrator = new vm_orchestrator_1.VMOrchestrator(this.containerManager);
         this.setupGlobalHandlers();
+        this.setupVMEventListeners();
     }
     setupGlobalHandlers() {
         process.on('unhandledRejection', (reason, promise) => {
@@ -144,6 +149,7 @@ class MainOrchestrator {
             `• ${chalk_1.default.green('Intelligent Planning')} - Autonomous task breakdown\\n` +
             `• ${chalk_1.default.green('Tool Integration')} - File ops, git, package management\\n` +
             `• ${chalk_1.default.green('Diff Management')} - Visual file change review\\n` +
+            `• ${chalk_1.default.green('VM Orchestration')} - Container management & agent isolation\\n` +
             `• ${chalk_1.default.green('Security Policies')} - Safe command execution\\n` +
             `• ${chalk_1.default.green('Context Management')} - Automatic memory optimization\\n\\n` +
             `${chalk_1.default.yellow.bold('🚀 Ready for autonomous development!')}`, {
@@ -163,6 +169,7 @@ class MainOrchestrator {
             { name: 'Agent System', fn: this.initializeAgents.bind(this) },
             { name: 'Planning System', fn: this.initializePlanning.bind(this) },
             { name: 'Tool System', fn: this.initializeTools.bind(this) },
+            { name: 'VM Orchestration', fn: this.initializeVMOrchestration.bind(this) },
             { name: 'Security Policies', fn: this.initializeSecurity.bind(this) },
             { name: 'Context Management', fn: this.initializeContext.bind(this) }
         ];
@@ -204,6 +211,76 @@ class MainOrchestrator {
     }
     async initializeContext() {
         console.log(chalk_1.default.dim('   Context management ready'));
+    }
+    async initializeVMOrchestration() {
+        console.log(chalk_1.default.dim('   VM Orchestrator ready'));
+        console.log(chalk_1.default.dim('   Container Manager ready'));
+        await this.streamOrchestrator.createPanel({
+            id: 'vm-status',
+            title: '🐳 VM Status',
+            position: 'right',
+            width: 35
+        });
+        await this.streamOrchestrator.createPanel({
+            id: 'vm-logs',
+            title: '📝 VM Agent Logs',
+            position: 'bottom',
+            height: 12
+        });
+        await this.streamOrchestrator.createPanel({
+            id: 'vm-metrics',
+            title: '📊 VM Metrics',
+            position: 'right',
+            width: 25
+        });
+        await this.streamOrchestrator.streamToPanel('vm-status', '🟢 VM Orchestration Initialized\n');
+        await this.streamOrchestrator.streamToPanel('vm-status', `Containers: 0 active\n`);
+    }
+    setupVMEventListeners() {
+        this.vmOrchestrator.on('container:created', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-status', `🟢 Container created: ${data.containerId?.slice(0, 8)}\n`);
+            await this.updateVMStatus();
+        });
+        this.vmOrchestrator.on('container:started', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-status', `▶️ Container started: ${data.containerId?.slice(0, 8)}\n`);
+        });
+        this.vmOrchestrator.on('container:stopped', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-status', `🔴 Container stopped: ${data.containerId?.slice(0, 8)}\n`);
+            await this.updateVMStatus();
+        });
+        this.vmOrchestrator.on('container:removed', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-status', `🗑️ Container removed: ${data.containerId?.slice(0, 8)}\n`);
+            await this.updateVMStatus();
+        });
+        this.vmOrchestrator.on('container:log', async (data) => {
+            const timestamp = new Date().toLocaleTimeString();
+            await this.streamOrchestrator.streamToPanel('vm-logs', `[${timestamp}] [${data.containerId?.slice(0, 8)}] ${data.log}\n`);
+        });
+        this.vmOrchestrator.on('container:metrics', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-metrics', `📊 ${data.containerId?.slice(0, 8)}:\n` +
+                `   Memory: ${(data.metrics?.memoryUsage / 1024 / 1024).toFixed(2)} MB\n` +
+                `   CPU: ${data.metrics?.cpuUsage?.toFixed(2)}%\n` +
+                `   Network: ${(data.metrics?.networkActivity / 1024).toFixed(2)} KB\n\n`);
+        });
+        this.vmOrchestrator.on('agent:message', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-logs', `[AGENT] ${data.agentId}: ${data.message}\n`);
+        });
+        this.vmOrchestrator.on('agent:error', async (data) => {
+            await this.streamOrchestrator.streamToPanel('vm-logs', `[ERROR] ${data.agentId}: ${data.error}\n`);
+        });
+    }
+    async updateVMStatus() {
+        const containers = this.vmOrchestrator.getActiveContainers();
+        await this.streamOrchestrator.streamToPanel('vm-status', `\nActive Containers: ${containers.length}\n`);
+        for (const container of containers) {
+            await this.streamOrchestrator.streamToPanel('vm-status', `• ${container.id.slice(0, 8)} - ${container.status} - ${container.agentId}\n`);
+        }
+    }
+    getVMOrchestrator() {
+        return this.vmOrchestrator;
+    }
+    getStreamOrchestrator() {
+        return this.streamOrchestrator;
     }
     showQuickStart() {
         console.log(chalk_1.default.cyan.bold('\\n📚 Quick Start Guide:'));

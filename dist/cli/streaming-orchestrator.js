@@ -50,6 +50,7 @@ const diff_manager_1 = require("./ui/diff-manager");
 const execution_policy_1 = require("./policies/execution-policy");
 const config_manager_1 = require("./core/config-manager");
 const input_queue_1 = require("./core/input-queue");
+const cli_ui_1 = require("./utils/cli-ui");
 class StreamingOrchestratorImpl extends events_1.EventEmitter {
     constructor() {
         super();
@@ -61,15 +62,18 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         this.inputQueueEnabled = true;
         this.supervisionCognition = null;
         this.adaptiveMetrics = new Map();
+        this.panels = new Map();
         this.context = {
             workingDirectory: process.cwd(),
             autonomous: true,
             planMode: false,
             autoAcceptEdits: true,
+            vmMode: false,
             contextLeft: 20,
             maxContext: 100
         };
         this.policyManager = new execution_policy_1.ExecutionPolicyManager(config_manager_1.simpleConfigManager);
+        global.__streamingOrchestrator = this;
     }
     setupInterface() {
         if (!this.rl)
@@ -227,8 +231,15 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         if (input.startsWith('@')) {
             const match = input.match(/^@(\\w+[-\\w]*)/);
             if (match) {
-                const agentName = match[1];
+                let agentName = match[1];
                 const task = input.replace(match[0], '').trim();
+                if (this.context.vmMode) {
+                    agentName = 'vm-agent';
+                    this.queueMessage({
+                        type: 'system',
+                        content: `🐳 VM Mode: Redirecting to VM Agent`
+                    });
+                }
                 await this.launchAgent(agentName, task);
                 return;
             }
@@ -285,6 +296,10 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             return;
         }
         try {
+            if (agentName === 'vm-agent' && this.context.vmMode) {
+                await this.handleVMAgentChat(task);
+                return;
+            }
             if (this.activeAgents.size >= 3) {
                 this.queueMessage({
                     type: 'system',
@@ -301,6 +316,113 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             this.queueMessage({
                 type: 'error',
                 content: `❌ Failed to launch ${agentName}: ${error.message}`
+            });
+        }
+    }
+    async handleVMAgentChat(message) {
+        try {
+            this.queueMessage({
+                type: 'system',
+                content: `🐳 VM Mode: Communicating with VM agents...`
+            });
+            if (!this.activeVMAgent) {
+                const { SecureVirtualizedAgent } = await Promise.resolve().then(() => __importStar(require('./virtualized-agents/secure-vm-agent')));
+                this.activeVMAgent = new SecureVirtualizedAgent(process.cwd());
+                await this.activeVMAgent.initialize();
+                await this.activeVMAgent.startChatMode();
+                this.queueMessage({
+                    type: 'vm',
+                    content: `VM Agent initialized and ready for chat`
+                });
+            }
+            this.queueMessage({
+                type: 'system',
+                content: `📤 Sending to 1 VM agent(s):`
+            });
+            this.queueMessage({
+                type: 'user',
+                content: `Input: ${message}`
+            });
+            this.queueMessage({
+                type: 'system',
+                content: `🌊 VM Agent ${this.activeVMAgent.id.slice(-8)}: Starting streaming response...`
+            });
+            cli_ui_1.CliUI.logDebug(`🔍 Checking VM Agent streaming support: ${typeof this.activeVMAgent.processChatMessageStreaming}`);
+            if (typeof this.activeVMAgent.processChatMessageStreaming === 'function') {
+                cli_ui_1.CliUI.logInfo(`🌊 Using streaming method for VM Agent chat`);
+                let hasContent = false;
+                let streamBuffer = '';
+                try {
+                    this.queueMessage({
+                        type: 'system',
+                        content: `🌊 Starting AI streaming...`
+                    });
+                    for await (const chunk of this.activeVMAgent.processChatMessageStreaming(message)) {
+                        cli_ui_1.CliUI.logDebug(`📦 Received chunk: ${chunk ? chunk.slice(0, 50) : 'null'}...`);
+                        if (chunk && chunk.trim()) {
+                            hasContent = true;
+                            streamBuffer += chunk;
+                            this.queueMessage({
+                                type: 'vm',
+                                content: chunk,
+                                metadata: {
+                                    isStreaming: true,
+                                    vmAgentId: this.activeVMAgent.id,
+                                    chunkLength: chunk.length
+                                }
+                            });
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                        }
+                    }
+                    this.queueMessage({
+                        type: 'system',
+                        content: `✅ VM Agent ${this.activeVMAgent.id.slice(-8)}: Streaming completed (${streamBuffer.length} chars)`
+                    });
+                }
+                catch (streamError) {
+                    cli_ui_1.CliUI.logError(`❌ Streaming error details: ${streamError.message}`);
+                    this.queueMessage({
+                        type: 'error',
+                        content: `❌ VM Agent streaming error: ${streamError.message}`
+                    });
+                    hasContent = false;
+                }
+                if (!hasContent) {
+                    cli_ui_1.CliUI.logWarning(`⚠️ No streaming content received, showing placeholder`);
+                    this.queueMessage({
+                        type: 'vm',
+                        content: `🤖 VM Agent processed the request but no streaming response was generated.`
+                    });
+                }
+            }
+            else {
+                this.queueMessage({
+                    type: 'system',
+                    content: `🤖 VM Agent ${this.activeVMAgent.id.slice(-8)}: Processing (non-streaming)...`
+                });
+                const response = await this.activeVMAgent.processChatMessage(message);
+                this.queueMessage({
+                    type: 'system',
+                    content: `✅ VM Agent ${this.activeVMAgent.id.slice(-8)}: Task completed`
+                });
+                if (response && response.trim()) {
+                    this.queueMessage({
+                        type: 'vm',
+                        content: response
+                    });
+                }
+                else {
+                    this.queueMessage({
+                        type: 'vm',
+                        content: `🤖 VM Agent completed the task but no specific response was generated.`
+                    });
+                }
+            }
+        }
+        catch (error) {
+            this.queueMessage({
+                type: 'error',
+                content: `❌ VM Agent chat error: ${error.message}`
             });
         }
     }
@@ -346,6 +468,16 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
     }
     selectBestAgent(input) {
         const lower = input.toLowerCase();
+        if (this.context.vmMode) {
+            return 'vm-agent';
+        }
+        if (lower.includes('analizza la repository') ||
+            lower.includes('analizza il repository') ||
+            lower.includes('analyze the repository') ||
+            lower.includes('vm agent') ||
+            lower.includes('isolated environment')) {
+            return 'vm-agent';
+        }
         if (lower.includes('react') || lower.includes('component'))
             return 'react-expert';
         if (lower.includes('backend') || lower.includes('api'))
@@ -393,6 +525,15 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
                 prefix = '📝';
                 color = chalk_1.default.yellow;
                 break;
+            case 'vm':
+                prefix = '🐳';
+                color = chalk_1.default.cyan;
+                if (message.metadata?.isStreaming) {
+                    const streamPrefix = chalk_1.default.dim('🌊');
+                    console.log(`${streamPrefix}${color(content)}`);
+                    return;
+                }
+                break;
         }
         const statusIndicator = message.status === 'completed' ? '' :
             message.status === 'processing' ? chalk_1.default.yellow('⏳') :
@@ -402,6 +543,55 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             const progressBar = this.createProgressBar(message.progress);
             console.log(`${' '.repeat(timestamp.length + 2)}${progressBar}`);
         }
+        if (message.type === 'vm' && message.metadata?.chunkLength) {
+            const streamInfo = chalk_1.default.dim(`[${message.metadata.chunkLength} chars]`);
+            console.log(`${' '.repeat(timestamp.length + 4)}${streamInfo}`);
+        }
+    }
+    createPanel(config) {
+        const panel = {
+            ...config,
+            content: [],
+            maxLines: config.height || 20
+        };
+        this.panels.set(config.id, panel);
+    }
+    async streamToPanel(panelId, content) {
+        const panel = this.panels.get(panelId);
+        if (!panel)
+            return;
+        const lines = content.split('\n');
+        panel.content.push(...lines);
+        if (panel.maxLines && panel.content.length > panel.maxLines) {
+            panel.content = panel.content.slice(-panel.maxLines);
+        }
+        if (panelId.includes('vm')) {
+            this.queueMessage({
+                type: 'vm',
+                content: lines.join(' ')
+            });
+        }
+    }
+    displayPanels() {
+        if (this.panels.size === 0)
+            return;
+        console.log(chalk_1.default.cyan('\n═══ Panels ═══'));
+        for (const [id, panel] of this.panels) {
+            console.log(chalk_1.default.blue(`\n▌ ${panel.title}`));
+            console.log(chalk_1.default.gray('─'.repeat(40)));
+            const displayLines = panel.content.slice(-5);
+            displayLines.forEach(line => {
+                if (line)
+                    console.log(chalk_1.default.dim(`  ${line}`));
+            });
+        }
+        console.log(chalk_1.default.cyan('═══════════════\n'));
+    }
+    queueVMMessage(content) {
+        this.queueMessage({
+            type: 'vm',
+            content
+        });
     }
     createProgressBar(progress, width = 20) {
         const filled = Math.round((progress / 100) * width);
@@ -440,6 +630,7 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         const queueStatus = input_queue_1.inputQueue.getStatus();
         const supervision = this.supervisionCognition;
         const metrics = Object.fromEntries(this.adaptiveMetrics);
+        this.displayPanels();
         console.log(chalk_1.default.cyan.bold('\\n🧠 Adaptive Orchestrator Status'));
         console.log(chalk_1.default.gray('═'.repeat(50)));
         console.log(`${chalk_1.default.blue('Working Dir:')} ${this.context.workingDirectory}`);
@@ -485,21 +676,53 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
         });
     }
     cycleMode() {
-        if (!this.context.planMode && !this.context.autoAcceptEdits) {
+        if (!this.context.planMode && !this.context.autoAcceptEdits && !this.context.vmMode) {
             this.context.planMode = true;
             console.log(chalk_1.default.green('\\n✅ plan mode on ') + chalk_1.default.dim('(shift+tab to cycle)'));
         }
-        else if (this.context.planMode && !this.context.autoAcceptEdits) {
+        else if (this.context.planMode && !this.context.autoAcceptEdits && !this.context.vmMode) {
             this.context.planMode = false;
             this.context.autoAcceptEdits = true;
             diff_manager_1.diffManager.setAutoAccept(true);
             console.log(chalk_1.default.green('\\n✅ auto-accept edits on ') + chalk_1.default.dim('(shift+tab to cycle)'));
         }
+        else if (!this.context.planMode && this.context.autoAcceptEdits && !this.context.vmMode) {
+            this.context.autoAcceptEdits = false;
+            this.context.vmMode = true;
+            diff_manager_1.diffManager.setAutoAccept(false);
+            console.log(chalk_1.default.cyan('\\n🐳 vm mode on ') + chalk_1.default.dim('(shift+tab to cycle)'));
+        }
         else {
             this.context.planMode = false;
             this.context.autoAcceptEdits = false;
+            this.context.vmMode = false;
             diff_manager_1.diffManager.setAutoAccept(false);
+            if (this.activeVMAgent) {
+                this.cleanupVMAgent();
+            }
             console.log(chalk_1.default.yellow('\\n⚠️ manual mode'));
+        }
+    }
+    async cleanupVMAgent() {
+        try {
+            if (this.activeVMAgent) {
+                this.queueMessage({
+                    type: 'system',
+                    content: `🐳 Cleaning up VM agent...`
+                });
+                await this.activeVMAgent.cleanup();
+                this.activeVMAgent = undefined;
+                this.queueMessage({
+                    type: 'system',
+                    content: `✅ VM agent cleaned up`
+                });
+            }
+        }
+        catch (error) {
+            this.queueMessage({
+                type: 'error',
+                content: `❌ VM cleanup error: ${error.message}`
+            });
         }
     }
     showCommandMenu() {
@@ -629,6 +852,8 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
             modes.push(chalk_1.default.cyan('plan'));
         if (this.context.autoAcceptEdits)
             modes.push(chalk_1.default.green('auto-accept'));
+        if (this.context.vmMode)
+            modes.push(chalk_1.default.cyan('vm'));
         const modeStr = modes.length > 0 ? ` ${modes.join(' ')} ` : '';
         const contextStr = chalk_1.default.dim(`${this.context.contextLeft}%`);
         const queueStatus = this.inputQueueEnabled ? input_queue_1.inputQueue.getStatus() : null;
@@ -729,6 +954,18 @@ class StreamingOrchestratorImpl extends events_1.EventEmitter {
     }
 }
 class StreamingOrchestrator extends StreamingOrchestratorImpl {
+    createPanel(config) {
+        super.createPanel(config);
+    }
+    async streamToPanel(panelId, content) {
+        return super.streamToPanel(panelId, content);
+    }
+    displayPanels() {
+        super.displayPanels();
+    }
+    queueVMMessage(content) {
+        super.queueVMMessage(content);
+    }
 }
 exports.StreamingOrchestrator = StreamingOrchestrator;
 if (require.main === module) {

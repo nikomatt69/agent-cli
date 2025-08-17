@@ -1,5 +1,6 @@
 import { AgentManager } from './core/agent-manager';
 import { UniversalAgent } from './automation/agents/universal-agent';
+import { SecureVirtualizedAgent } from './virtualized-agents/secure-vm-agent';
 
 export function registerAgents(agentManager: AgentManager): void {
   // Register the unified UniversalAgent for enterprise production use
@@ -98,6 +99,86 @@ export function registerAgents(agentManager: AgentManager): void {
         canAccessSecrets: false
       },
       sandboxRestrictions: []
+    }
+  });
+
+  // Register SecureVirtualizedAgent for autonomous VM-based development
+  agentManager.registerAgentClass(SecureVirtualizedAgent, {
+    id: 'vm-agent',
+    name: 'Secure VM Agent',
+    description: 'Autonomous development agent with isolated VM environment and complete repository management',
+    specialization: 'virtualized-autonomous',
+    version: '0.1.15-beta',
+    capabilities: [
+      // VM-specific capabilities
+      'vm-management',
+      'container-orchestration',
+      'isolated-execution',
+      'repository-cloning',
+      'vscode-server',
+      'autonomous-development',
+      'pull-request-automation',
+      
+      // Repository analysis and management
+      'repository-analysis',
+      'dependency-management',
+      'testing-automation',
+      'documentation-generation',
+      'code-quality-analysis',
+      
+      // Security capabilities
+      'secure-api-communication',
+      'token-budget-management',
+      'audit-logging',
+      'resource-isolation',
+      'credential-management',
+      
+      // Development workflows
+      'full-stack-development',
+      'ci-cd-integration',
+      'git-operations',
+      'package-management',
+      'environment-setup'
+    ],
+    category: 'enterprise-vm',
+    tags: ['vm', 'isolated', 'autonomous', 'secure', 'repository'],
+    requiresGuidance: false,
+    defaultConfig: {
+      autonomyLevel: 'fully-autonomous',
+      maxConcurrentTasks: 1, // VM agents typically handle one task at a time
+      defaultTimeout: 1800000, // 30 minutes for VM operations
+      retryPolicy: {
+        maxAttempts: 2,
+        backoffMs: 5000,
+        backoffMultiplier: 2,
+        retryableErrors: ['container-error', 'network', 'timeout']
+      },
+      enabledTools: ['docker', 'git', 'npm', 'analysis', 'security'],
+      guidanceFiles: [],
+      logLevel: 'info',
+      permissions: {
+        canReadFiles: true,
+        canWriteFiles: true,
+        canDeleteFiles: false, // VM agents work in isolated containers
+        allowedPaths: ['/workspace/*'],
+        forbiddenPaths: ['/etc', '/system', '/var'],
+        canExecuteCommands: true,
+        allowedCommands: ['git', 'npm', 'yarn', 'docker', 'code-server'],
+        forbiddenCommands: ['rm -rf', 'sudo', 'su', 'chmod 777'],
+        canAccessNetwork: true,
+        allowedDomains: ['github.com', 'npmjs.com', 'yarnpkg.com'],
+        canInstallPackages: true,
+        canModifyConfig: false, // Config handled by orchestrator
+        canAccessSecrets: false // Uses secure proxy for AI calls
+      },
+      sandboxRestrictions: [
+        'isolated-container',
+        'resource-limits',
+        'network-restrictions',
+        'token-budget-enforcement'
+      ],
+      // VM-specific configuration moved to metadata
+      maxTokens: 50000
     }
   });
 }

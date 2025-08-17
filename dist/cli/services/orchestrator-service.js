@@ -223,6 +223,11 @@ class OrchestratorService extends events_1.EventEmitter {
             await this.initializeServices();
         }
         console.log(chalk_1.default.blue('🧠 Processing natural language request...'));
+        if (this.isVMAgentRequest(input)) {
+            console.log(chalk_1.default.cyan('🤖 VM Agent request detected - launching secure virtualized agent'));
+            await this.executeVMAgentTask(input);
+            return;
+        }
         if (this.context.planMode) {
             console.log(chalk_1.default.cyan('🎯 Plan Mode: Creating execution plan...'));
             const plan = await planning_service_1.planningService.createPlan(input, {
@@ -247,6 +252,37 @@ class OrchestratorService extends events_1.EventEmitter {
             const bestAgent = this.selectBestAgent(input);
             console.log(chalk_1.default.blue(`🎯 Selected ${bestAgent} agent for this task`));
             await this.executeAgentTask(bestAgent, input);
+        }
+    }
+    isVMAgentRequest(input) {
+        const lowerInput = input.toLowerCase();
+        const vmTriggers = [
+            'analizza la repository',
+            'analizza il repository',
+            'analyze the repository',
+            'analyze repository',
+            'clone and analyze',
+            'vm agent',
+            'isolated environment',
+            'autonomous repository'
+        ];
+        return vmTriggers.some(trigger => lowerInput.includes(trigger)) ||
+            (lowerInput.includes('repository') && lowerInput.includes('analizza'));
+    }
+    async executeVMAgentTask(input) {
+        try {
+            console.log(chalk_1.default.blue('🐳 Starting VM Agent with secure environment...'));
+            const taskId = await agent_service_1.agentService.executeTask('vm-agent', input, {
+                createVM: true,
+                isolated: true,
+                autonomous: true
+            });
+            console.log(chalk_1.default.green(`✅ VM Agent launched with task ID: ${taskId}`));
+            console.log(chalk_1.default.dim('🔐 Agent will operate in secure isolated environment'));
+            console.log(chalk_1.default.dim('📊 Monitor with Ctrl+L for logs, Ctrl+S for security dashboard'));
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`❌ Failed to launch VM agent: ${error.message}`));
         }
     }
     selectBestAgent(input) {

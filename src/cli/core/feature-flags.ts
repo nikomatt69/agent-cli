@@ -59,14 +59,12 @@ export class FeatureFlagManager extends EventEmitter {
   private static instance: FeatureFlagManager;
   private flags: Map<string, FeatureFlag> = new Map();
   private config: FeatureFlagConfig;
-  private workingDirectory: string;
   private isInitialized = false;
   private refreshTimer?: NodeJS.Timeout;
   private configFilePath: string;
 
   constructor(workingDirectory: string, config: Partial<FeatureFlagConfig> = {}) {
     super();
-    this.workingDirectory = workingDirectory;
     this.config = FeatureFlagConfigSchema.parse(config);
     this.configFilePath = join(workingDirectory, this.config.configFile);
   }
@@ -347,8 +345,11 @@ export class FeatureFlagManager extends EventEmitter {
   }
 
   private async loadDefaultFlags(): Promise<void> {
+    // Use the schema input type so fields with defaults are optional here
+    type FeatureFlagInit = Omit<z.input<typeof FeatureFlagSchema>, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'lastModifiedBy'>;
+
     // Core system flags
-    const defaultFlags: Omit<FeatureFlag, 'id' | 'createdAt' | 'updatedAt'>[] = [
+    const defaultFlags: FeatureFlagInit[] = [
       {
         name: 'LSP Integration',
         description: 'Enable Language Server Protocol integration for code intelligence',
@@ -447,7 +448,7 @@ export class FeatureFlagManager extends EventEmitter {
 
   private async loadFromFile(): Promise<void> {
     try {
-      if (!await existsSync(this.configFilePath)) {
+      if (!existsSync(this.configFilePath)) {
         await this.saveToFile(); // Create initial file
         return;
       }
