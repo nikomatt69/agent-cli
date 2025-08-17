@@ -28,9 +28,6 @@ import { registerAgents } from './register-agents';
 import { AgentManager } from './core/agent-manager';
 import { Logger } from './core/logger';
 import { Logger as UtilsLogger } from './utils/logger';
-import { AgentCommands } from './handlers/agent-commands';
-import { unifiedAgentFactory } from './core/unified-agent-factory';
-import { agentPersistence } from './persistence/agent-persistence';
 
 // Types from streaming orchestrator
 interface StreamMessage {
@@ -513,16 +510,6 @@ class ServiceModule {
     console.log(chalk.dim(`   Agents ready (${agents.length} available)`));
   }
 
-  static async initializeUnifiedAgentSystem(): Promise<void> {
-    // Initialize agent persistence
-    await agentPersistence.initialize();
-    
-    // Initialize unified agent factory
-    // (already done in constructor)
-    
-    console.log(chalk.dim('   Unified agent system ready'));
-  }
-
   static async initializeTools(): Promise<void> {
     const tools = toolService.getAvailableTools();
     console.log(chalk.dim(`   Tools ready (${tools.length} available)`));
@@ -548,7 +535,6 @@ class ServiceModule {
     const steps = [
       { name: 'Services', fn: this.initializeServices.bind(this) },
       { name: 'Agents', fn: this.initializeAgents.bind(this) },
-      { name: 'Unified Agent System', fn: this.initializeUnifiedAgentSystem.bind(this) },
       { name: 'Tools', fn: this.initializeTools.bind(this) },
       { name: 'Planning', fn: this.initializePlanning.bind(this) },
       { name: 'Security', fn: this.initializeSecurity.bind(this) },
@@ -682,74 +668,10 @@ class StreamingModule extends EventEmitter {
   }
 
   private async queueUserInput(input: string): Promise<void> {
-    // Handle agent commands
-    if (input.startsWith('create-agent') || input.startsWith('launch-agent') || 
-        input.startsWith('list-agents') || input.startsWith('describe-agent') ||
-        input.startsWith('pause-agent') || input.startsWith('resume-agent') ||
-        input.startsWith('kill-agent') || input.startsWith('factory')) {
-      
-      await this.handleAgentCommand(input);
-      return;
-    }
-
     this.queueMessage({
       type: 'user',
       content: input
     });
-  }
-
-  private async handleAgentCommand(input: string): Promise<void> {
-    const parts = input.split(' ');
-    const command = parts[0];
-    const args = parts.slice(1);
-
-    try {
-      let result;
-      
-      switch (command) {
-        case 'create-agent':
-          result = await AgentCommands.createAgent(args);
-          break;
-        case 'launch-agent':
-          result = await AgentCommands.launchAgent(args);
-          break;
-        case 'list-agents':
-          result = await AgentCommands.listAgents(args);
-          break;
-        case 'describe-agent':
-          result = await AgentCommands.describeAgent(args);
-          break;
-        case 'pause-agent':
-          result = await AgentCommands.pauseAgent(args);
-          break;
-        case 'resume-agent':
-          result = await AgentCommands.resumeAgent(args);
-          break;
-        case 'kill-agent':
-          result = await AgentCommands.killAgent(args);
-          break;
-        case 'factory':
-          result = await AgentCommands.factory(args);
-          break;
-        default:
-          console.log(chalk.red(`Unknown agent command: ${command}`));
-          return;
-      }
-
-      if (result.success) {
-        if (result.data && typeof result.data === 'object') {
-          // Output JSON if data is provided
-          console.log(JSON.stringify(result.data, null, 2));
-        } else {
-          console.log(result.message);
-        }
-      } else {
-        console.log(chalk.red(`Error: ${result.error}`));
-      }
-
-    } catch (error: any) {
-      console.log(chalk.red(`Command failed: ${error.message}`));
-    }
   }
 
   private showPrompt(): void {

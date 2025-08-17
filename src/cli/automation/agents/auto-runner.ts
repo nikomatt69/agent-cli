@@ -292,10 +292,16 @@ export class AutoRunner extends EventEmitter {
     }
 
     this.shouldStop = true;
+    this.isRunning = false;
     await this.log('info', 'AutoRunner paused by user request');
     
-    // Salva lo stato corrente
+    // Salva lo stato corrente con status 'paused'
     await this.saveSnapshot();
+    
+    // Aggiorna lo stato dell'agente a 'paused'
+    if (this.agent && typeof (this.agent as any).setStatus === 'function') {
+      (this.agent as any).setStatus('paused');
+    }
   }
 
   /**
@@ -307,6 +313,7 @@ export class AutoRunner extends EventEmitter {
     }
 
     this.shouldStop = false;
+    this.isRunning = true;
     await this.log('info', 'AutoRunner resumed by user request');
     
     // Continua l'esecuzione
@@ -351,10 +358,20 @@ export class AutoRunner extends EventEmitter {
    * Salva uno snapshot dello stato corrente
    */
   private async saveSnapshot(): Promise<void> {
+    // Determina lo stato corretto
+    let status: 'created' | 'running' | 'paused' | 'stopped' | 'error';
+    if (this.shouldStop && this.isRunning) {
+      status = 'paused';
+    } else if (this.isRunning) {
+      status = 'running';
+    } else {
+      status = 'stopped';
+    }
+
     const state: AgentState = {
       id: this.agent.id,
       name: this.config.name,
-      status: this.isRunning ? 'running' : 'paused',
+      status,
       runId: this.runId,
       currentStep: this.budget.stepsUsed,
       totalSteps: this.steps.length,

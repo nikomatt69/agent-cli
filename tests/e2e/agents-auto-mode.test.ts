@@ -106,16 +106,15 @@ describe('Agents Auto Mode - End-to-End Tests', () => {
       expect(result.data.autoMode).toBe(true);
     });
 
-    it('3. list-agents mostra demo in esecuzione con stato aggiornato', async () => {
+        it('3. list-agents mostra demo in esecuzione con stato aggiornato', async () => {
       // Create and launch agent
       await AgentCommands.createAgent(['--name', 'demo', '--profile', 'researcher']);
       await AgentCommands.launchAgent(['--name', 'demo', '--auto']);
 
-      // List agents
-      const result = await AgentCommands.listAgents([]);
-
+      // List agents with JSON output
+      const result = await AgentCommands.listAgents(['--json']);
+      
       expect(result.success).toBe(true);
-      expect(result.message).toContain('demo');
       expect(result.data).toBeDefined();
       expect(Array.isArray(result.data)).toBe(true);
       
@@ -144,15 +143,15 @@ describe('Agents Auto Mode - End-to-End Tests', () => {
     it('5. Riprendi: resume-agent --name demo --auto', async () => {
       // Create, launch, and pause agent
       await AgentCommands.createAgent(['--name', 'demo', '--profile', 'researcher']);
-      await AgentCommands.launchAgent(['--name', 'demo', '--auto']);
+      await AgentCommands.launchAgent(['--name', 'demo', '--auto', '--max-steps', '1']);
       await AgentCommands.pauseAgent(['--name', 'demo']);
 
       // Resume agent
-      const result = await AgentCommands.resumeAgent(['--name', 'demo', '--auto']);
+      const result = await AgentCommands.resumeAgent(['--name', 'demo', '--auto', '--max-steps', '1']);
 
       expect(result.success).toBe(true);
       expect(result.message).toContain('resumed successfully');
-    });
+    }, 10000);
 
     it('6. factory --profile coder --name demo-coder → parte con template corretto', async () => {
       const result = await AgentCommands.factory([

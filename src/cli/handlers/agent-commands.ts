@@ -37,6 +37,16 @@ export class AgentCommands {
         };
       }
 
+      // Valida il nome dell'agente secondo il pattern regex
+      const namePattern = /^[a-zA-Z0-9_-]+$/;
+      if (!namePattern.test(options.name)) {
+        return {
+          success: false,
+          message: 'Invalid agent name. Use only letters, numbers, underscores, and hyphens.',
+          error: 'Invalid agent configuration: name must match pattern ^[a-zA-Z0-9_-]+$'
+        };
+      }
+
       if (!options.profile && !options.config) {
         return {
           success: false,
@@ -98,6 +108,7 @@ export class AgentCommands {
       if (!options.name) {
         return {
           success: false,
+          message: 'Agent name is required. Use --name <name>',
           error: 'Agent name is required. Use --name <name>'
         };
       }
@@ -376,6 +387,7 @@ export class AgentCommands {
     } catch (error: any) {
       return {
         success: false,
+        message: `Failed to kill agent: ${error.message}`,
         error: `Failed to kill agent: ${error.message}`
       };
     }
@@ -397,6 +409,16 @@ export class AgentCommands {
       }
 
       if (options.profile && options.name) {
+        // Valida il nome dell'agente secondo il pattern regex
+        const namePattern = /^[a-zA-Z0-9_-]+$/;
+        if (!namePattern.test(options.name)) {
+          return {
+            success: false,
+            message: 'Invalid agent name. Use only letters, numbers, underscores, and hyphens.',
+            error: 'Invalid agent configuration: name must match pattern ^[a-zA-Z0-9_-]+$'
+          };
+        }
+
         // Crea agente da profilo
         const overrides = options.overrides ? JSON.parse(options.overrides) : {};
         const instance = await unifiedAgentFactory.createAgentFromProfile(
@@ -426,6 +448,7 @@ export class AgentCommands {
     } catch (error: any) {
       return {
         success: false,
+        message: `Factory command failed: ${error.message}`,
         error: `Factory command failed: ${error.message}`
       };
     }
@@ -674,15 +697,17 @@ export class AgentCommands {
   }
 
   private static parseTimeLimit(timeLimit: string): number {
-    const match = timeLimit.match(/^(\d+)([mh])$/);
+    const match = timeLimit.match(/^(\d+)([smh])$/);
     if (!match) {
-      throw new Error(`Invalid time limit format: ${timeLimit}. Use format like '30m' or '2h'`);
+      throw new Error(`Invalid time limit format: ${timeLimit}. Use format like '30s', '30m' or '2h'`);
     }
 
     const value = parseInt(match[1]);
     const unit = match[2];
 
-    if (unit === 'm') {
+    if (unit === 's') {
+      return value * 1000; // secondi in millisecondi
+    } else if (unit === 'm') {
       return value * 60 * 1000; // minuti in millisecondi
     } else if (unit === 'h') {
       return value * 60 * 60 * 1000; // ore in millisecondi
@@ -728,7 +753,7 @@ ${chalk.cyan('Options:')}
   --max-steps <number>        Maximum steps for auto mode
   --max-tokens <number>       Maximum tokens for auto mode
   --max-cost <number>         Maximum cost for auto mode
-  --time-limit <time>         Time limit (e.g., 30m, 2h)
+  --time-limit <time>         Time limit (e.g., 30s, 30m, 2h)
   --safe-tools-only           Use only safe tools
   --allow-write               Allow write operations
   --json                      Output in JSON format

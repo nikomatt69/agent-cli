@@ -181,14 +181,19 @@ class AutoRunner extends events_1.EventEmitter {
             throw new Error('AutoRunner is not running');
         }
         this.shouldStop = true;
+        this.isRunning = false;
         await this.log('info', 'AutoRunner paused by user request');
         await this.saveSnapshot();
+        if (this.agent && typeof this.agent.setStatus === 'function') {
+            this.agent.setStatus('paused');
+        }
     }
     async resume() {
         if (this.isRunning) {
             throw new Error('AutoRunner is already running');
         }
         this.shouldStop = false;
+        this.isRunning = true;
         await this.log('info', 'AutoRunner resumed by user request');
         await this.start();
     }
@@ -210,10 +215,20 @@ class AutoRunner extends events_1.EventEmitter {
         return false;
     }
     async saveSnapshot() {
+        let status;
+        if (this.shouldStop && this.isRunning) {
+            status = 'paused';
+        }
+        else if (this.isRunning) {
+            status = 'running';
+        }
+        else {
+            status = 'stopped';
+        }
         const state = {
             id: this.agent.id,
             name: this.config.name,
-            status: this.isRunning ? 'running' : 'paused',
+            status,
             runId: this.runId,
             currentStep: this.budget.stepsUsed,
             totalSteps: this.steps.length,

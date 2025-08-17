@@ -25,6 +25,14 @@ class AgentCommands {
                     error: 'Agent name is required. Use --name <name>'
                 };
             }
+            const namePattern = /^[a-zA-Z0-9_-]+$/;
+            if (!namePattern.test(options.name)) {
+                return {
+                    success: false,
+                    message: 'Invalid agent name. Use only letters, numbers, underscores, and hyphens.',
+                    error: 'Invalid agent configuration: name must match pattern ^[a-zA-Z0-9_-]+$'
+                };
+            }
             if (!options.profile && !options.config) {
                 return {
                     success: false,
@@ -54,6 +62,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to create agent: ${error.message}`,
                 error: `Failed to create agent: ${error.message}`
             };
         }
@@ -70,6 +79,7 @@ class AgentCommands {
             if (!options.name) {
                 return {
                     success: false,
+                    message: 'Agent name is required. Use --name <name>',
                     error: 'Agent name is required. Use --name <name>'
                 };
             }
@@ -120,6 +130,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to launch agent: ${error.message}`,
                 error: `Failed to launch agent: ${error.message}`
             };
         }
@@ -150,6 +161,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to list agents: ${error.message}`,
                 error: `Failed to list agents: ${error.message}`
             };
         }
@@ -194,6 +206,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to describe agent: ${error.message}`,
                 error: `Failed to describe agent: ${error.message}`
             };
         }
@@ -223,6 +236,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to pause agent: ${error.message}`,
                 error: `Failed to pause agent: ${error.message}`
             };
         }
@@ -252,6 +266,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to resume agent: ${error.message}`,
                 error: `Failed to resume agent: ${error.message}`
             };
         }
@@ -281,6 +296,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Failed to kill agent: ${error.message}`,
                 error: `Failed to kill agent: ${error.message}`
             };
         }
@@ -295,6 +311,14 @@ class AgentCommands {
                 };
             }
             if (options.profile && options.name) {
+                const namePattern = /^[a-zA-Z0-9_-]+$/;
+                if (!namePattern.test(options.name)) {
+                    return {
+                        success: false,
+                        message: 'Invalid agent name. Use only letters, numbers, underscores, and hyphens.',
+                        error: 'Invalid agent configuration: name must match pattern ^[a-zA-Z0-9_-]+$'
+                    };
+                }
                 const overrides = options.overrides ? JSON.parse(options.overrides) : {};
                 const instance = await unified_agent_factory_1.unifiedAgentFactory.createAgentFromProfile(options.profile, options.name, overrides);
                 return {
@@ -316,6 +340,7 @@ class AgentCommands {
         catch (error) {
             return {
                 success: false,
+                message: `Factory command failed: ${error.message}`,
                 error: `Factory command failed: ${error.message}`
             };
         }
@@ -536,13 +561,16 @@ class AgentCommands {
         }
     }
     static parseTimeLimit(timeLimit) {
-        const match = timeLimit.match(/^(\d+)([mh])$/);
+        const match = timeLimit.match(/^(\d+)([smh])$/);
         if (!match) {
-            throw new Error(`Invalid time limit format: ${timeLimit}. Use format like '30m' or '2h'`);
+            throw new Error(`Invalid time limit format: ${timeLimit}. Use format like '30s', '30m' or '2h'`);
         }
         const value = parseInt(match[1]);
         const unit = match[2];
-        if (unit === 'm') {
+        if (unit === 's') {
+            return value * 1000;
+        }
+        else if (unit === 'm') {
             return value * 60 * 1000;
         }
         else if (unit === 'h') {
@@ -585,7 +613,7 @@ ${chalk_1.default.cyan('Options:')}
   --max-steps <number>        Maximum steps for auto mode
   --max-tokens <number>       Maximum tokens for auto mode
   --max-cost <number>         Maximum cost for auto mode
-  --time-limit <time>         Time limit (e.g., 30m, 2h)
+  --time-limit <time>         Time limit (e.g., 30s, 30m, 2h)
   --safe-tools-only           Use only safe tools
   --allow-write               Allow write operations
   --json                      Output in JSON format
