@@ -58,6 +58,8 @@ const register_agents_1 = require("./register-agents");
 const agent_manager_1 = require("./core/agent-manager");
 const logger_1 = require("./core/logger");
 const logger_2 = require("./utils/logger");
+const agent_commands_1 = require("./handlers/agent-commands");
+const agent_persistence_1 = require("./persistence/agent-persistence");
 const banner = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
 ████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
@@ -411,6 +413,10 @@ class ServiceModule {
         const agents = this.agentManager.listAgents();
         console.log(chalk_1.default.dim(`   Agents ready (${agents.length} available)`));
     }
+    static async initializeUnifiedAgentSystem() {
+        await agent_persistence_1.agentPersistence.initialize();
+        console.log(chalk_1.default.dim('   Unified agent system ready'));
+    }
     static async initializeTools() {
         const tools = tool_service_1.toolService.getAvailableTools();
         console.log(chalk_1.default.dim(`   Tools ready (${tools.length} available)`));
@@ -431,6 +437,7 @@ class ServiceModule {
         const steps = [
             { name: 'Services', fn: this.initializeServices.bind(this) },
             { name: 'Agents', fn: this.initializeAgents.bind(this) },
+            { name: 'Unified Agent System', fn: this.initializeUnifiedAgentSystem.bind(this) },
             { name: 'Tools', fn: this.initializeTools.bind(this) },
             { name: 'Planning', fn: this.initializePlanning.bind(this) },
             { name: 'Security', fn: this.initializeSecurity.bind(this) },
@@ -539,10 +546,68 @@ class StreamingModule extends events_1.EventEmitter {
         this.messageQueue.push(fullMessage);
     }
     async queueUserInput(input) {
+        if (input.startsWith('create-agent') || input.startsWith('launch-agent') ||
+            input.startsWith('list-agents') || input.startsWith('describe-agent') ||
+            input.startsWith('pause-agent') || input.startsWith('resume-agent') ||
+            input.startsWith('kill-agent') || input.startsWith('factory')) {
+            await this.handleAgentCommand(input);
+            return;
+        }
         this.queueMessage({
             type: 'user',
             content: input
         });
+    }
+    async handleAgentCommand(input) {
+        const parts = input.split(' ');
+        const command = parts[0];
+        const args = parts.slice(1);
+        try {
+            let result;
+            switch (command) {
+                case 'create-agent':
+                    result = await agent_commands_1.AgentCommands.createAgent(args);
+                    break;
+                case 'launch-agent':
+                    result = await agent_commands_1.AgentCommands.launchAgent(args);
+                    break;
+                case 'list-agents':
+                    result = await agent_commands_1.AgentCommands.listAgents(args);
+                    break;
+                case 'describe-agent':
+                    result = await agent_commands_1.AgentCommands.describeAgent(args);
+                    break;
+                case 'pause-agent':
+                    result = await agent_commands_1.AgentCommands.pauseAgent(args);
+                    break;
+                case 'resume-agent':
+                    result = await agent_commands_1.AgentCommands.resumeAgent(args);
+                    break;
+                case 'kill-agent':
+                    result = await agent_commands_1.AgentCommands.killAgent(args);
+                    break;
+                case 'factory':
+                    result = await agent_commands_1.AgentCommands.factory(args);
+                    break;
+                default:
+                    console.log(chalk_1.default.red(`Unknown agent command: ${command}`));
+                    return;
+            }
+            if (result.success) {
+                if (result.data && typeof result.data === 'object') {
+                    console.log(JSON.stringify(result.data, null, 2));
+                }
+                else {
+                    console.log(result.message);
+                }
+            }
+            else {
+                console.log(chalk_1.default.red(`Error: ${result.error}`));
+            }
+        }
+        catch (error) {
+            console.log(chalk_1.default.red(`Command failed: ${error.message}`));
+        }
     }
     showPrompt() {
         const dir = require('path').basename(this.context.workingDirectory);

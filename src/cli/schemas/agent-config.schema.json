@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Configuration Schema",
+  "description": "Schema per la configurazione degli agenti in modalità auto",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nome univoco dell'agente",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "profile": {
+      "type": "string",
+      "description": "Profilo dell'agente (researcher, coder, planner, etc.)",
+      "enum": ["researcher", "coder", "planner", "tester", "devops", "custom"]
+    },
+    "specialization": {
+      "type": "string",
+      "description": "Specializzazione specifica dell'agente",
+      "minLength": 1
+    },
+    "systemPrompt": {
+      "type": "string",
+      "description": "Prompt di sistema per l'agente",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Lista delle capacità dell'agente"
+    },
+    "requiredTools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Strumenti richiesti dall'agente"
+    },
+    "personality": {
+      "type": "object",
+      "properties": {
+        "proactive": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Livello di proattività (0-100)"
+        },
+        "collaborative": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Livello di collaborazione (0-100)"
+        },
+        "analytical": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Livello di analisi (0-100)"
+        },
+        "creative": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Livello di creatività (0-100)"
+        }
+      },
+      "required": ["proactive", "collaborative", "analytical", "creative"]
+    },
+    "autonomyLevel": {
+      "type": "string",
+      "enum": ["supervised", "semi-autonomous", "fully-autonomous"],
+      "description": "Livello di autonomia dell'agente"
+    },
+    "contextScope": {
+      "type": "string",
+      "enum": ["file", "directory", "project", "workspace"],
+      "description": "Scope del contesto di lavoro"
+    },
+    "workingStyle": {
+      "type": "string",
+      "enum": ["sequential", "parallel", "adaptive"],
+      "description": "Stile di lavoro dell'agente"
+    },
+    "autoMode": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Abilita la modalità auto"
+        },
+        "maxSteps": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Numero massimo di step"
+        },
+        "maxTokens": {
+          "type": "number",
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Limite massimo di token"
+        },
+        "maxCost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Costo massimo in dollari"
+        },
+        "timeLimit": {
+          "type": "string",
+          "pattern": "^\\d+[mh]$",
+          "description": "Limite di tempo (es: 30m, 2h)"
+        },
+        "safeToolsOnly": {
+          "type": "boolean",
+          "description": "Usa solo strumenti sicuri"
+        },
+        "allowWrite": {
+          "type": "boolean",
+          "description": "Permette operazioni di scrittura"
+        }
+      },
+      "required": ["enabled"]
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "memory": {
+          "type": "string",
+          "description": "Limite di memoria (es: 512MB, 1GB)"
+        },
+        "cpu": {
+          "type": "string",
+          "description": "Limite CPU (es: 0.5, 2.0)"
+        },
+        "disk": {
+          "type": "string",
+          "description": "Limite disco (es: 1GB, 10GB)"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Variabili d'ambiente per l'agente"
+    }
+  },
+  "required": ["name", "profile", "specialization", "systemPrompt", "capabilities", "autonomyLevel"],
+  "additionalProperties": false
+}
