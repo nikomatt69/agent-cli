@@ -103,12 +103,17 @@ NikCLI provides an extensive set of commands organized into logical categories:
 
 | Command                     | Description                     |
 | --------------------------- | ------------------------------- |
+| `create-agent`              | Create new agent from profile or config |
+| `launch-agent`              | Launch agent in auto/interactive mode |
+| `list-agents`               | List all agents with status     |
+| `describe-agent`            | Show detailed agent information |
+| `pause-agent`               | Pause running agent             |
+| `resume-agent`              | Resume paused agent             |
+| `kill-agent`                | Stop and delete agent           |
+| `factory`                   | Agent factory dashboard         |
 | `/agents`                   | List all available agents       |
 | `/agent <name> <task>`      | Run specific agent with task    |
 | `/parallel <agents> <task>` | Run multiple agents in parallel |
-| `/factory`                  | Show agent factory dashboard    |
-| `/create-agent <spec>`      | Create new specialized agent    |
-| `/launch-agent <id>`        | Launch agent from blueprint     |
 
 ### Session Management
 
@@ -181,6 +186,18 @@ NikCLI provides an extensive set of commands organized into logical categories:
 - **Orchestrator Service** - Coordinates multi-agent collaboration
 
 **Stream-Based Processing**: Real-time message processing with queued execution and progress tracking for responsive user experience.
+
+### Agents Auto Mode System
+
+The **Agents Auto Mode** provides enterprise-grade autonomous agent management with:
+
+- **Unified Agent Factory** - Centralized agent creation and management
+- **Auto Runner** - Autonomous execution with perception→reasoning→action→evaluation cycle
+- **Persistent State Management** - Complete state persistence with config, logs, and memory
+- **Security Policies** - Safe tools, resource limits, and input validation
+- **CLI Integration** - Full command-line interface for agent lifecycle management
+
+See [Agents Auto Mode Documentation](docs/agents-auto-mode.md) for complete details.
 
 ### Core System Components
 

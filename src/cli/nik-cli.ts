@@ -40,6 +40,9 @@ import { SlashCommandHandler } from './chat/nik-cli-commands';
 import { chatManager } from './chat/chat-manager';
 import { agentService } from './services/agent-service';
 import { planningService } from './services/planning-service';
+import { AgentCommands } from './handlers/agent-commands';
+import { unifiedAgentFactory } from './core/unified-agent-factory';
+import { agentPersistence } from './persistence/agent-persistence';
 import { AgentTask } from './types/types';
 import { ExecutionPlan } from './planning/types';
 import { registerAgents } from './register-agents';
@@ -194,6 +197,9 @@ export class NikCLI {
 
         // Initialize cognitive orchestration system
         this.initializeCognitiveOrchestration();
+
+        // Initialize unified agent system
+        this.initializeUnifiedAgentSystem();
 
         // Expose NikCLI globally for token management
         (global as any).__nikcli = this;
@@ -2164,6 +2170,11 @@ export class NikCLI {
                 case 'factory':
                 case 'create-agent':
                 case 'launch-agent':
+                case 'list-agents':
+                case 'describe-agent':
+                case 'pause-agent':
+                case 'resume-agent':
+                case 'kill-agent':
                 case 'context':
                 case 'stream':
                 case 'approval':
@@ -4226,42 +4237,106 @@ Planning:
                     break;
                 }
                 case 'factory': {
-                    agentFactory.showFactoryDashboard();
+                    const result = await AgentCommands.factory(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
                     break;
                 }
                 case 'create-agent': {
-                    if (args.length === 0) {
-                        console.log(chalk.red('Usage: /create-agent [--vm|--container] <specialization>'));
-                        console.log(chalk.gray('Examples:'));
-                        console.log(chalk.gray('  /create-agent "React Expert"'));
-                        console.log(chalk.gray('  /create-agent --vm "Repository Analyzer"'));
-                        console.log(chalk.gray('  /create-agent --container "Isolated Tester"'));
-                        return;
+                    const result = await AgentCommands.createAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
                     }
-                    const specialization = args.join(' ');
-                    const blueprint = await agentFactory.createAgentBlueprint({
-                        specialization,
-                        autonomyLevel: 'fully-autonomous',
-                        contextScope: 'project',
-                    });
-                    console.log(chalk.green(`✅ Agent blueprint created: ${blueprint.name}`));
-                    console.log(chalk.gray(`Blueprint ID: ${blueprint.id}`));
                     break;
                 }
                 case 'launch-agent': {
-                    if (args.length === 0) {
-                        console.log(chalk.red('Usage: /launch-agent <blueprint-id> [task]'));
-                        return;
-                    }
-                    const blueprintId = args[0];
-                    const task = args.slice(1).join(' ');
-                    const agent = await agentFactory.launchAgent(blueprintId);
-                    if (task) {
-                        console.log(formatAgent('agent', 'running', task));
-                        const result = await agent.run(task);
-                        console.log(chalk.green('✅ Agent execution completed'));
+                    const result = await AgentCommands.launchAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
                     } else {
-                        console.log(chalk.blue('🤖 Agent launched and ready'));
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
+                    break;
+                }
+                case 'list-agents': {
+                    const result = await AgentCommands.listAgents(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
+                    break;
+                }
+                case 'describe-agent': {
+                    const result = await AgentCommands.describeAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
+                    break;
+                }
+                case 'pause-agent': {
+                    const result = await AgentCommands.pauseAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
+                    break;
+                }
+                case 'resume-agent': {
+                    const result = await AgentCommands.resumeAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
+                    }
+                    break;
+                }
+                case 'kill-agent': {
+                    const result = await AgentCommands.killAgent(args);
+                    if (result.success) {
+                        if (result.data) {
+                            console.log(JSON.stringify(result.data, null, 2));
+                        } else {
+                            console.log(result.message);
+                        }
+                    } else {
+                        console.log(chalk.red(`Error: ${result.error}`));
                     }
                     break;
                 }
@@ -6970,6 +7045,21 @@ Generated by NikCLI on ${new Date().toISOString()}
             console.log(chalk.yellow('⚠️ No lint command found. Try /run <your-lint-command>'));
         } catch (error: any) {
             console.log(chalk.red(`❌ Linting failed: ${error.message}`));
+        }
+    }
+
+    /**
+     * Initialize unified agent system
+     */
+    private async initializeUnifiedAgentSystem(): Promise<void> {
+        try {
+            // Initialize agent persistence
+            await agentPersistence.initialize();
+            
+            // Unified agent factory is already initialized in constructor
+            console.log(chalk.dim('   Unified agent system ready'));
+        } catch (error: any) {
+            console.log(chalk.yellow(`⚠️ Unified agent system initialization failed: ${error.message}`));
         }
     }
 
